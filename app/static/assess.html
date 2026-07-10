@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RepoProof — Assessment</title>
+<style>
+/* Theme tokens from Figma: File Uploader — Light & Dark Mode (Community) */
+:root{
+  --bg:#f1f4ff; --card:#ffffff; --ink:#0c1421; --muted:#7d7d7d;
+  --line:#d8daeb; --input-bg:#fefefe; --placeholder:#949fb1;
+  --accent:#5046fa; --accent-hover:#4238e0; --ok:#06bf5c; --bad:#df3d43;
+  --shadow:0 12px 32px rgba(12,20,33,.07);
+}
+[data-theme="dark"]{
+  --bg:#161618; --card:#1e1f22; --ink:#f5f6f8; --muted:#9a9aa3;
+  --line:#33343a; --input-bg:#232428; --placeholder:#6f7078;
+  --accent:#5046fa; --accent-hover:#6157ff; --ok:#06bf5c; --bad:#f2555a;
+  --shadow:0 12px 32px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+main{max-width:760px;margin:2rem auto;padding:0 1rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.3rem 1.5rem;margin-bottom:1rem;box-shadow:var(--shadow)}
+h1{font-size:1.3rem;font-weight:600}
+.q{margin:1.2rem 0;padding-top:.8rem;border-top:1px solid var(--line)}
+.opt{display:flex;gap:.6rem;align-items:flex-start;margin:.35rem 0;padding:.5rem .6rem;border-radius:10px;border:1px solid transparent}
+.opt:hover{background:var(--bg);border-color:var(--line)}
+.small{font-size:.82rem;color:var(--muted)}
+button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:.65rem 1.2rem;font:inherit;font-weight:500;letter-spacing:.03em;cursor:pointer}
+button:hover{background:var(--accent-hover)}
+button:disabled{opacity:.5;cursor:default}
+#themeToggle{background:var(--card);color:var(--ink);border:1px solid var(--line);float:right;padding:.4rem .7rem}
+input[type=text]{padding:.55rem .7rem;border:1px solid var(--line);border-radius:10px;font:inherit;width:100%;background:var(--input-bg);color:var(--ink)}
+input::placeholder{color:var(--placeholder)}
+.correct{color:var(--ok)} .wrong{color:var(--bad)}
+.result-q{border-left:3px solid var(--line);padding-left:.8rem;margin:.8rem 0}
+.result-q.ok{border-color:var(--ok)} .result-q.bad{border-color:var(--bad)}
+.err{color:var(--bad)}
+</style>
+</head>
+<body>
+<main>
+  <div class="card" id="intro">
+    <button id="themeToggle" title="Toggle light/dark">🌙</button>
+    <h1 id="title">Loading…</h1>
+    <p class="small" id="scoring"></p>
+    <label class="small">Your name (optional)</label>
+    <input type="text" id="taker">
+  </div>
+  <div class="card" id="paper"></div>
+  <div class="card"><button id="submit">Submit answers</button> <span class="err" id="err"></span></div>
+  <div class="card" id="report" style="display:none"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const token = location.pathname.split('/').pop();
+let data = null;
+
+const savedTheme = localStorage.getItem('rp-theme');
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+else if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.dataset.theme = 'dark';
+function syncThemeBtn(){ $('themeToggle').textContent = document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'; }
+$('themeToggle').onclick = ()=>{
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('rp-theme', next);
+  syncThemeBtn();
+};
+syncThemeBtn();
+
+async function api(path, opts={}) {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(()=>({detail:r.statusText}));
+  if (!r.ok) throw new Error(body.detail || JSON.stringify(body));
+  return body;
+}
+function esc(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+async function load(){
+  try { data = await api('/api/take/'+token); }
+  catch(e){ $('title').textContent = 'Not found'; $('err').textContent = e.message; return; }
+  $('title').textContent = data.title;
+  $('scoring').textContent = data.scoring;
+  const paper = $('paper');
+  data.questions.forEach((q,i)=>{
+    const d = document.createElement('div');
+    d.className = 'q';
+    const hint = q.correct_count ? ` <span class="small">(${q.correct_count} correct)</span>` : '';
+    d.innerHTML = `<p><strong>Q${i+1}.</strong> ${esc(q.stem)}${hint}</p>`;
+    q.options.forEach(o=>{
+      const l = document.createElement('label');
+      l.className = 'opt';
+      l.innerHTML = `<input type="checkbox" data-q="${q.id}" value="${o.key}"> <span><strong>${o.key}.</strong> ${esc(o.text)}</span>`;
+      d.appendChild(l);
+    });
+    paper.appendChild(d);
+  });
+}
+
+$('submit').onclick = async ()=>{
+  $('err').textContent = '';
+  const responses = {};
+  data.questions.forEach(q=>{ responses[q.id] = []; });
+  document.querySelectorAll('#paper input[type=checkbox]:checked').forEach(c=>{
+    responses[c.dataset.q].push(c.value);
+  });
+  try {
+    const score = await api('/api/take/'+token+'/submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({taker_name:$('taker').value, responses})});
+    showReport(score);
+  } catch(e){ $('err').textContent = e.message; }
+};
+
+function showReport(s){
+  $('submit').disabled = true;
+  const r = $('report');
+  r.style.display = 'block';
+  let html = `<h1>Result: ${s.correct}/${s.total} (${s.percent}%)</h1>`;
+  html += '<h3>By focus area</h3><ul>' + Object.entries(s.per_focus).map(([k,v])=>
+    `<li>${esc(k)}: ${v.correct}/${v.total}</li>`).join('') + '</ul><h3>Per question</h3>';
+  s.per_question.forEach((pq,i)=>{
+    html += `<div class="result-q ${pq.correct?'ok':'bad'}">
+      <p><strong>Q${i+1}</strong> — <span class="${pq.correct?'correct':'wrong'}">${pq.correct?'correct':'incorrect'}</span>.
+      You selected [${pq.selected.join(', ')||'nothing'}]; the answer is [${pq.answer.join(', ')}].</p>
+      ${pq.explanation?`<p class="small">${esc(pq.explanation)}</p>`:''}</div>`;
+  });
+  r.innerHTML = html;
+  r.scrollIntoView({behavior:'smooth'});
+}
+
+load();
+</script>
+</body>
+</html>

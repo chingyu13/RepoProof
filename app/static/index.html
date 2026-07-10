@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RepoProof — Creator</title>
+<style>
+/* Theme tokens from Figma: File Uploader — Light & Dark Mode (Community) */
+:root{
+  --bg:#f1f4ff; --card:#ffffff; --ink:#0c1421; --muted:#7d7d7d;
+  --line:#d8daeb; --input-bg:#fefefe; --placeholder:#949fb1;
+  --accent:#5046fa; --accent-hover:#4238e0; --ok:#06bf5c; --bad:#df3d43;
+  --chip:#eef0ff; --chip-ink:#3a34b8;
+  --shadow:0 12px 32px rgba(12,20,33,.07);
+}
+[data-theme="dark"]{
+  --bg:#161618; --card:#1e1f22; --ink:#f5f6f8; --muted:#9a9aa3;
+  --line:#33343a; --input-bg:#232428; --placeholder:#6f7078;
+  --accent:#5046fa; --accent-hover:#6157ff; --ok:#06bf5c; --bad:#f2555a;
+  --chip:#2a2b3d; --chip-ink:#b9b4ff;
+  --shadow:0 12px 32px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink);transition:background .2s}
+.top-shell{position:sticky;top:0;z-index:30;background:var(--bg);box-shadow:0 4px 14px rgba(12,20,33,.05)}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:.9rem 1.5rem;display:flex;align-items:center;gap:1rem}
+header h1{font-size:1.15rem;margin:0;font-weight:600}
+.badge{font-size:.75rem;padding:.15rem .55rem;border-radius:999px;background:var(--chip);color:var(--chip-ink)}
+.badge.warn{background:#fef3c7;color:#92400e}
+.workflow{max-width:1012px;margin:1.5rem auto;display:flex;overflow-x:hidden;scroll-behavior:smooth;align-items:flex-start}
+.workflow-step{flex:0 0 100%;min-width:0;padding:0 1rem;display:grid;gap:1.25rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.4rem 1.6rem;box-shadow:var(--shadow);position:relative}
+/* generation loading overlay */
+.gen-overlay{position:absolute;inset:0;background:rgba(255,255,255,.5);backdrop-filter:blur(1.5px);border-radius:16px;
+  display:flex;flex-direction:column;gap:.9rem;align-items:center;justify-content:center;z-index:5}
+[data-theme="dark"] .gen-overlay{background:rgba(22,22,24,.5)}
+.gen-overlay p{font-weight:500;margin:0;color:var(--ink)}
+.loader{width:44px;height:44px;border:4px solid rgba(80,70,250,.22);border-top-color:var(--accent);border-radius:50%;animation:spin .9s linear infinite}
+.card h2{margin:.1rem 0 .3rem;font-size:1.05rem;font-weight:600}
+.sub{color:var(--muted);font-size:.85rem;margin:0 0 1rem}
+label{display:block;font-size:.85rem;color:var(--muted);margin:.5rem 0 .2rem}
+input[type=text],input[type=number],select,textarea{width:100%;padding:.55rem .7rem;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--input-bg);color:var(--ink)}
+input::placeholder,textarea::placeholder{color:var(--placeholder)}
+textarea{min-height:60px}
+button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:.6rem 1rem;font:inherit;font-weight:500;letter-spacing:.03em;cursor:pointer}
+button:hover{background:var(--accent-hover)}
+button.secondary{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+button.secondary:hover{background:var(--bg)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:.8rem;flex-wrap:wrap}.row>div{flex:1;min-width:130px}
+/* Figma drop zone */
+.drop{border:1.5px dashed var(--line);border-radius:12px;padding:2rem 1rem;text-align:center;transition:border-color .15s, background .15s}
+.drop.hover{border-color:var(--accent);background:var(--chip)}
+.drop .icon{width:52px;height:52px;margin:0 auto .6rem;color:var(--muted)}
+.drop-title{font-weight:600;margin:.2rem 0}
+.drop-sub{color:var(--muted);font-size:.8rem;margin:.2rem 0 1rem}
+.or-label{color:var(--muted);font-size:.85rem;margin:1rem 0 .4rem}
+.url-wrap{display:flex;gap:.6rem;align-items:center;border:1px solid var(--line);border-radius:12px;padding:.45rem .45rem .45rem .9rem;background:var(--input-bg)}
+.url-wrap input{border:0;background:transparent;padding:.35rem 0;flex:1;outline:none}
+.filerow{display:flex;align-items:center;gap:.8rem;border:1px solid var(--line);border-radius:12px;padding:.7rem .9rem;margin-top:.8rem}
+.filerow .fname{font-weight:500}
+.filerow .fmeta{color:var(--muted);font-size:.8rem}
+.filerow .status-ok{color:var(--ok)}
+.filerow .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.consent{font-size:.8rem;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;margin:.9rem 0}
+.err{color:var(--bad);font-size:.85rem;white-space:pre-wrap}
+.okmsg{color:var(--ok);font-size:.85rem}
+.plist{list-style:none;padding:0;margin:0}
+.plist li{padding:.55rem .3rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-radius:8px}
+.plist li:hover{background:var(--bg)}
+.q{border:1px solid var(--line);border-radius:12px;padding:1rem;margin:.8rem 0}
+.q .status{float:right;font-size:.75rem;padding:.15rem .55rem;border-radius:999px}
+.status.draft{background:var(--chip);color:var(--chip-ink)}
+.status.approved{background:#dcfce7;color:#166534}.status.rejected{background:#fee2e2;color:#991b1b}
+[data-theme="dark"] .status.approved{background:#123b26;color:#5ee6a1}
+[data-theme="dark"] .status.rejected{background:#3d1517;color:#ff9a9e}
+.opt{display:flex;gap:.5rem;align-items:center;margin:.3rem 0}
+.opt input[type=text]{flex:1}
+.evidence{font-size:.78rem;color:var(--muted);background:var(--bg);border-radius:10px;padding:.5rem .7rem;margin-top:.5rem}
+.small{font-size:.8rem;color:var(--muted)}
+a{color:var(--accent)}
+.hidden{display:none}
+/* Focus-area radar — style from Figma: Spider Graph Templates (Community) */
+.radar-wrap{display:flex;gap:1.4rem;align-items:flex-start;flex-wrap:wrap;margin-top:.4rem}
+.radar-panel{background:#20233f;border-radius:14px;padding:.6rem;flex:0 0 auto}
+#radar{display:block;width:300px;height:300px;max-width:100%}
+.area-list{flex:1;min-width:250px;display:grid;gap:.45rem;align-content:start}
+.area-row{display:flex;gap:.5rem;align-items:center}
+.area-row .aname{flex:1.2;min-width:90px}
+.area-row input[type=range]{flex:1;accent-color:var(--accent);min-width:80px}
+.area-row .aval{width:1.4em;text-align:center;color:var(--muted);font-size:.85rem}
+.area-row .adel{padding:.2rem .6rem}
+.add-area{display:flex;gap:.5rem;margin-top:.5rem}
+/* scrollable review list */
+#questions{max-height:62vh;overflow-y:auto;padding-right:.4rem}
+#questions::-webkit-scrollbar{width:8px}
+#questions::-webkit-scrollbar-track{background:transparent}
+#questions::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+#questions::-webkit-scrollbar-thumb:hover{background:var(--placeholder)}
+#themeToggle{margin-left:auto}
+.actions{display:flex;justify-content:flex-end;margin:.9rem 0 0}
+.actions button{min-width:150px}
+/* Stepper — style from Figma: Stepper / Step indicator (Community) */
+.stepper{display:flex;max-width:980px;margin:0 auto;padding:.75rem 2.5rem;background:var(--bg)}
+.step{flex:1;position:relative;text-align:center;cursor:pointer;user-select:none;outline:none}
+.step.locked{cursor:not-allowed;opacity:.55}
+.step:focus-visible .dot{box-shadow:0 0 0 3px var(--chip)}
+.step .dot{width:24px;height:24px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;
+  font-size:.72rem;font-weight:600;background:var(--line);color:var(--muted);position:relative;z-index:1;
+  border:2.5px solid var(--line);transition:all .2s}
+.step .lbl{display:block;margin-top:.45rem;font-size:.78rem;color:var(--muted)}
+.step:not(:first-child)::before{content:'';position:absolute;top:11px;right:50%;width:100%;height:2.5px;background:var(--line);z-index:0;transition:background .2s}
+.step.done .dot{background:var(--accent);border-color:var(--accent);color:#fff}
+.step.done .dot::after{content:'✓'}
+.step.done .dot span{display:none}
+.step.done .lbl{color:var(--ink)}
+.step.done::before,.step.current::before{background:var(--accent)}
+.step.current .dot{background:var(--card);border-color:var(--accent);color:var(--accent)}
+.step.current .lbl{color:var(--accent);font-weight:600}
+@media (max-width:640px){
+  header{padding:.7rem 1rem}
+  header .small{display:none}
+  .stepper{padding:.65rem .5rem}
+  .step .lbl{font-size:.67rem}
+  .workflow{margin:1rem auto}
+  .card{padding:1.1rem}
+}
+</style>
+</head>
+<body>
+<div class="top-shell">
+  <header>
+    <h1>RepoProof</h1>
+    <span class="small">project-understanding assessments · prototype</span>
+    <span id="mockBadge" class="badge warn hidden">MOCK MODE — no OpenAI key</span>
+    <button id="themeToggle" class="secondary" title="Toggle light/dark">🌙</button>
+  </header>
+  <nav class="stepper" id="stepper" aria-label="Assessment creation progress">
+    <div class="step current" data-step="1" role="button" tabindex="0"><div class="dot"><span>1</span></div><span class="lbl">Link the Project</span></div>
+    <div class="step locked" data-step="2" role="button" tabindex="0"><div class="dot"><span>2</span></div><span class="lbl">Question Framework</span></div>
+    <div class="step locked" data-step="3" role="button" tabindex="0"><div class="dot"><span>3</span></div><span class="lbl">Review and Approve</span></div>
+    <div class="step locked" data-step="4" role="button" tabindex="0"><div class="dot"><span>4</span></div><span class="lbl">Publish Assessment</span></div>
+  </nav>
+</div>
+<main class="workflow" id="workflow">
+
+<section class="workflow-step" id="linkStep" data-panel="1">
+<div class="card" id="newProject">
+  <h2>1 · Link the Project</h2>
+  <p class="sub">Upload a folder or paste a public GitHub repository URL.</p>
+
+  <div class="drop" id="dropZone">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/>
+      <line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/>
+    </svg>
+    <p class="drop-title">Drag and drop your project (.zip)</p>
+    <p class="drop-sub" id="sizeNote">Any code project</p>
+    <button class="secondary" id="selectFileBtn" type="button">Select File (.zip)</button>
+    <button class="secondary" id="selectFolderBtn" type="button">Select Folder</button>
+    <input type="file" id="zipFile" accept=".zip" hidden>
+    <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+  </div>
+
+  <p class="or-label">or analyze from a public GitHub URL</p>
+  <div class="url-wrap">
+    <input type="text" id="ghUrl" placeholder="https://github.com/owner/repo">
+  </div>
+
+  <div id="fileRow" class="filerow hidden">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--muted)">
+      <rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/>
+    </svg>
+    <div style="flex:1">
+      <div class="fname" id="fileName"></div>
+      <div class="fmeta" id="fileMeta"></div>
+    </div>
+  </div>
+
+  <div class="consent">
+    <label style="display:flex;gap:.5rem;align-items:flex-start;margin:0;color:inherit">
+      <input type="checkbox" id="consent" style="margin-top:.2rem">
+      <span id="consentText">Loading consent notice…</span>
+    </label>
+  </div>
+  <div class="actions"><button id="analyzeProject">Analyze project</button></div>
+  <p class="err" id="projectErr"></p>
+</div>
+
+<div class="card">
+  <h2>Projects</h2>
+  <ul class="plist" id="projectList"><li class="small">None yet.</li></ul>
+</div>
+</section>
+
+<section class="workflow-step" id="frameworkStep" data-panel="2">
+<div class="card project-content hidden">
+  <div class="gen-overlay hidden" id="genOverlay">
+    <div class="loader"></div>
+    <p>Generating questions…</p>
+  </div>
+  <h2 id="projTitle"></h2>
+  <p class="small" id="projStats"></p>
+
+  <h2 style="margin-top:1.2rem">2 · Question Framework</h2>
+  <div class="row">
+    <div><label># Questions</label><input type="number" id="gNum" value="5" min="1" max="20"></div>
+    <div><label>Options per question</label><input type="number" id="gChoices" value="5" min="2" max="7"></div>
+    <div><label>Correct-count mode</label>
+      <select id="gMode"><option value="dynamic">Dynamic range</option><option value="exact">Exact</option></select></div>
+    <div id="gExactWrap" class="hidden"><label>Exact correct</label><input type="number" id="gExact" value="2" min="1"></div>
+    <div id="gRangeWrap"><label>Range (min–max)</label>
+      <div style="display:flex;gap:.3rem"><input type="number" id="gMin" value="1" min="1"><input type="number" id="gMax" value="3" min="1"></div></div>
+    <div><label>Difficulty (1–5)</label><input type="number" id="gDiff" value="2" min="1" max="5"></div>
+  </div>
+  <label>Focus areas — drag each slider to set how strongly that area is tested (0 = skip)</label>
+  <div class="radar-wrap">
+    <div class="radar-panel"><svg id="radar" viewBox="0 0 300 300" aria-label="Focus area radar chart"></svg></div>
+    <div style="flex:1;min-width:250px">
+      <div class="area-list" id="areaList"></div>
+      <div class="add-area">
+        <input type="text" id="newArea" placeholder="Add focus area (e.g. Security)">
+        <button class="secondary" id="addArea" type="button">Add</button>
+      </div>
+    </div>
+  </div>
+  <label>Extra instructions (optional — e.g. "recursion, testing; don't ask about deployment")</label>
+  <input type="text" id="gFocus">
+  <p style="margin-top:.8rem"><button id="generate">Generate questions</button> <span class="small" id="genStatus"></span></p>
+  <p class="err" id="genErr"></p>
+</div>
+</section>
+
+<section class="workflow-step" id="reviewStep" data-panel="3">
+<div class="card project-content hidden">
+  <h2>3 · Review and Approve</h2>
+  <div id="questions" class="small">No questions yet.</div>
+  <div class="actions"><button id="continuePublish">Continue to publish</button></div>
+  <p class="err" id="reviewErr"></p>
+</div>
+</section>
+
+<section class="workflow-step" id="publishStep" data-panel="4">
+<div class="card project-content hidden">
+  <h2>4 · Publish Assessment</h2>
+  <label>Title</label>
+  <input type="text" id="aTitle" placeholder="Assignment 3 — understanding check">
+  <label style="display:flex;gap:.4rem;align-items:center"><input type="checkbox" id="aShowCount" style="width:auto">Show the taker how many options are correct</label>
+  <p><button id="publish">Publish selected approved questions</button></p>
+  <p class="err" id="pubErr"></p><p class="okmsg" id="pubOk"></p>
+
+  <h2>Assessments</h2>
+  <div id="assessments" class="small">None yet.</div>
+</div>
+</section>
+
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let currentProject = null;
+let pendingFile = null;
+let maxProjectMB = 1024;
+
+/* theme */
+const savedTheme = localStorage.getItem('rp-theme');
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+else if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.dataset.theme = 'dark';
+function syncThemeBtn(){ $('themeToggle').textContent = document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'; }
+$('themeToggle').onclick = ()=>{
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('rp-theme', next);
+  syncThemeBtn();
+};
+syncThemeBtn();
+
+/* stepper state */
+let currentStep = 1;
+let maxUnlockedStep = 1;
+function renderStepper(){
+  document.querySelectorAll('#stepper .step').forEach(el=>{
+    const s = +el.dataset.step;
+    const locked = s > maxUnlockedStep;
+    el.classList.toggle('done', s < maxUnlockedStep && s !== currentStep);
+    el.classList.toggle('current', s === currentStep);
+    el.classList.toggle('locked', locked);
+    el.setAttribute('aria-disabled', locked ? 'true' : 'false');
+    if (s === currentStep) el.setAttribute('aria-current', 'step');
+    else el.removeAttribute('aria-current');
+  });
+}
+function goToStep(n, {unlock=false}={}){
+  if (unlock) maxUnlockedStep = Math.max(maxUnlockedStep, n);
+  if (n < 1 || n > 4 || n > maxUnlockedStep) return;
+  currentStep = n;
+  renderStepper();
+  const workflow = $('workflow');
+  workflow.scrollTo({left:(n - 1) * workflow.clientWidth, behavior:'smooth'});
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+document.querySelectorAll('#stepper .step').forEach(el=>{
+  const activate = ()=>goToStep(+el.dataset.step);
+  el.addEventListener('click', activate);
+  el.addEventListener('keydown', e=>{
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+  });
+});
+window.addEventListener('resize', ()=>{
+  $('workflow').scrollTo({left:(currentStep - 1) * $('workflow').clientWidth, behavior:'auto'});
+});
+renderStepper();
+
+async function api(path, opts={}) {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(()=>({detail:r.statusText}));
+  if (!r.ok) throw new Error(body.detail || JSON.stringify(body));
+  return body;
+}
+
+async function loadMeta(){
+  const m = await api('/api/meta');
+  maxProjectMB = m.max_project_mb;
+  $('consentText').textContent = m.consent_text;
+  $('sizeNote').textContent = `Any code project up to ${m.max_project_mb.toLocaleString()} MB (larger: Pro tier pending — ${m.pro_contact})`;
+  if (m.mock_mode) $('mockBadge').classList.remove('hidden');
+}
+
+/* drag & drop */
+const dz = $('dropZone');
+['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.add('hover');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.remove('hover');}));
+dz.addEventListener('drop', async e=>{
+  const item = e.dataTransfer.items && e.dataTransfer.items[0];
+  const entry = item && item.webkitGetAsEntry && item.webkitGetAsEntry();
+  if (entry && entry.isDirectory) {           // a folder was dropped
+    try {
+      const out = [];
+      await readEntries(entry, '', out);
+      await packAndStage(out, entry.name);
+    } catch(err){ $('projectErr').textContent = 'Could not read the folder: ' + err.message; }
+    return;
+  }
+  const f = e.dataTransfer.files[0];
+  if (f) setPendingFile(f);
+});
+
+async function readEntries(entry, prefix, out){
+  const SKIP = /(^|\/)(\.git|node_modules|\.venv|venv|__pycache__|dist|build|\.idea|\.vscode)(\/|$)/;
+  if (entry.isFile) {
+    const f = await new Promise((res, rej)=>entry.file(res, rej));
+    out.push({file: f, rel: prefix + entry.name});
+  } else if (entry.isDirectory) {
+    if (SKIP.test('/' + prefix + entry.name + '/')) return;
+    const reader = entry.createReader();
+    let batch;
+    do {
+      batch = await new Promise((res, rej)=>reader.readEntries(res, rej));
+      for (const e of batch) await readEntries(e, prefix + entry.name + '/', out);
+    } while (batch.length);
+  }
+}
+$('selectFileBtn').onclick = ()=>$('zipFile').click();
+$('zipFile').onchange = ()=>{ if ($('zipFile').files[0]) setPendingFile($('zipFile').files[0]); };
+
+/* folder upload: pack the selected folder into a zip in the browser */
+const folderSupported = 'webkitdirectory' in document.createElement('input');
+if (!folderSupported) {
+  $('selectFolderBtn').disabled = true;
+  $('selectFolderBtn').title = 'Your browser does not support folder selection — zip the folder and use Select File.';
+}
+$('selectFolderBtn').addEventListener('click', (e)=>{
+  e.preventDefault();
+  $('projectErr').textContent = '';
+  $('folderInput').value = '';
+  $('folderInput').click();
+});
+$('folderInput').addEventListener('change', async ()=>{
+  try {
+    const files = [...$('folderInput').files];
+    if (!files.length) { $('projectErr').textContent = 'No files received from the folder picker. Try dragging the folder onto the drop zone instead.'; return; }
+    const list = files.map(f => ({file: f, rel: f.webkitRelativePath || f.name}));
+    const folderName = (list[0].rel.split('/')[0]) || 'project';
+    await packAndStage(list, folderName);
+  } catch(e){ $('projectErr').textContent = 'Folder selection failed: ' + e.message; }
+});
+
+async function packAndStage(list, folderName){
+  $('projectErr').textContent = '';
+  if (typeof JSZip === 'undefined') {
+    $('projectErr').textContent = 'Folder packing needs internet access (JSZip CDN). Please zip the folder yourself and use Select File.';
+    return;
+  }
+  const SKIP = /(^|\/)(\.git|node_modules|\.venv|venv|__pycache__|dist|build|\.idea|\.vscode)(\/|$)/;
+  const kept = list.filter(x => !SKIP.test('/' + x.rel));
+  if (!kept.length) { $('projectErr').textContent = 'The folder appears to be empty (or contains only skipped directories).'; return; }
+  const total = kept.reduce((a,x)=>a+x.file.size, 0);
+  if (total > maxProjectMB * 1_000_000) {
+    $('projectErr').textContent = `Folder is ${(total/1_000_000).toFixed(0)} MB — over the ${maxProjectMB.toLocaleString()} MB limit. Pro tier pending — jobs@chingyu.site`;
+    return;
+  }
+  $('fileRow').classList.remove('hidden');
+  $('fileName').textContent = folderName + '/';
+  $('fileMeta').innerHTML = `<span class="spin"></span> Packing ${kept.length} files…`;
+  try {
+    const zip = new JSZip();
+    kept.forEach(x => zip.file(x.rel, x.file));
+    const blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:1}});
+    pendingFile = new File([blob], folderName + '.zip', {type:'application/zip'});
+    $('fileName').textContent = folderName + '.zip';
+    $('fileMeta').textContent = `${(blob.size/1_000_000).toFixed(1)} MB (${kept.length} files) · ready to analyze`;
+  } catch(e) {
+    $('fileMeta').textContent = '';
+    $('projectErr').textContent = 'Could not pack the folder: ' + e.message;
+  }
+}
+function setPendingFile(f){
+  if (!f.name.toLowerCase().endsWith('.zip')) { $('projectErr').textContent = 'Only .zip archives are supported.'; return; }
+  pendingFile = f;
+  $('projectErr').textContent = '';
+  $('fileRow').classList.remove('hidden');
+  $('fileName').textContent = f.name;
+  $('fileMeta').textContent = `${(f.size/1_000_000).toFixed(1)} MB · ready to analyze`;
+}
+
+async function submitProject({url, file}){
+  $('projectErr').textContent='';
+  if (!$('consent').checked) { $('projectErr').textContent = 'Please accept the consent notice first.'; return; }
+  const fd = new FormData();
+  fd.append('github_url', url || '');
+  fd.append('consent', 'true');
+  if (file) fd.append('file', file);
+  const btn = $('analyzeProject');
+  btn.disabled = true;
+  if (file) $('fileMeta').innerHTML = `<span class="spin"></span> Analyzing…`;
+  btn.textContent = 'Analyzing…';
+  try {
+    const p = await api('/api/projects', {method:'POST', body:fd});
+    if (file) $('fileMeta').innerHTML = `<span class="status-ok">● Analyzed successfully</span>`;
+    await loadProjects();
+    await openProject(p.id);
+  } catch(e){
+    $('projectErr').textContent = e.message;
+    if (file) $('fileMeta').textContent = 'Failed — see error below.';
+  }
+  btn.disabled = false; btn.textContent = 'Analyze project';
+}
+$('analyzeProject').onclick = ()=>{
+  const url = $('ghUrl').value.trim();
+  if (!url && !pendingFile) {
+    $('projectErr').textContent = 'Paste a GitHub URL or drop a project file or folder.';
+    return;
+  }
+  if (url && pendingFile) {
+    $('projectErr').textContent = 'Choose one project source: either the URL or the selected upload.';
+    return;
+  }
+  submitProject({url, file:pendingFile});
+};
+
+async function loadProjects(){
+  const ps = await api('/api/projects');
+  const ul = $('projectList');
+  ul.innerHTML = ps.length ? '' : '<li class="small">None yet.</li>';
+  ps.forEach(p=>{
+    const li = document.createElement('li');
+    li.innerHTML = `<span><strong>${p.name}</strong> <span class="small">· ${p.source_type} · snapshot ${p.snapshot_id}</span></span>
+                    <span class="small">${p.stats.source_files ?? p.stats.python_files} source files</span>`;
+    li.onclick = ()=>openProject(p.id);
+    ul.appendChild(li);
+  });
+}
+
+async function openProject(id){
+  const p = await api('/api/projects/'+id);
+  currentProject = id;
+  document.querySelectorAll('.project-content').forEach(el=>el.classList.remove('hidden'));
+  $('projTitle').textContent = `${p.name} — snapshot ${p.snapshot_id}`;
+  const s = p.stats;
+  const langs = Object.entries(s.files_by_language || {}).map(([k,v])=>`${v} ${k}`).join(', ')
+                || `${s.python_files} Python`;
+  $('projStats').textContent = `${s.source_files ?? s.python_files} source files (${langs}) · ${s.functions} Python functions · ${s.lines_of_code.toLocaleString()} LOC · ${p.chunk_count} evidence chunks` + (s.parse_errors?` · ${s.parse_errors} parse errors`:'');
+  const qs = await loadQuestions();
+  const as = await loadAssessments();
+  goToStep(as.length ? 4 : (qs.length ? 3 : 2), {unlock:true});
+}
+
+$('gMode').onchange = ()=>{
+  const exact = $('gMode').value==='exact';
+  $('gExactWrap').classList.toggle('hidden', !exact);
+  $('gRangeWrap').classList.toggle('hidden', exact);
+};
+
+/* focus-area radar picker */
+let areas = [
+  {name:'Project logic', w:4},
+  {name:'Architecture', w:3},
+  {name:'Data modelling', w:3},
+  {name:'Algorithms', w:2},
+  {name:'Testing', w:2},
+];
+function escXml(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function drawRadar(){
+  const svg = $('radar');
+  const n = areas.length, cx = 150, cy = 150, R = 102, LVL = 5;
+  const pt = (i, r) => {
+    const a = -Math.PI/2 + i * 2 * Math.PI / n;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  };
+  if (n < 3) { svg.innerHTML = `<text x="150" y="155" text-anchor="middle" fill="#cfd3e8" font-size="12">Add at least 3 focus areas</text>`; return; }
+  let s = '';
+  for (let l = 1; l <= LVL; l++) {
+    const pts = Array.from({length:n}, (_,i)=>pt(i, R*l/LVL).join(',')).join(' ');
+    s += `<polygon points="${pts}" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="1"/>`;
+  }
+  for (let i = 0; i < n; i++) {
+    const [x,y] = pt(i, R);
+    s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="rgba(255,255,255,.8)" stroke-width="1"/>`;
+  }
+  const dataPts = areas.map((a,i)=>pt(i, R * Math.max(0, Math.min(5, a.w)) / LVL));
+  s += `<polygon points="${dataPts.map(p=>p.join(',')).join(' ')}" fill="rgba(90,141,222,.55)" stroke="#7ab3f0" stroke-width="2" stroke-linejoin="round"/>`;
+  dataPts.forEach(p=>{ s += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#7c83ff" stroke="#20233f" stroke-width="1"/>`; });
+  areas.forEach((a,i)=>{
+    const [x,y] = pt(i, R + 14);
+    const anchor = Math.abs(x - cx) < 10 ? 'middle' : (x > cx ? 'start' : 'end');
+    s += `<text x="${x}" y="${y + 3}" text-anchor="${anchor}" font-size="10" fill="#cfd3e8">${escXml(a.name.slice(0, 18))}</text>`;
+  });
+  svg.innerHTML = s;
+}
+function renderAreas(){
+  const list = $('areaList');
+  list.innerHTML = '';
+  areas.forEach((a, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'area-row';
+    row.innerHTML = `<input type="text" class="aname" value="${esc(a.name)}">
+      <input type="range" class="aw" min="0" max="5" step="1" value="${a.w}">
+      <span class="aval">${a.w}</span>
+      <button class="secondary adel" type="button" title="Remove area">×</button>`;
+    row.querySelector('.aname').oninput = e=>{ a.name = e.target.value; drawRadar(); };
+    row.querySelector('.aw').oninput = e=>{ a.w = +e.target.value; row.querySelector('.aval').textContent = a.w; drawRadar(); };
+    row.querySelector('.adel').onclick = ()=>{ areas.splice(idx, 1); renderAreas(); };
+    list.appendChild(row);
+  });
+  drawRadar();
+}
+$('addArea').onclick = ()=>{
+  const name = $('newArea').value.trim();
+  if (!name) return;
+  areas.push({name, w:3});
+  $('newArea').value = '';
+  renderAreas();
+};
+$('newArea').addEventListener('keydown', e=>{ if (e.key === 'Enter') $('addArea').click(); });
+renderAreas();
+
+$('generate').onclick = async ()=>{
+  $('genErr').textContent=''; $('genStatus').textContent='Generating…';
+  $('generate').disabled = true;
+  $('genOverlay').classList.remove('hidden');
+  try {
+    const cfg = {
+      num_questions:+$('gNum').value, choice_count:+$('gChoices').value,
+      correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
+      correct_min:+$('gMin').value, correct_max:+$('gMax').value,
+      difficulty:+$('gDiff').value, focus:$('gFocus').value,
+      areas: areas.filter(a=>a.name.trim() && a.w > 0).map(a=>({name:a.name.trim(), weight:a.w}))
+    };
+    const res = await api(`/api/projects/${currentProject}/generate`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
+    $('genStatus').textContent = `Created ${res.created.length} question(s).` + (res.mock_mode?' (mock mode)':'');
+    if (res.warnings.length) $('genErr').textContent = res.warnings.join('\n');
+    await loadQuestions();
+    goToStep(3, {unlock:true});
+  } catch(e){ $('genErr').textContent = e.message; $('genStatus').textContent=''; }
+  $('genOverlay').classList.add('hidden');
+  $('generate').disabled = false;
+};
+
+async function loadQuestions(){
+  const qs = await api(`/api/projects/${currentProject}/questions`);
+  const wrap = $('questions');
+  wrap.innerHTML = qs.length ? '' : 'No questions yet.';
+  qs.forEach(q=>wrap.appendChild(renderQuestion(q)));
+  return qs;
+}
+
+$('continuePublish').onclick = ()=>{
+  $('reviewErr').textContent = '';
+  if (!document.querySelector('.pubSel:not(:disabled)')) {
+    $('reviewErr').textContent = 'Approve at least one question before continuing.';
+    return;
+  }
+  goToStep(4, {unlock:true});
+};
+
+const selectedForPublish = new Set();
+
+function renderQuestion(q){
+  const div = document.createElement('div');
+  div.className = 'q';
+  const included = q.status === 'approved' && selectedForPublish.has(q.id);
+  const ev = (q.evidence||[]).map(e=>`${e.title}${e.file?` — ${e.file}${e.lines?' : '+e.lines:''}`:''}`).join('<br>') || 'No evidence linked';
+  div.innerHTML = `
+    <span class="status ${q.status}">${q.status}</span>
+    <label style="display:flex;gap:.4rem;align-items:center;margin:0 0 .4rem">
+      <input type="checkbox" class="pubSel" data-id="${q.id}" style="width:auto" ${q.status==='approved'?'':'disabled'} ${included?'checked':''}>
+      <span class="small">include in assessment · #${q.id} · slot: ${q.slot} · by ${q.generator}</span>
+    </label>
+    <textarea class="stem">${esc(q.stem)}</textarea>
+    <div class="opts"></div>
+    <div class="row" style="margin-top:.4rem">
+      <div><label>Difficulty</label><input type="number" class="diff" value="${q.difficulty}" min="1" max="5"></div>
+      <div style="flex:3"><label>Explanation (shown after submission)</label><textarea class="expl">${esc(q.explanation)}</textarea></div>
+    </div>
+    <div class="evidence"><strong>Evidence:</strong><br>${ev}</div>
+    <p style="margin:.6rem 0 0">
+      <button class="save secondary">Save</button>
+      <button class="approve">Approve</button>
+      <button class="reject secondary">Reject</button>
+      <span class="err msg"></span>
+    </p>`;
+  const opts = div.querySelector('.opts');
+  q.options.forEach(o=>{
+    const row = document.createElement('div');
+    row.className='opt';
+    row.innerHTML = `<input type="checkbox" class="corr" ${q.answer.includes(o.key)?'checked':''} title="correct">
+      <strong>${o.key}.</strong> <input type="text" value="${esc(o.text)}" data-key="${o.key}">`;
+    opts.appendChild(row);
+  });
+  const collect = ()=>({
+    stem: div.querySelector('.stem').value,
+    options: [...opts.querySelectorAll('input[type=text]')].map(i=>({key:i.dataset.key,text:i.value})),
+    answer: [...opts.querySelectorAll('.opt')].filter(r=>r.querySelector('.corr').checked).map(r=>r.querySelector('input[type=text]').dataset.key),
+    difficulty: +div.querySelector('.diff').value,
+    explanation: div.querySelector('.expl').value
+  });
+  const send = async (extra)=>{
+    div.querySelector('.msg').textContent='';
+    try {
+      await api('/api/questions/'+q.id, {method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({...collect(), ...extra})});
+      await loadQuestions();
+    } catch(e){ div.querySelector('.msg').textContent = e.message; }
+  };
+  div.querySelector('.pubSel').onchange = e=>{
+    if (e.target.checked) selectedForPublish.add(q.id);
+    else selectedForPublish.delete(q.id);
+  };
+  div.querySelector('.save').onclick = ()=>send({status:'draft'});
+  div.querySelector('.approve').onclick = ()=>{
+    selectedForPublish.add(q.id);          // approving auto-includes it in the assessment
+    send({status:'approved'});
+  };
+  div.querySelector('.reject').onclick = ()=>{
+    selectedForPublish.delete(q.id);
+    send({status:'rejected'});
+  };
+  return div;
+}
+
+$('publish').onclick = async ()=>{
+  $('pubErr').textContent=''; $('pubOk').textContent='';
+  const ids = [...document.querySelectorAll('.pubSel:checked')].map(c=>+c.dataset.id);
+  try {
+    const res = await api(`/api/projects/${currentProject}/assessments`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({title:$('aTitle').value, question_ids:ids, show_correct_count:$('aShowCount').checked})});
+    $('pubOk').innerHTML = `Published. Take link: <a href="${res.take_url}" target="_blank">${location.origin}${res.take_url}</a> · <a href="${res.print_url}" target="_blank">printable</a> (<a href="${res.print_url}?key=1" target="_blank">with answer key</a>)`;
+    await loadAssessments();
+    goToStep(4, {unlock:true});
+  } catch(e){ $('pubErr').textContent = e.message; }
+};
+
+async function loadAssessments(){
+  const as = await api(`/api/projects/${currentProject}/assessments`);
+  const wrap = $('assessments');
+  wrap.innerHTML = as.length ? '' : 'None yet.';
+  as.forEach(a=>{
+    const d = document.createElement('div');
+    d.style.padding='.35rem 0';
+    d.innerHTML = `<strong>${esc(a.title)}</strong> · ${a.questions} questions · ${a.attempts} attempt(s) ·
+      <a href="/a/${a.token}" target="_blank">take</a> ·
+      <a href="/print/${a.id}" target="_blank">print</a> ·
+      <a href="/print/${a.id}?key=1" target="_blank">answer key</a> ·
+      <a href="#" data-id="${a.id}" class="viewAttempts">results</a><div class="small results"></div>`;
+    d.querySelector('.viewAttempts').onclick = async (ev)=>{
+      ev.preventDefault();
+      const ats = await api(`/api/assessments/${a.id}/attempts`);
+      d.querySelector('.results').innerHTML = ats.length
+        ? ats.map(t=>`${esc(t.taker_name)||'(anonymous)'} — ${t.score.correct}/${t.score.total} (${t.score.percent}%) at ${t.submitted_at}`).join('<br>')
+        : 'No attempts yet.';
+    };
+    wrap.appendChild(d);
+  });
+  return as;
+}
+
+function esc(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+loadMeta(); loadProjects();
+</script>
+</body>
+</html>
