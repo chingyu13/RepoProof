@@ -2,239 +2,103 @@
 
 **Turn a code project into an evidence-grounded understanding assessment.**
 
-RepoProof analyzes a project and generates multi-answer questions (MAQs) about its real implementation. Assessment creators can configure the question framework, inspect the supporting evidence, edit and approve questions, publish an assessment, and review exact-match results.
+RepoProof analyzes a real codebase and generates multi-answer questions grounded in its actual implementation — testing whether someone *understands* a project, not just whether they can produce one with code-generation tools.
 
-The goal is to test whether someone understands a project—not simply whether they can produce one with code generation tools.
+### 🔗 Live: **[repoproof.chingyu.site](https://repoproof.chingyu.site/)**
 
-> [!WARNING]
-> RepoProof is an early, local prototype. It has no authentication or tenant isolation and is not ready for production, unsupervised grading, or automated hiring decisions.
+The landing page includes a **public guided demo** (no login needed). The full creator interface sits behind a shared password.
 
-## Use cases
+---
 
-- **Computer science education:** assess whether students understand their submitted assignments.
-- **Engineering hiring:** create a project-specific screening assessment before an open interview.
-- **Self-assessment:** test your own understanding of a codebase, notebook, model, or data project.
+## What it is
 
-RepoProof measures demonstrated project understanding. It does not prove authorship or conclusively detect AI-generated work.
+Point RepoProof at a repository — a public GitHub URL, a `.zip`, or a browser folder selection — and it:
 
-## What works today
+1. Takes an **immutable snapshot** (git commit prefix or archive checksum) and analyzes the code.
+2. Builds **provenance-tagged evidence** from that analysis (every fact traces back to a file, line/cell, and snapshot).
+3. Uses retrieval + an LLM to generate **multi-answer questions (MAQs)** grounded strictly in that evidence.
+4. Lets a human **review, edit, approve** questions, then **publish** a shareable assessment.
+5. Scores attempts by **exact match**, with a per-focus-area breakdown.
 
-- Public GitHub repository import
-- Drag-and-drop `.zip` upload
-- Browser folder selection and client-side packaging
-- Public guided demo with a simulated uploaded project
-- Server-enforced shared-password protection for creator pages and APIs
-- Deep Python AST analysis
-- File- and cell-level analysis for many other languages and Jupyter notebooks
-- Evidence chunks with file, line, cell, and snapshot provenance
-- BM25 evidence retrieval
-- OpenAI-powered MAQ generation
-- Deterministic mock mode without an API key
-- Configurable MAQ structure and difficulty
-- Focus-area weighting through an interactive radar chart
-- Human editing, approval, and rejection
-- Shareable assessment links
-- Printable assessments and answer keys
-- Exact-match scoring with per-focus-area results
-- Light and dark themes
+Because every question is tied to the analyzed snapshot, results are always traceable to a specific version of the code.
 
-## Workflow
+**Use cases:** CS education (do students understand what they submitted?), engineering hiring (a project-specific screen before an interview), and self-assessment of a codebase, notebook, or data project.
 
-The landing page provides a public guided demo and a password-protected path to the creator interface. The creator uses a four-step workflow:
+RepoProof measures *demonstrated understanding*. It does not prove authorship or conclusively detect AI-generated work.
 
-1. **Link the Project**
-   - Paste a public GitHub URL, upload a `.zip`, or select a folder.
-   - Accept the project-processing notice and analyze an immutable snapshot.
-2. **Question Framework**
-   - Choose the number of questions, 2–7 options, exact or dynamic correct-answer count, and difficulty from 1–5.
-   - Adjust focus-area weights on the radar chart and add optional instructions.
-3. **Review and Approve**
-   - Inspect project evidence and edit question stems, options, answer keys, difficulty, and explanations.
-   - Approve valid questions or reject unsuitable ones.
-4. **Publish Assessment**
-   - Publish selected approved questions and receive shareable, printable, and answer-key links.
-   - Review stored attempts and scores.
+---
 
-The progress bar remains visible and allows navigation between unlocked steps.
+## Architecture
 
-## Multi-answer question rules
+RepoProof is a **retrieval-augmented generation (RAG) pipeline** with a human-in-the-loop review stage and an operational-telemetry layer, wrapped in a FastAPI service.
 
-Each MAQ has:
+```text
+Project intake  (GitHub clone / .zip upload / folder)
+        ↓   immutable snapshot: git SHA or archive checksum
+Static analysis  (Python AST + multi-language text analysis)
+        ↓
+Evidence-chunk construction  (file / line / cell / snapshot provenance)
+        ↓
+BM25 retrieval  (steered by question blueprint + focus-area weights)
+        ↓
+LLM generation  (strict-JSON, evidence-grounded)  OR  deterministic mock
+        ↓
+Constraint validation  +  validate-and-retry
+        ↓
+Human review  (edit / drag-reorder / approve / reject)
+        ↓
+Publish → Take → Exact-match scoring  (per-focus-area breakdown)
+```
 
-- 2–7 distinct options
-- At least one correct option, but not every option correct
-- One unambiguous correct combination
-- Difficulty from 1–5
-- Linked project evidence
-- An explanation for post-submission review
+### Key techniques
 
-Scoring currently uses exact set matching. A response is correct only when its selected options exactly match the answer key. Partial credit is not yet implemented.
+- **RAG grounding.** Analysis is decomposed into evidence chunks; a **BM25** retriever (with a custom tokenizer that splits `snake_case`) selects the relevant chunks per question, and the prompt enforces a "cite only these evidence ids / never invent facts" contract.
+- **Static analysis.** Python gets a deep `ast` walk — functions, classes, imports, and an approximate **call graph**. Jupyter notebooks are parsed per cell. 30+ other file types get lightweight declaration extraction.
+- **Constrained generation + self-correction.** The model is called in **strict JSON mode** against a fixed schema; options are shuffled to remove positional bias; each candidate is validated, and on failure the generator **retries once with the validation errors fed back into the prompt**.
+- **Constraint validation.** Every MAQ must have 2–7 distinct options, one unambiguous correct combination (all-correct disallowed), difficulty 1–5, and linked evidence — the same gate blocks human approval.
+- **Focus-area steering.** An interactive radar chart weights areas (Architecture, Testing, …); weights expand into a proportional question schedule.
+- **MLOps telemetry.** An append-only event log captures generation config and human review/edit signals (derived metadata only — never raw code); a metrics endpoint aggregates approval rate, human-edit rate, and validator-block rate for comparing prompt/model versions.
+- **Auth & intake security.** Creator routes are protected by HMAC-signed `httponly` session cookies behind a password gate; intake validates GitHub URLs, runs shallow timed clones, guards against zip path traversal, and gates total project size.
+- **Deterministic mock mode.** With no API key, RepoProof produces evidence-grounded sample questions labeled `[MOCK]`, so the entire flow is demoable without spending tokens.
+
+> A deeper write-up of the architecture and techniques lives in [`overview_repoproof.md`](overview_repoproof.md).
+
+### Tech stack
+
+Python · FastAPI · Uvicorn · Pydantic · OpenAI API (JSON mode) · `rank_bm25` · Python `ast` · SQLite (JSON columns + lightweight migrations) · vanilla-JS frontend with Figma-synced CSS design tokens and inline SVG.
+
+### Project layout
+
+```text
+app/
+├── ingest.py      # GitHub clone / .zip extraction, size & path-traversal guards
+├── analyzer.py    # Python AST + multi-language file analysis
+├── knowledge.py   # evidence chunks + BM25 retrieval
+├── generator.py   # LLM & mock MAQ generation (+ validate-and-retry)
+├── validator.py   # MAQ schema & rule validation
+├── scoring.py     # exact-match + per-focus-area scoring
+├── db.py          # SQLite storage, migrations, telemetry events
+├── config.py      # env config, mock mode, consent copy/versioning
+├── main.py        # FastAPI routes, session auth, middleware
+└── static/        # index (landing/login), creator, demo, assess UIs
+```
+
+---
 
 ## Supported projects
 
-Python receives the deepest analysis, including:
+Python receives the deepest analysis (functions, classes, imports, approximate call edges, docstrings, source snippets). Lightweight file-level analysis covers Jupyter notebooks (per-cell), R/R Markdown, Java/Kotlin/Scala/Swift, JavaScript/TypeScript/JSX/TSX/Vue, HTML/CSS/SCSS, SQL, C/C++/C#/Go/Rust, Ruby/PHP/Perl/Lua/Julia/Dart, Shell/PowerShell/MATLAB, and JSON/YAML/TOML. Question quality scales with analysis depth.
 
-- Functions and classes
-- Imports and dependencies
-- Approximate call edges
-- Docstrings and source snippets
+## Scope & limitations
 
-RepoProof also provides lightweight file-level analysis for:
+RepoProof is an early prototype, and its boundaries are deliberate seams for later upgrades: shared-password access (no per-user accounts or tenant isolation); public GitHub repos only; BM25-only retrieval (no embeddings/hybrid yet); SQLite rather than PostgreSQL; exact-match scoring (no partial credit yet); non-Python languages use lightweight parsing rather than full ASTs; and no automated test suite or container image yet.
 
-- Jupyter notebooks, including per-cell source extraction
-- R and R Markdown
-- Java, Kotlin, Scala, and Swift
-- JavaScript, TypeScript, JSX, TSX, and Vue
-- HTML, CSS, and SCSS
-- SQL
-- C, C++, C#, Go, and Rust
-- Ruby, PHP, Perl, Lua, Julia, and Dart
-- Shell, PowerShell, and MATLAB
-- JSON, YAML, and TOML
-
-Question quality depends on analysis depth. Non-Python languages currently use lightweight declaration extraction rather than a complete language-specific AST.
-
-## Quick start
-
-### Requirements
-
-- Python 3.10 or newer
-- `pip`
-- Git, when importing a GitHub repository
-
-### Installation
-
-```bash
-git clone https://github.com/chingyu13/RepoProof.git
-cd RepoProof
-
-python -m venv .venv
-source .venv/bin/activate
-
-pip install -r requirements.txt
-cp .env.example .env
-# Set REPOPROOF_ACCESS_PASSWORD before opening the creator.
-python run.py
-```
-
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
-
-FastAPI's interactive API documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
-
-### Windows activation
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-## Configuration
-
-Copy `.env.example` to `.env`. Supported settings include:
-
-- `OPENAI_API_KEY` — optional OpenAI API key; leave empty to use mock mode
-- `OPENAI_MODEL` — generation model; defaults to `gpt-4o-mini`
-- `REPOPROOF_ACCESS_PASSWORD` — shared password required for creator access
-- `REPOPROOF_SESSION_SECRET` — secret used to sign creator-session cookies
-- `REPOPROOF_MAX_MB` — maximum total project size in MB; defaults to `1024`
-- `REPOPROOF_MAX_FILE_MB` — per-file analysis limit; defaults to `1`
-- `REPOPROOF_MAX_NOTEBOOK_MB` — notebook analysis limit; defaults to `25`
-- `REPOPROOF_PORT` — local server port; defaults to `8000`
-
-Additional runtime overrides:
-
-- `REPOPROOF_WORK_DIR` — runtime data directory; defaults to `./data`
-- `REPOPROOF_DB` — SQLite database path
-- `MOCK_LLM=1` — force mock mode even when an API key is configured
-
-Never commit `.env` or API keys.
-
-## Mock mode
-
-An OpenAI key is not required to try the complete workflow. Without `OPENAI_API_KEY`, RepoProof generates deterministic sample questions from real project evidence and labels them `[MOCK]`.
-
-Mock questions are intended to exercise the product flow; they are not a substitute for real model-generated assessment content.
-
-## How it works
-
-```text
-Project URL / Upload
-        ↓
-Snapshot and Intake Validation
-        ↓
-Code, Notebook, and File Analysis
-        ↓
-Evidence Chunk Construction
-        ↓
-BM25 Retrieval by Question Focus
-        ↓
-OpenAI or Mock Question Generation
-        ↓
-Constraint Validation and Human Review
-        ↓
-Publish → Take → Score
-```
-
-All assessments remain associated with the analyzed snapshot: a Git commit prefix for imported repositories or an archive checksum for uploads.
-
-## Project structure
-
-```text
-.
-├── app/
-│   ├── analyzer.py      # Python AST and generic file analysis
-│   ├── config.py        # Environment configuration and limits
-│   ├── db.py            # SQLite storage
-│   ├── generator.py     # OpenAI and mock MAQ generation
-│   ├── ingest.py        # GitHub clone and archive extraction
-│   ├── knowledge.py     # Evidence chunks and BM25 retrieval
-│   ├── main.py          # FastAPI routes and page delivery
-│   ├── scoring.py       # Exact-match and focus-area scoring
-│   ├── validator.py     # MAQ schema and evidence validation
-│   └── static/
-│       ├── assess.html  # Assessment-taker interface
-│       ├── creator.html # Assessment-creator interface
-│       ├── demo.html    # Public guided product demonstration
-│       └── index.html   # Public landing and creator login
-├── .env.example
-├── requirements.txt
-└── run.py
-```
-
-Runtime files are written to the gitignored `data/` directory:
-
-- `data/repoproof.db` stores projects, questions, assessments, and attempts.
-- `data/projects/` stores extracted project snapshots.
-
-## Current limitations
-
-- Shared-password creator access only; no individual users, roles, or tenant isolation
-- Public GitHub repositories only
-- No private-repository OAuth or GitHub App integration
-- Python-first deep analysis; other languages use lightweight parsing
-- BM25 retrieval only; no embeddings or hybrid search
-- SQLite storage instead of PostgreSQL
-- Exact-match scoring only
-- No open-question or conversational interview mode
-- No automated deletion lifecycle
-- No automated test suite, Docker image, or production deployment configuration
-
-To delete local project data, stop the app and remove the relevant files from `data/projects/` and records from the local database. Automated lifecycle deletion is planned but not yet implemented.
-
-## Roadmap
-
-- Open questions and conversational follow-ups
-- Partial-credit scoring
-- Tree-sitter language parsers
-- Semantic and hybrid retrieval
-- Private GitHub repository support
-- Authentication, organizations, and tenant isolation
-- Automated retention and deletion policies
-- PostgreSQL and pgvector
-- Webhook-driven snapshot updates
-- Production packaging and deployment
+**Roadmap:** partial-credit scoring · Tree-sitter parsers · semantic/hybrid retrieval · private-repo support · per-user auth & organizations · PostgreSQL + pgvector · retention/deletion lifecycle · production packaging.
 
 ## Responsible use
 
-Repository familiarity is evidence of understanding, not definitive evidence of authorship. Education and hiring assessments should include human review, clear scoring rules, an appeal process, and appropriate accommodations.
+Repository familiarity is evidence of understanding, not definitive evidence of authorship. Education and hiring assessments should include human review, clear scoring rules, an appeal process, and appropriate accommodations. Don't submit projects you aren't authorized to process, and review your model provider's data-handling terms before analyzing sensitive code.
 
-Do not submit projects you are not authorized to process. Review your model provider's data-handling terms before analyzing private or sensitive code.
+---
+
+<sub>Running locally is possible (`pip install -r requirements.txt` then `python run.py`), but RepoProof is primarily meant to be viewed live at **[repoproof.chingyu.site](https://repoproof.chingyu.site/)**.</sub>
