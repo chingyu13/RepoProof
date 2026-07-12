@@ -69,6 +69,8 @@ def creator_page():
 
 
 @app.get("/demo", response_class=HTMLResponse)
+@app.get("/demo/", response_class=HTMLResponse)
+@app.get("/demo.html", response_class=HTMLResponse)
 def demo_page():
     return FileResponse(STATIC_DIR / "demo.html")
 

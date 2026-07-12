@@ -6,19 +6,20 @@
 <title>RepoProof — Link the Project</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#E8E8E8;
+  --bg:#FFFFFF;
   --card:#F4F4F4;
   --border:#888;
-  --ink:#111;
-  --mute:#6B6B6B;
+  --ink:#0C1421;
+  --mute:#7D7D7D;
   --input-bg:#fff;
-  --input-border:#C8C8C8;
-  --btn:#4A4A4A;
+  --input-border:#7D7D7D;
+  --btn:#626262;
   --btn-text:#fff;
-  --demo-bg:#EFEFEF;
+  --demo-bg:#FEFEFE;
+  --toggle-bg:#D9D9D9;
   --danger:#C0392B;
 }
 html.dark{
@@ -32,12 +33,15 @@ html.dark{
   --btn:#D0D0D0;
   --btn-text:#111;
   --demo-bg:#333;
+  --toggle-bg:#3A3B40;
   --danger:#FF7B72;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{min-height:100%}
+html{min-height:100%}
 body{
-  font-family:'Outfit',sans-serif;
+  min-height:100vh;
+  min-height:100dvh;
+  font-family:'Oxanium',sans-serif;
   background:var(--bg);
   color:var(--ink);
   display:flex;
@@ -48,15 +52,18 @@ body{
 }
 .theme-toggle{
   position:fixed;top:18px;right:18px;z-index:10;
-  display:flex;gap:4px;padding:4px;
-  background:var(--card);border:2px solid var(--border);border-radius:999px;
+  display:flex;gap:8px;padding:5px;
+  background:transparent;border:1px solid var(--border);border-radius:5px;
 }
 .theme-toggle button{
-  width:36px;height:36px;border:none;border-radius:999px;
-  background:transparent;cursor:pointer;font-size:16px;line-height:1;
+  width:24px;height:24px;border:none;border-radius:3px;
+  display:grid;place-items:center;
+  background:transparent;cursor:pointer;line-height:1;
   color:var(--mute);
 }
-.theme-toggle button.active{background:var(--btn);color:var(--btn-text)}
+.theme-toggle button.active{background:var(--toggle-bg);color:var(--ink)}
+.theme-icon{width:20px;height:20px;display:block}
+.theme-icon *{stroke:currentColor}
 
 .card{
   display:flex;
@@ -65,8 +72,9 @@ body{
   justify-content:center;
   align-items:center;
   gap:20px;
-  align-self:stretch;
-  width:min(420px,100%);
+  align-self:center;
+  width:min(506px,100%);
+  min-height:290px;
   border-radius:10px;
   border:3px solid var(--border);
   background:var(--card);
@@ -74,31 +82,31 @@ body{
 }
 
 .brand{
-  font-size:42px;font-weight:800;letter-spacing:-.03em;line-height:1;
+  font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1;
   color:var(--ink);
 }
 .lead{
-  font-size:15px;font-weight:500;color:var(--mute);
+  font-size:12px;font-weight:400;color:var(--mute);
   text-align:center;line-height:1.45;max-width:28em;
 }
 
 .row{
-  display:flex;align-items:stretch;gap:10px;width:100%;
+  display:flex;align-items:stretch;gap:8px;width:min(250px,100%);
 }
 .row input{
   flex:1;min-width:0;
-  font-family:inherit;font-size:15px;font-weight:500;
-  padding:12px 14px;
-  border:1.5px solid var(--input-border);
-  border-radius:8px;
+  font-family:inherit;font-size:12px;font-weight:400;
+  padding:6px 8px;
+  border:2px solid var(--input-border);
+  border-radius:5px;
   background:var(--input-bg);color:var(--ink);
   outline:none;
 }
 .row input:focus{border-color:var(--border)}
 .row input::placeholder{color:var(--mute)}
 .row .enter{
-  font-family:inherit;font-size:15px;font-weight:700;
-  padding:12px 18px;border:none;border-radius:8px;
+  font-family:inherit;font-size:12px;font-weight:500;
+  padding:6px 14px;border:none;border-radius:5px;
   background:var(--btn);color:var(--btn-text);cursor:pointer;
   white-space:nowrap;
 }
@@ -106,27 +114,43 @@ body{
 .row .enter:active{transform:translateY(1px)}
 
 .demo-btn{
-  width:100%;
-  font-family:inherit;font-size:15px;font-weight:600;
-  padding:13px 16px;
-  border-radius:8px;
-  border:1.5px solid var(--input-border);
+  width:min(250px,100%);
+  font-family:inherit;font-size:12px;font-weight:500;
+  padding:7px 12px;
+  border-radius:5px;
+  border:2px solid var(--input-border);
   background:var(--demo-bg);color:var(--ink);
   cursor:pointer;
 }
 .demo-btn:hover{border-color:var(--border)}
 
 .err{
-  font-size:13px;font-weight:600;color:var(--danger);
+  font-size:12px;font-weight:500;color:var(--danger);
   min-height:1.2em;text-align:center;
 }
 .err:empty{display:none}
+@media (max-width:560px){
+  body{padding:16px}
+  .card{width:100%;padding:36px 26px}
+  .theme-toggle{top:10px;right:10px}
+}
 </style>
 </head>
 <body>
   <div class="theme-toggle" role="group" aria-label="Theme">
-    <button type="button" id="theme-light" class="active" title="Light">☀</button>
-    <button type="button" id="theme-dark" title="Dark">☾</button>
+    <button type="button" id="theme-light" class="active" title="Light" aria-label="Light theme">
+      <svg class="theme-icon" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+        <circle cx="13" cy="13" r="5.2" stroke-width="1.4"/>
+        <path d="M13 3.4v3M13 19.6v3M3.4 13h3M19.6 13h3M6.2 6.2l2.1 2.1M17.7 17.7l2.1 2.1M19.8 6.2l-2.1 2.1M8.3 17.7l-2.1 2.1" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <button type="button" id="theme-dark" title="Dark" aria-label="Dark theme">
+      <svg class="theme-icon" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+        <path d="M17.9 17.2a7.6 7.6 0 0 1-8.8-8.8 7.7 7.7 0 1 0 8.8 8.8Z" stroke-width="1.4" stroke-linejoin="round"/>
+        <circle cx="17.7" cy="8" r=".9" fill="currentColor" stroke="none"/>
+        <circle cx="20.2" cy="11.2" r=".65" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
   </div>
 
   <main class="card" aria-label="Link the Project">
@@ -184,7 +208,7 @@ body{
   });
 
   document.getElementById("demo").onclick = () => {
-    location.href = "/demo";
+    location.href = "demo";
   };
 })();
 </script>

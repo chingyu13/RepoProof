@@ -34,6 +34,10 @@ header h1{font-size:1.15rem;margin:0;font-weight:600}
 .badge.warn{background:#fef3c7;color:#92400e}
 .workflow{max-width:1012px;margin:1.5rem auto;display:flex;overflow-x:hidden;scroll-behavior:smooth;align-items:flex-start}
 .workflow-step{flex:0 0 100%;min-width:0;padding:0 1rem;display:grid;gap:1.25rem}
+.step-back{width:30px;height:30px;padding:0;border:2px solid var(--card-border);border-radius:5px;background:var(--input-bg);color:var(--muted);
+  display:grid;place-items:center;justify-self:start;margin-bottom:-.8rem;box-shadow:var(--shadow)}
+.step-back:hover{background:var(--card);color:var(--ink)}
+.step-back svg{width:22px;height:22px;display:block;stroke:currentColor}
 .card{background:var(--card);border:3px solid var(--card-border);border-radius:10px;padding:1.4rem 1.6rem;box-shadow:var(--shadow);position:relative}
 /* generation loading overlay */
 .gen-overlay{position:absolute;inset:0;background:rgba(255,255,255,.5);backdrop-filter:blur(1.5px);border-radius:16px;
@@ -135,8 +139,10 @@ a{color:var(--accent)}
 #questions::-webkit-scrollbar-thumb:hover{background:var(--placeholder)}
 #themeToggle{margin-left:auto;display:flex;gap:8px;padding:5px;border:1px solid var(--card-border);border-radius:5px;background:transparent}
 #themeToggle:hover{background:var(--card)}
-#themeToggle .seg{width:24px;height:24px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted);background:transparent}
+#themeToggle .seg{width:24px;height:24px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--muted);background:transparent}
 #themeToggle .seg.active{background:var(--chip);color:var(--heading)}
+#themeToggle .theme-icon{width:20px;height:20px;display:block}
+#themeToggle .theme-icon *{stroke:currentColor}
 #logout{padding:.45rem .7rem;background:var(--input-bg);color:var(--ink);border:1px solid var(--card-border)}
 .actions{display:flex;justify-content:center;margin:.9rem 0 0}
 .actions button{min-width:150px}
@@ -173,7 +179,21 @@ a{color:var(--accent)}
     <h1>RepoProof</h1>
     <span class="small">project-understanding assessments · prototype</span>
     <span id="mockBadge" class="badge warn hidden">MOCK MODE — no OpenAI key</span>
-    <button id="themeToggle" title="Toggle light/dark"><span class="seg" id="segSun">☀</span><span class="seg" id="segMoon">☾</span></button>
+    <button id="themeToggle" title="Toggle light/dark" aria-label="Toggle light/dark">
+      <span class="seg" id="segSun">
+        <svg class="theme-icon" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+          <circle cx="13" cy="13" r="5.2" stroke-width="1.4"/>
+          <path d="M13 3.4v3M13 19.6v3M3.4 13h3M19.6 13h3M6.2 6.2l2.1 2.1M17.7 17.7l2.1 2.1M19.8 6.2l-2.1 2.1M8.3 17.7l-2.1 2.1" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="seg" id="segMoon">
+        <svg class="theme-icon" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+          <path d="M17.9 17.2a7.6 7.6 0 0 1-8.8-8.8 7.7 7.7 0 1 0 8.8 8.8Z" stroke-width="1.4" stroke-linejoin="round"/>
+          <circle cx="17.7" cy="8" r=".9" fill="currentColor" stroke="none"/>
+          <circle cx="20.2" cy="11.2" r=".65" fill="currentColor" stroke="none"/>
+        </svg>
+      </span>
+    </button>
     <button id="logout" type="button">Log out</button>
   </header>
   <nav class="stepper" id="stepper" aria-label="Assessment creation progress">
@@ -239,6 +259,11 @@ a{color:var(--accent)}
 </section>
 
 <section class="workflow-step" id="frameworkStep" data-panel="2">
+<button class="step-back" type="button" data-back-step="1" aria-label="Back to Link the Project" title="Back">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M15 6l-6 6 6 6"/><path d="M10 12h10"/>
+  </svg>
+</button>
 <div class="card project-content hidden">
   <div class="gen-overlay hidden" id="genOverlay">
     <div class="loader"></div>
@@ -277,6 +302,11 @@ a{color:var(--accent)}
 </section>
 
 <section class="workflow-step" id="reviewStep" data-panel="3">
+<button class="step-back" type="button" data-back-step="2" aria-label="Back to Question Framework" title="Back">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M15 6l-6 6 6 6"/><path d="M10 12h10"/>
+  </svg>
+</button>
 <div class="card project-content hidden">
   <h2>3 · Review and Approve</h2>
   <div id="questions" class="small">No questions yet.</div>
@@ -286,6 +316,11 @@ a{color:var(--accent)}
 </section>
 
 <section class="workflow-step" id="publishStep" data-panel="4">
+<button class="step-back" type="button" data-back-step="3" aria-label="Back to Review and Approve" title="Back">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M15 6l-6 6 6 6"/><path d="M10 12h10"/>
+  </svg>
+</button>
 <div class="card project-content hidden">
   <h2>4 · Publish Assessment</h2>
   <label>Title</label>
@@ -354,6 +389,9 @@ document.querySelectorAll('#stepper .step').forEach(el=>{
   el.addEventListener('keydown', e=>{
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
   });
+});
+document.querySelectorAll('.step-back').forEach(btn=>{
+  btn.addEventListener('click', ()=>goToStep(+btn.dataset.backStep));
 });
 window.addEventListener('resize', ()=>{
   $('workflow').scrollTo({left:(currentStep - 1) * $('workflow').clientWidth, behavior:'auto'});
