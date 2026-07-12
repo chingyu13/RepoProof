@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS projects (
     snapshot_id TEXT NOT NULL,          -- commit SHA prefix or archive checksum
     stats_json TEXT NOT NULL DEFAULT '{}',
     chunks_json TEXT NOT NULL DEFAULT '[]',
+    consent_json TEXT NOT NULL DEFAULT '{}',   -- {acknowledged, share_data, consent_version, at}
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -54,7 +55,23 @@ CREATE TABLE IF NOT EXISTS attempts (
     score_json TEXT NOT NULL,
     submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Operational telemetry for the MLOps loop. Holds derived metadata only
+-- (model/config, human review actions, outcomes) — never raw project code.
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,                 -- nullable: some events are global
+    kind TEXT NOT NULL,                 -- e.g. project_created | generation_run | question_review | publish
+    data_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
+
+# Columns added after the initial release: (table, column, definition).
+# Applied idempotently on init() so existing SQLite files pick them up.
+_MIGRATIONS = [
+    ("projects", "consent_json", "TEXT NOT NULL DEFAULT '{}'"),
+]
 
 
 def init() -> None:
@@ -62,6 +79,18 @@ def init() -> None:
     config.PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as con:
         con.executescript(SCHEMA)
+        for table, column, ddl in _MIGRATIONS:
+            cols = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+            if column not in cols:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def log_event(kind: str, data: dict, project_id: int | None = None) -> None:
+    """Record an operational telemetry event. Best-effort: never breaks the request."""
+    try:
+        insert("events", {"project_id": project_id, "kind": kind, "data_json": data})
+    except Exception:
+        pass
 
 
 @contextmanager

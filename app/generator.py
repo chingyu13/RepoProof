@@ -193,7 +193,7 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
                     if attempt == 1 and last_err:
                         prompt += f"\n\nYour previous attempt was invalid: {last_err}. Fix these problems."
                     raw = _call_openai(SYSTEM_PROMPT, prompt)
-                q = _normalize(raw, slot, chunk_by_id)
+                q = _normalize(raw, slot, chunk_by_id, rng)
                 errs = validate_maq(q, choice_count, correct_count)
                 if errs:
                     last_err = "; ".join(errs)
@@ -211,17 +211,22 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
     return questions, warnings
 
 
-def _normalize(raw: dict, slot: dict, chunk_by_id: dict) -> dict:
+def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | None = None) -> dict:
+    opts_raw = list(raw.get("options", [])[:7])
+    # LLMs put correct options first (position bias) — shuffle so the answer
+    # key is uniformly distributed across A..G.
+    if rng is not None:
+        rng.shuffle(opts_raw)
     options = []
     answer = []
-    for j, opt in enumerate(raw.get("options", [])[:7]):
+    for j, opt in enumerate(opts_raw):
         key = OPTION_KEYS[j]
         options.append({"key": key, "text": str(opt.get("text", "")).strip()})
         if opt.get("correct"):
             answer.append(key)
     justifications = {
         OPTION_KEYS[j]: str(opt.get("justification", "")).strip()
-        for j, opt in enumerate(raw.get("options", [])[:7])
+        for j, opt in enumerate(opts_raw)
     }
     evidence = []
     for cid in raw.get("evidence_ids", []):

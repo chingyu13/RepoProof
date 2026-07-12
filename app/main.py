@@ -1,5 +1,6 @@
 """FastAPI application: creator API, taker API, print view, static UI."""
 import secrets
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -43,20 +44,30 @@ def meta():
         "model": config.OPENAI_MODEL,
         "max_project_mb": config.MAX_PROJECT_MB,
         "consent_text": config.CONSENT_TEXT,
+        "data_sharing_text": config.DATA_SHARING_TEXT,
+        "consent_version": config.CONSENT_VERSION,
         "pro_contact": config.PRO_CONTACT,
     }
 
 
 # ---------- projects ----------
 
+def _truthy(v: str) -> bool:
+    return str(v).lower() in ("true", "on", "1", "yes")
+
+
 @app.post("/api/projects")
 async def create_project(
     github_url: str = Form(""),
-    consent: str = Form(""),
+    consent: str = Form(""),           # required acknowledgment (kept name for compat)
+    acknowledge: str = Form(""),       # required acknowledgment (preferred)
+    share_data: str = Form(""),        # optional de-identified data-sharing opt-in
     file: UploadFile | None = File(None),
 ):
-    if consent not in ("true", "on", "1"):
-        raise HTTPException(400, "You must accept the consent notice to submit a project.")
+    acknowledged = _truthy(acknowledge) or _truthy(consent)
+    if not acknowledged:
+        raise HTTPException(400, "You must accept the required acknowledgment to submit a project.")
+    share = _truthy(share_data)
     try:
         if github_url.strip():
             root, snapshot, name = clone_github(github_url)
@@ -83,6 +94,12 @@ async def create_project(
             detail += " Parse problems: " + "; ".join(analysis["errors"][:5])
         raise HTTPException(400, detail)
     chunks = build_chunks(analysis, snapshot)
+    consent_record = {
+        "acknowledged": True,
+        "share_data": share,
+        "consent_version": config.CONSENT_VERSION,
+        "at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+    }
     project_id = db.insert("projects", {
         "name": name,
         "source_type": source_type,
@@ -90,9 +107,18 @@ async def create_project(
         "snapshot_id": snapshot,
         "stats_json": analysis["stats"],
         "chunks_json": chunks,
+        "consent_json": consent_record,
     })
+    db.log_event("project_created", {
+        "source_type": source_type,
+        "source_files": analysis["stats"].get("source_files"),
+        "chunks": len(chunks),
+        "share_data": share,
+        "consent_version": config.CONSENT_VERSION,
+    }, project_id=project_id)
     return {"id": project_id, "name": name, "snapshot_id": snapshot,
             "stats": analysis["stats"], "chunks": len(chunks),
+            "share_data": share,
             "parse_errors": analysis["errors"][:10]}
 
 
@@ -148,6 +174,17 @@ def generate(project_id: int, cfg: GenerateConfig):
             "generator": q["generator"],
         })
         ids.append(qid)
+    db.log_event("generation_run", {
+        "model": ("mock" if config.mock_mode() else config.OPENAI_MODEL),
+        "mock_mode": config.mock_mode(),
+        "requested": cfg.num_questions,
+        "created": len(ids),
+        "choice_count": cfg.choice_count,
+        "correct_mode": cfg.correct_mode,
+        "difficulty": cfg.difficulty,
+        "areas": [a.get("name") for a in cfg.areas if a.get("name")],
+        "warnings": len(warnings),
+    }, project_id=project_id)
     return {"created": ids, "warnings": warnings, "mock_mode": config.mock_mode()}
 
 
@@ -181,9 +218,20 @@ def edit_question(question_id: int, edit: QuestionEdit):
         "evidence": q["evidence"],
     }
     status = edit.status if edit.status is not None else q["status"]
+    edited = any([
+        merged["stem"] != q["stem"],
+        merged["options"] != q["options"],
+        sorted(set(merged["answer"])) != sorted(set(q["answer"])),
+        merged["difficulty"] != q["difficulty"],
+        merged["explanation"] != q["explanation"],
+    ])
     if status == "approved":
         errs = validate_maq(merged, choice_count=len(merged["options"]))
         if errs:
+            db.log_event("question_review", {
+                "question_id": question_id, "action": "approve_blocked",
+                "generator": q["generator"], "reasons": errs,
+            }, project_id=q["project_id"])
             raise HTTPException(422, "Cannot approve: " + " ".join(errs))
     db.update("questions", question_id, {
         "stem": merged["stem"],
@@ -194,6 +242,14 @@ def edit_question(question_id: int, edit: QuestionEdit):
         "explanation": merged["explanation"],
         "status": status,
     })
+    db.log_event("question_review", {
+        "question_id": question_id,
+        "action": status,                 # draft | approved | rejected
+        "status_changed": status != q["status"],
+        "edited": edited,                 # human corrected model output → training signal
+        "generator": q["generator"],
+        "slot": q["slot"],
+    }, project_id=q["project_id"])
     return db.get("questions", question_id)
 
 
@@ -225,7 +281,37 @@ def publish(project_id: int, req: PublishRequest):
         "question_ids_json": req.question_ids,
         "config_json": {"show_correct_count": req.show_correct_count},
     })
+    db.log_event("publish", {
+        "assessment_id": aid, "questions": len(req.question_ids),
+        "show_correct_count": req.show_correct_count,
+    }, project_id=project_id)
     return {"id": aid, "token": token, "take_url": f"/a/{token}", "print_url": f"/print/{aid}"}
+
+
+@app.get("/api/projects/{project_id}/metrics")
+def project_metrics(project_id: int):
+    """Operational MLOps summary for a project, derived from telemetry events."""
+    if not db.get("projects", project_id):
+        raise HTTPException(404, "Project not found")
+    reviews = [e["data"] for e in db.list_where("events", "project_id=? AND kind='question_review'",
+                                                 (project_id,))]
+    gens = [e["data"] for e in db.list_where("events", "project_id=? AND kind='generation_run'",
+                                             (project_id,))]
+    decided = [r for r in reviews if r.get("action") in ("approved", "rejected")]
+    approved = [r for r in decided if r.get("action") == "approved"]
+    edited = [r for r in reviews if r.get("edited")]
+    blocked = [r for r in reviews if r.get("action") == "approve_blocked"]
+    generated = sum(g.get("created", 0) for g in gens)
+    return {
+        "generation_runs": len(gens),
+        "questions_generated": generated,
+        "reviewed": len(decided),
+        "approved": len(approved),
+        "rejected": len(decided) - len(approved),
+        "approval_rate": round(len(approved) / len(decided), 3) if decided else None,
+        "human_edit_rate": round(len(edited) / len(reviews), 3) if reviews else None,
+        "validator_blocks": len(blocked),
+    }
 
 
 @app.get("/api/projects/{project_id}/assessments")

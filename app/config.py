@@ -24,10 +24,17 @@ def mock_mode() -> bool:
     return not openai_api_key()
 
 
+# Consent copy (RepoProof UI / Step 1). Bump CONSENT_VERSION whenever the wording
+# changes so stored per-project consent records stay auditable.
+CONSENT_VERSION = "2026-07-12-v2"
+
+# Required acknowledgment — the taker must accept this to analyse a project.
 CONSENT_TEXT = (
-    "By submitting this project you confirm that you own it or have the right to share it, "
-    "and you agree that RepoProof analyzes its contents to generate assessment questions. "
-    "Only public repositories and files you upload yourself are accepted. "
-    "Your code is used solely for this assessment and is deleted after the assessment "
-    "lifecycle ends. It is never used to train models."
+    "*I acknowledge that RepoProof analyses this project's contents to generate assessment "
+    "questions. The content will be deleted unless I opt in to data sharing above."
+)
+
+# Optional opt-in — sharing a de-identified copy to help improve the model.
+DATA_SHARING_TEXT = (
+    "I agree to share a de-identified copy of the project for improving RepoProof's models."
 )
