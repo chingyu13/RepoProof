@@ -1,11 +1,12 @@
 """FastAPI application: creator API, taker API, print view, static UI."""
+import hashlib
+import hmac
 import secrets
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from . import config, db
@@ -20,7 +21,39 @@ app = FastAPI(title="RepoProof", version="0.1.0")
 db.init()
 
 STATIC_DIR = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+COOKIE_NAME = "repoproof_creator"
+_SESSION_SECRET = config.SESSION_SECRET or secrets.token_urlsafe(32)
+
+
+def _session_token() -> str:
+    return hmac.new(_SESSION_SECRET.encode(), b"creator-access", hashlib.sha256).hexdigest()
+
+
+def _authenticated(request: Request) -> bool:
+    supplied = request.cookies.get(COOKIE_NAME, "")
+    return bool(supplied) and secrets.compare_digest(supplied, _session_token())
+
+
+def _requires_creator_auth(path: str) -> bool:
+    return path == "/creator" or path.startswith((
+        "/api/meta",
+        "/api/projects",
+        "/api/questions",
+        "/api/assessments",
+        "/print/",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    ))
+
+
+@app.middleware("http")
+async def protect_creator_routes(request: Request, call_next):
+    if _requires_creator_auth(request.url.path) and not _authenticated(request):
+        if request.url.path == "/creator":
+            return RedirectResponse("/?login=required", status_code=303)
+        return JSONResponse({"detail": "Creator authentication required."}, status_code=401)
+    return await call_next(request)
 
 
 # ---------- pages ----------
@@ -30,9 +63,51 @@ def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/creator", response_class=HTMLResponse)
+def creator_page():
+    return FileResponse(STATIC_DIR / "creator.html")
+
+
+@app.get("/demo", response_class=HTMLResponse)
+def demo_page():
+    return FileResponse(STATIC_DIR / "demo.html")
+
+
 @app.get("/a/{token}", response_class=HTMLResponse)
 def assess_page(token: str):
     return FileResponse(STATIC_DIR / "assess.html")
+
+
+# ---------- creator access ----------
+
+class LoginRequest(BaseModel):
+    password: str
+
+
+@app.post("/api/login")
+def login(req: LoginRequest, request: Request):
+    if not config.ACCESS_PASSWORD:
+        raise HTTPException(503, "Creator access is not configured on this server.")
+    if not secrets.compare_digest(req.password, config.ACCESS_PASSWORD):
+        raise HTTPException(401, "Incorrect password.")
+    response = JSONResponse({"ok": True})
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    response.set_cookie(
+        COOKIE_NAME,
+        _session_token(),
+        max_age=8 * 60 * 60,
+        httponly=True,
+        secure=request.url.scheme == "https" or forwarded_proto == "https",
+        samesite="lax",
+    )
+    return response
+
+
+@app.post("/api/logout")
+def logout():
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(COOKIE_NAME)
+    return response
 
 
 # ---------- meta ----------

@@ -22,6 +22,8 @@ RepoProof measures demonstrated project understanding. It does not prove authors
 - Public GitHub repository import
 - Drag-and-drop `.zip` upload
 - Browser folder selection and client-side packaging
+- Public guided demo with a simulated uploaded project
+- Server-enforced shared-password protection for creator pages and APIs
 - Deep Python AST analysis
 - File- and cell-level analysis for many other languages and Jupyter notebooks
 - Evidence chunks with file, line, cell, and snapshot provenance
@@ -38,7 +40,7 @@ RepoProof measures demonstrated project understanding. It does not prove authors
 
 ## Workflow
 
-The creator interface uses a four-step workflow:
+The landing page provides a public guided demo and a password-protected path to the creator interface. The creator uses a four-step workflow:
 
 1. **Link the Project**
    - Paste a public GitHub URL, upload a `.zip`, or select a folder.
@@ -103,7 +105,7 @@ Question quality depends on analysis depth. Non-Python languages currently use l
 ### Installation
 
 ```bash
-git clone https://github.com/your-account/RepoProof.git
+git clone https://github.com/chingyu13/RepoProof.git
 cd RepoProof
 
 python -m venv .venv
@@ -111,6 +113,7 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 cp .env.example .env
+# Set REPOPROOF_ACCESS_PASSWORD before opening the creator.
 python run.py
 ```
 
@@ -130,6 +133,8 @@ Copy `.env.example` to `.env`. Supported settings include:
 
 - `OPENAI_API_KEY` — optional OpenAI API key; leave empty to use mock mode
 - `OPENAI_MODEL` — generation model; defaults to `gpt-4o-mini`
+- `REPOPROOF_ACCESS_PASSWORD` — shared password required for creator access
+- `REPOPROOF_SESSION_SECRET` — secret used to sign creator-session cookies
 - `REPOPROOF_MAX_MB` — maximum total project size in MB; defaults to `1024`
 - `REPOPROOF_MAX_FILE_MB` — per-file analysis limit; defaults to `1`
 - `REPOPROOF_MAX_NOTEBOOK_MB` — notebook analysis limit; defaults to `25`
@@ -187,7 +192,9 @@ All assessments remain associated with the analyzed snapshot: a Git commit prefi
 │   ├── validator.py     # MAQ schema and evidence validation
 │   └── static/
 │       ├── assess.html  # Assessment-taker interface
-│       └── index.html   # Assessment-creator interface
+│       ├── creator.html # Assessment-creator interface
+│       ├── demo.html    # Public guided product demonstration
+│       └── index.html   # Public landing and creator login
 ├── .env.example
 ├── requirements.txt
 └── run.py
@@ -200,7 +207,7 @@ Runtime files are written to the gitignored `data/` directory:
 
 ## Current limitations
 
-- Local, single-user prototype with no authentication or authorization
+- Shared-password creator access only; no individual users, roles, or tenant isolation
 - Public GitHub repositories only
 - No private-repository OAuth or GitHub App integration
 - Python-first deep analysis; other languages use lightweight parsing

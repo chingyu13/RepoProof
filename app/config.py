@@ -11,6 +11,8 @@ MAX_PROJECT_MB = int(os.environ.get("REPOPROOF_MAX_MB", "1024"))
 PRO_CONTACT = "jobs@chingyu.site"
 
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+ACCESS_PASSWORD = os.environ.get("REPOPROOF_ACCESS_PASSWORD", "").strip()
+SESSION_SECRET = os.environ.get("REPOPROOF_SESSION_SECRET", "").strip()
 
 
 def openai_api_key() -> str:

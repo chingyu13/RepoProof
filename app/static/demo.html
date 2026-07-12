@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RepoProof — Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E8E8E8;--card:#F4F4F4;--border:#888;--ink:#111;--mute:#6B6B6B;
+  --panel:#fff;--line:#D5D5D5;--ok:#1F7A4C;--warn:#9A6B00;--accent:#2B5AA8;
+}
+html.dark{
+  --bg:#1A1A1A;--card:#2A2A2A;--border:#777;--ink:#F2F2F2;--mute:#A0A0A0;
+  --panel:#1F1F1F;--line:#444;--ok:#3DDC97;--warn:#F0C14B;--accent:#7EB6FF;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Outfit',sans-serif;background:var(--bg);color:var(--ink);
+  min-height:100vh;padding:24px;transition:background .2s ease,color .2s ease;
+}
+.theme-toggle{
+  position:fixed;top:18px;right:18px;z-index:10;
+  display:flex;gap:4px;padding:4px;
+  background:var(--card);border:2px solid var(--border);border-radius:999px;
+}
+.theme-toggle button{
+  width:36px;height:36px;border:none;border-radius:999px;
+  background:transparent;cursor:pointer;font-size:16px;color:var(--mute);
+}
+.theme-toggle button.active{background:#4A4A4A;color:#fff}
+html.dark .theme-toggle button.active{background:#D0D0D0;color:#111}
+
+.wrap{max-width:880px;margin:0 auto;padding-top:28px}
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:20px;flex-wrap:wrap;
+}
+.brand{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.back{
+  font:inherit;font-size:14px;font-weight:600;color:var(--mute);
+  background:none;border:none;cursor:pointer;text-decoration:underline;
+}
+.badge{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:4px 10px;border-radius:999px;
+  border:1.5px solid var(--border);color:var(--mute);
+}
+
+.card{
+  display:flex;flex-direction:column;gap:20px;
+  padding:36px 26px;
+  border-radius:10px;border:3px solid var(--border);
+  background:var(--card);box-shadow:0 12px 32px 0 rgba(12,20,33,.07);
+}
+
+h1{font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.sub{font-size:15px;font-weight:500;color:var(--mute);line-height:1.5}
+
+.file{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:14px 16px;border-radius:8px;border:1.5px solid var(--line);
+  background:var(--panel);
+}
+.file .icon{
+  width:42px;height:42px;border-radius:8px;background:#E6EEF8;color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;
+}
+html.dark .file .icon{background:#243247}
+.file .meta{flex:1;min-width:160px}
+.file .name{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600}
+.file .size{font-size:13px;color:var(--mute);margin-top:2px}
+.file .status{font-size:13px;font-weight:700;color:var(--ok)}
+
+.steps{display:grid;gap:10px}
+.step{
+  display:grid;grid-template-columns:28px 1fr auto;gap:12px;align-items:start;
+  padding:12px 14px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);
+}
+.step .n{
+  width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:800;background:var(--line);color:var(--mute);
+}
+.step.done .n{background:var(--ok);color:#fff}
+.step.active .n{background:var(--accent);color:#fff}
+.step .t{font-size:14px;font-weight:700}
+.step .d{font-size:13px;color:var(--mute);margin-top:2px;line-height:1.4}
+.step .tag{font-size:12px;font-weight:700;color:var(--mute);padding-top:4px}
+.step.done .tag{color:var(--ok)}
+.step.active .tag{color:var(--accent)}
+
+.panel{
+  border-radius:8px;border:1.5px solid var(--line);background:var(--panel);overflow:hidden;
+}
+.panel h2{
+  font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--mute);padding:12px 14px;border-bottom:1px solid var(--line);
+}
+.panel pre{
+  font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.55;
+  padding:14px;overflow:auto;white-space:pre-wrap;color:var(--ink);
+}
+.findings{display:grid;gap:8px;padding:14px}
+.finding{
+  display:flex;gap:10px;align-items:flex-start;
+  padding:10px 12px;border-radius:8px;border:1px solid var(--line);
+}
+.finding .dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:0 0 auto}
+.finding .dot.ok{background:var(--ok)}
+.finding .dot.warn{background:var(--warn)}
+.finding b{font-size:14px;font-weight:700;display:block}
+.finding span{font-size:13px;color:var(--mute);line-height:1.4}
+.sample-q{margin:0 14px 14px;padding:14px;border:1px solid var(--line);border-radius:8px}
+.sample-q .stem{font-size:14px;font-weight:700;line-height:1.45;margin-bottom:10px}
+.sample-q .option{font-size:13px;padding:7px 9px;margin-top:6px;border-radius:6px;background:var(--card)}
+.sample-q .option.correct{border-left:3px solid var(--ok)}
+.sample-q .evidence{font-size:12px;color:var(--mute);margin-top:12px;line-height:1.45}
+
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.actions button,.actions a{
+  font:inherit;font-size:14px;font-weight:700;text-decoration:none;
+  padding:11px 16px;border-radius:8px;cursor:pointer;border:1.5px solid var(--border);
+}
+.primary{background:#4A4A4A;color:#fff;border-color:#4A4A4A}
+html.dark .primary{background:#D0D0D0;color:#111;border-color:#D0D0D0}
+.ghost{background:transparent;color:var(--ink)}
+</style>
+</head>
+<body>
+  <div class="theme-toggle" role="group" aria-label="Theme">
+    <button type="button" id="theme-light" class="active" title="Light">☀</button>
+    <button type="button" id="theme-dark" title="Dark">☾</button>
+  </div>
+
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">RepoProof <span class="badge">Demo</span></div>
+      <button type="button" class="back" id="back">← Back to landing</button>
+    </div>
+
+    <main class="card">
+      <div>
+        <h1>See RepoProof in action</h1>
+        <p class="sub">Suppose a student has uploaded a code project. This guided demo shows how RepoProof analyses it, builds evidence, generates an assessment, and prepares it for review.</p>
+      </div>
+
+      <div class="file">
+        <div class="icon">ZIP</div>
+        <div class="meta">
+          <div class="name">student-task-manager.zip</div>
+          <div class="size">Uploaded · 1.8 MB · 26 files · Python / FastAPI</div>
+        </div>
+        <div class="status" id="file-status">Ready</div>
+      </div>
+
+      <div class="steps" id="steps">
+        <div class="step" data-step="0">
+          <div class="n">1</div>
+          <div>
+            <div class="t">Analyse the project</div>
+            <div class="d">Unpack the snapshot and identify files, languages, functions, classes, imports, and entrypoints.</div>
+          </div>
+          <div class="tag">Queued</div>
+        </div>
+        <div class="step" data-step="1">
+          <div class="n">2</div>
+          <div>
+            <div class="t">Build the evidence map</div>
+            <div class="d">Create traceable evidence chunks linked to source files, lines, and the project snapshot.</div>
+          </div>
+          <div class="tag">Queued</div>
+        </div>
+        <div class="step" data-step="2">
+          <div class="n">3</div>
+          <div>
+            <div class="t">Generate project-specific questions</div>
+            <div class="d">Use the configured difficulty and focus areas to generate evidence-grounded MAQs.</div>
+          </div>
+          <div class="tag">Queued</div>
+        </div>
+        <div class="step" data-step="3">
+          <div class="n">4</div>
+          <div>
+            <div class="t">Review and publish</div>
+            <div class="d">A human checks the answer key and evidence before sharing the assessment with a student or candidate.</div>
+          </div>
+          <div class="tag">Queued</div>
+        </div>
+      </div>
+
+      <div class="panel" id="log-panel" hidden>
+        <h2>Live log</h2>
+        <pre id="log"></pre>
+      </div>
+
+      <div class="panel" id="result-panel" hidden>
+        <h2>Generated assessment preview</h2>
+        <div class="findings">
+          <div class="finding"><div class="dot ok"></div><div><b>Snapshot analysed</b><span>26 source files, 14 functions, 5 classes, and 4 API routes identified.</span></div></div>
+          <div class="finding"><div class="dot ok"></div><div><b>Evidence linked</b><span>Question claims trace back to app/routes/tasks.py and app/services/task_service.py.</span></div></div>
+          <div class="finding"><div class="dot ok"></div><div><b>Question framework applied</b><span>Difficulty 3 · five options · dynamic 1–3 correct answers · focus: API flow.</span></div></div>
+          <div class="finding"><div class="dot warn"></div><div><b>Human approval required</b><span>The creator must verify the wording, answer combination, and evidence before publishing.</span></div></div>
+        </div>
+        <div class="sample-q">
+          <div class="stem">Which statements correctly describe how this project completes a task?</div>
+          <div class="option correct">A. The PATCH route loads the task through TaskService.</div>
+          <div class="option">B. The route writes directly to the SQLite file.</div>
+          <div class="option correct">C. TaskService rejects an unknown task identifier.</div>
+          <div class="option">D. Completion automatically deletes the task.</div>
+          <div class="option">E. Authentication is performed by GitHub OAuth.</div>
+          <div class="evidence"><strong>Answer:</strong> A, C<br><strong>Evidence:</strong> app/routes/tasks.py:42–58; app/services/task_service.py:31–47</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="primary" id="run">Run demo flow</button>
+        <button type="button" class="ghost" id="reset" hidden>Run again</button>
+        <a class="ghost" href="/">Open creator login</a>
+      </div>
+    </main>
+  </div>
+
+<script>
+(function () {
+  function setTheme(mode) {
+    document.documentElement.classList.toggle("dark", mode === "dark");
+    document.getElementById("theme-light").classList.toggle("active", mode === "light");
+    document.getElementById("theme-dark").classList.toggle("active", mode === "dark");
+    localStorage.setItem("repoproof-theme", mode);
+  }
+  setTheme(localStorage.getItem("repoproof-theme") || "light");
+  document.getElementById("theme-light").onclick = () => setTheme("light");
+  document.getElementById("theme-dark").onclick = () => setTheme("dark");
+  document.getElementById("back").onclick = () => { location.href = "/"; };
+
+  const steps = [...document.querySelectorAll(".step")];
+  const logPanel = document.getElementById("log-panel");
+  const resultPanel = document.getElementById("result-panel");
+  const logEl = document.getElementById("log");
+  const fileStatus = document.getElementById("file-status");
+  const runBtn = document.getElementById("run");
+  const resetBtn = document.getElementById("reset");
+
+  const lines = [
+    ["Extracting student-task-manager.zip …", 0],
+    ["Ignored: .git/, .venv/, __pycache__/", 0],
+    ["Snapshot checksum: 7f3c1a9e…c21", 0],
+    ["Detected Python + FastAPI; entrypoint app/main.py", 0],
+    ["Mapped task routes to TaskService", 1],
+    ["Built 38 evidence chunks with file and line provenance", 1],
+    ["Retrieving evidence for focus area: API flow", 2],
+    ["Generating five-option MAQ at difficulty 3", 2],
+    ["Validated one unambiguous answer combination", 2],
+    ["Saved draft for human review", 3],
+  ];
+
+  function setStep(i, state) {
+    const el = steps[i];
+    el.classList.remove("active", "done");
+    if (state === "active") el.classList.add("active");
+    if (state === "done") el.classList.add("done");
+    el.querySelector(".tag").textContent =
+      state === "done" ? "Done" : state === "active" ? "Running" : "Queued";
+  }
+
+  function reset() {
+    steps.forEach((_, i) => setStep(i, "queued"));
+    logEl.textContent = "";
+    logPanel.hidden = true;
+    resultPanel.hidden = true;
+    fileStatus.textContent = "Ready";
+    runBtn.hidden = false;
+    resetBtn.hidden = true;
+  }
+
+  async function run() {
+    runBtn.hidden = true;
+    resetBtn.hidden = true;
+    logPanel.hidden = false;
+    resultPanel.hidden = true;
+    fileStatus.textContent = "Processing…";
+    logEl.textContent = "";
+    let current = -1;
+    for (const [line, step] of lines) {
+      if (step !== current) {
+        if (current >= 0) setStep(current, "done");
+        current = step;
+        setStep(current, "active");
+      }
+      logEl.textContent += (logEl.textContent ? "\n" : "") + "> " + line;
+      logEl.scrollTop = logEl.scrollHeight;
+      await new Promise((r) => setTimeout(r, 450 + Math.random() * 350));
+    }
+    setStep(current, "done");
+    fileStatus.textContent = "Assessment draft ready";
+    resultPanel.hidden = false;
+    resetBtn.hidden = false;
+  }
+
+  runBtn.onclick = run;
+  resetBtn.onclick = () => { reset(); run(); };
+})();
+</script>
+</body>
+</html>
