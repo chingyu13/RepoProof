@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from pydantic import BaseModel
 
 from . import config, db
-from .analyzer import analyze_project
+from .analyzer import analyze_project, prune_non_source
 from .generator import generate_questions
 from .ingest import IngestError, clone_github, extract_upload
 from .knowledge import build_chunks
@@ -158,6 +158,9 @@ async def create_project(
     except IngestError as exc:
         raise HTTPException(400, str(exc)) from exc
 
+    # After the size gate, strip non-programming files (images, media, fonts,
+    # archives, binaries) and noise dirs so only code/text is analyzed and stored.
+    prune = prune_non_source(root)
     analysis = analyze_project(root)
     if analysis["stats"]["source_files"] == 0:
         detail = (
@@ -190,11 +193,14 @@ async def create_project(
         "source_type": source_type,
         "source_files": analysis["stats"].get("source_files"),
         "chunks": len(chunks),
+        "pruned_files": prune["removed"],
+        "pruned_mb": prune["removed_mb"],
         "share_data": share,
         "consent_version": config.CONSENT_VERSION,
     }, project_id=project_id)
     return {"id": project_id, "name": name, "snapshot_id": snapshot,
             "stats": analysis["stats"], "chunks": len(chunks),
+            "pruned": prune,
             "share_data": share,
             "parse_errors": analysis["errors"][:10]}
 

@@ -484,6 +484,30 @@ $('folderInput').addEventListener('change', async ()=>{
   } catch(e){ $('projectErr').textContent = 'Folder selection failed: ' + e.message; }
 });
 
+// File types RepoProof analyzes (mirrors the server analyzer's LANG_BY_EXT,
+// plus common text/config). Everything else (images, video, audio, fonts,
+// archives, binaries, models) is left out of the upload.
+const ANALYZE_EXT = new Set([
+  'py','ipynb','r','rmd','java','kt','scala','js','jsx','mjs','ts','tsx','vue',
+  'html','htm','css','scss','sql','c','h','cpp','cc','hpp','cs','go','rs','rb',
+  'php','sh','ps1','swift','jl','lua','pl','m','dart','yaml','yml','toml','json',
+  'md','txt','csv','tsv','xml','cfg','ini','gradle','env','properties'
+]);
+// Extensionless files worth keeping for project context.
+const KEEP_NAMES = new Set(['dockerfile','procfile','makefile','license','description','gemfile','rakefile']);
+const NOTEBOOK_MAX = 25 * 1_000_000;   // notebooks embed outputs — allow larger
+const TEXT_FILE_MAX = 3 * 1_000_000;   // skip oversized data/text files (server skips them too)
+
+function analyzableFile(rel, size){
+  const base = rel.split('/').pop().toLowerCase();
+  if (base.includes('.min.')) return false;                 // minified bundles
+  const ext = base.includes('.') ? base.split('.').pop() : '';
+  const okType = ANALYZE_EXT.has(ext) || KEEP_NAMES.has(base)
+    || base.startsWith('readme') || base.startsWith('requirements') || base.startsWith('.env');
+  if (!okType) return false;
+  return size <= (ext === 'ipynb' ? NOTEBOOK_MAX : TEXT_FILE_MAX);
+}
+
 async function packAndStage(list, folderName){
   $('projectErr').textContent = '';
   if (typeof JSZip === 'undefined') {
@@ -491,23 +515,32 @@ async function packAndStage(list, folderName){
     return;
   }
   const SKIP = /(^|\/)(\.git|node_modules|\.venv|venv|__pycache__|dist|build|\.idea|\.vscode)(\/|$)/;
-  const kept = list.filter(x => !SKIP.test('/' + x.rel));
-  if (!kept.length) { $('projectErr').textContent = 'The folder appears to be empty (or contains only skipped directories).'; return; }
+  const preDir = list.filter(x => !SKIP.test('/' + x.rel));
+  // Only upload file types RepoProof actually analyzes. Skip images, video,
+  // audio, fonts, archives, and other binaries so large asset folders don't
+  // bloat the upload (and trip the server's request-size limit).
+  const kept = preDir.filter(x => analyzableFile(x.rel, x.file.size));
+  const skipped = preDir.length - kept.length;
+  if (!kept.length) {
+    $('projectErr').textContent = 'No analyzable source files found in this folder — it looks like it only contains images, media, or other binaries. RepoProof analyzes code and text files.';
+    return;
+  }
   const total = kept.reduce((a,x)=>a+x.file.size, 0);
   if (total > maxProjectMB * 1_000_000) {
-    $('projectErr').textContent = `Folder is ${(total/1_000_000).toFixed(0)} MB — over the ${maxProjectMB.toLocaleString()} MB limit. Pro tier pending — jobs@chingyu.site`;
+    $('projectErr').textContent = `Code/text content is ${(total/1_000_000).toFixed(0)} MB — over the ${maxProjectMB.toLocaleString()} MB limit. Pro tier pending — jobs@chingyu.site`;
     return;
   }
   $('fileRow').classList.remove('hidden');
   $('fileName').textContent = folderName + '/';
-  $('fileMeta').innerHTML = `<span class="spin"></span> Packing ${kept.length} files…`;
+  $('fileMeta').innerHTML = `<span class="spin"></span> Packing ${kept.length} files${skipped ? ` (skipping ${skipped} non-code)` : ''}…`;
   try {
     const zip = new JSZip();
     kept.forEach(x => zip.file(x.rel, x.file));
     const blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:1}});
     pendingFile = new File([blob], folderName + '.zip', {type:'application/zip'});
     $('fileName').textContent = folderName + '.zip';
-    $('fileMeta').textContent = `${(blob.size/1_000_000).toFixed(1)} MB (${kept.length} files) · ready to analyze`;
+    $('fileMeta').textContent = `${(blob.size/1_000_000).toFixed(1)} MB · ${kept.length} code/text files`
+      + (skipped ? ` · ${skipped} non-code skipped` : '') + ' · ready to analyze';
   } catch(e) {
     $('fileMeta').textContent = '';
     $('projectErr').textContent = 'Could not pack the folder: ' + e.message;

@@ -9,6 +9,7 @@ layer when per-language AST support is needed.
 import ast
 import json
 import re
+import shutil
 from pathlib import Path
 
 from .ingest import SKIP_DIRS
@@ -43,6 +44,59 @@ LANG_BY_EXT = {
 }
 
 SKIP_FILENAMES = {"package-lock.json", "yarn.lock", "poetry.lock", "pnpm-lock.yaml"}
+
+# Extensionless files the analyzer still uses for project context (README and
+# dependency manifests are found by name in _find_readme / _find_dependencies).
+KEEP_FILENAMES = {"dockerfile", "procfile", "makefile", "description", "gemfile", "rakefile", "license"}
+
+
+def _is_source_file(p: Path) -> bool:
+    """True if the analyzer would use this file (code/text or key metadata)."""
+    name = p.name.lower()
+    if p.suffix.lower() in LANG_BY_EXT:
+        return True
+    if name in KEEP_FILENAMES:
+        return True
+    return name.startswith("readme") or name.startswith("requirements")
+
+
+def prune_non_source(root: Path) -> dict:
+    """Delete non-programming files (images, media, fonts, archives, binaries)
+    and noise directories from an extracted/cloned snapshot, keeping only what
+    the analyzer reads. Runs AFTER the size gate. Returns a small summary."""
+    removed = kept = removed_bytes = 0
+    # remove noise directories wholesale (.git, node_modules, build, ...)
+    for d in list(root.rglob("*")):
+        if d.is_dir() and d.name in SKIP_DIRS:
+            for f in d.rglob("*"):
+                if f.is_file():
+                    try:
+                        removed_bytes += f.stat().st_size
+                        removed += 1
+                    except OSError:
+                        pass
+            shutil.rmtree(d, ignore_errors=True)
+    # remove non-source files elsewhere
+    for p in root.rglob("*"):
+        if not p.is_file() or set(p.parts) & SKIP_DIRS:
+            continue
+        if _is_source_file(p):
+            kept += 1
+            continue
+        try:
+            removed_bytes += p.stat().st_size
+            p.unlink()
+            removed += 1
+        except OSError:
+            pass
+    # drop directories left empty by the prune
+    for p in sorted(root.rglob("*"), key=lambda x: len(x.parts), reverse=True):
+        if p.is_dir():
+            try:
+                p.rmdir()
+            except OSError:
+                pass
+    return {"removed": removed, "kept": kept, "removed_mb": round(removed_bytes / 1_000_000, 1)}
 
 # crude but broadly useful declaration matcher for the generic languages
 _DECL_RE = re.compile(
