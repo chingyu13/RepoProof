@@ -2,8 +2,11 @@
 .DS_Store
 data/
 __pycache__/
+docs/
 *.pyc
 .venv/
 venv/
 PRODUCT_DESIGN.md
 overview_repoproof.md
+notebooks/*.ipynb
+task_progress.md

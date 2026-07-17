@@ -10,6 +10,8 @@ def score_attempt(questions: list[dict], responses: dict) -> dict:
 
     for q in questions:
         qid = q["id"]
+        # normalize_answer sorts + dedupes + uppercases both sides, so
+        # ["c","A","a"] == ["A","C"] — set equality via canonical lists.
         selected = normalize_answer(responses.get(str(qid), []))
         answer = normalize_answer(q["answer"])
         is_correct = selected == answer

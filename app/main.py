@@ -26,11 +26,19 @@ _SESSION_SECRET = config.SESSION_SECRET or secrets.token_urlsafe(32)
 
 
 def _session_token() -> str:
+    """Stateless session: the cookie value is HMAC(secret, constant), so it is
+    the SAME for every login and stays valid until the secret changes. No
+    server-side session store is needed, but note two consequences: (1) the
+    cookie can't be revoked per-user — rotate REPOPROOF_SESSION_SECRET to kill
+    all sessions; (2) max_age only expires it client-side. Fine for a
+    single-creator prototype; use per-session tokens with expiry for multi-user."""
     return hmac.new(_SESSION_SECRET.encode(), b"creator-access", hashlib.sha256).hexdigest()
 
 
 def _authenticated(request: Request) -> bool:
     supplied = request.cookies.get(COOKIE_NAME, "")
+    # compare_digest = constant-time comparison; a plain `==` would leak how
+    # many leading characters match through response-timing differences.
     return bool(supplied) and secrets.compare_digest(supplied, _session_token())
 
 
@@ -116,9 +124,15 @@ def logout():
 
 @app.get("/api/meta")
 def meta():
+    local_up = config.local_llm_available()
     return {
         "mock_mode": config.mock_mode(),
         "model": config.OPENAI_MODEL,
+        "providers": {
+            "default": config.default_provider(),
+            "openai": {"available": bool(config.openai_api_key()), "model": config.OPENAI_MODEL},
+            "local": {"available": local_up, "model": config.LOCAL_LLM_MODEL, "url": config.LOCAL_LLM_URL},
+        },
         "max_project_mb": config.MAX_PROJECT_MB,
         "consent_text": config.CONSENT_TEXT,
         "data_sharing_text": config.DATA_SHARING_TEXT,
@@ -233,6 +247,7 @@ class GenerateConfig(BaseModel):
     difficulty: int = 2
     focus: str = ""
     areas: list[dict] = []          # [{name, weight 1-5}] — focus-area radar weights
+    provider: str = ""              # '' = server default | 'openai' | 'local' | 'mock'
 
 
 @app.post("/api/projects/{project_id}/generate")
@@ -257,8 +272,9 @@ def generate(project_id: int, cfg: GenerateConfig):
             "generator": q["generator"],
         })
         ids.append(qid)
+    provider_used = questions[0]["generator"] if questions else (cfg.provider or config.default_provider())
     db.log_event("generation_run", {
-        "model": ("mock" if config.mock_mode() else config.OPENAI_MODEL),
+        "model": provider_used,
         "mock_mode": config.mock_mode(),
         "requested": cfg.num_questions,
         "created": len(ids),
@@ -268,7 +284,8 @@ def generate(project_id: int, cfg: GenerateConfig):
         "areas": [a.get("name") for a in cfg.areas if a.get("name")],
         "warnings": len(warnings),
     }, project_id=project_id)
-    return {"created": ids, "warnings": warnings, "mock_mode": config.mock_mode()}
+    return {"created": ids, "warnings": warnings, "mock_mode": config.mock_mode(),
+            "provider": provider_used}
 
 
 @app.get("/api/projects/{project_id}/questions")
@@ -301,6 +318,9 @@ def edit_question(question_id: int, edit: QuestionEdit):
         "evidence": q["evidence"],
     }
     status = edit.status if edit.status is not None else q["status"]
+    # "Did a human change the model's output?" — compared field by field
+    # against the stored row. This flag feeds the human_edit_rate metric:
+    # a high rate means generation quality is too low to approve as-is.
     edited = any([
         merged["stem"] != q["stem"],
         merged["options"] != q["options"],
@@ -430,6 +450,8 @@ def take(token: str):
     questions = []
     for qid in a["question_ids"]:
         q = db.get("questions", qid)
+        # SECURITY: build the taker payload by whitelisting fields — answer,
+        # justifications, and evidence must never reach the taker's browser.
         item = {"id": q["id"], "stem": q["stem"], "options": q["options"],
                 "difficulty": q["difficulty"]}
         if show_count:
@@ -466,6 +488,10 @@ def print_view(assessment_id: int, key: int = 0):
     if not a:
         raise HTTPException(404, "Assessment not found")
     project = db.get("projects", a["project_id"])
+    # NOTE (review finding): stems/options/explanations are interpolated into
+    # this HTML unescaped. They originate from LLM output over repo content,
+    # so a hostile repository could inject markup here. Wrap the dynamic
+    # values in html.escape() before any multi-tenant/production use.
     parts = [f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{a['title']} — RepoProof</title>
 <style>

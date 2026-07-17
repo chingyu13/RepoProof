@@ -22,7 +22,7 @@ Point RepoProof at a repository — a public GitHub URL, a `.zip`, or a browser 
 
 Because every question is tied to the analyzed snapshot, results are always traceable to a specific version of the code.
 
-**Use cases:** CS education (do students understand what they submitted?), engineering hiring (a project-specific screen before an interview), and self-assessment of a codebase, notebook, or data project.
+**Use cases:** CS education (do students understand what they submitted?), engineering hiring (a project-specific screening assessment), and self-assessment of a codebase, notebook, or data project.
 
 RepoProof measures *demonstrated understanding*. It does not prove authorship or conclusively detect AI-generated work.
 

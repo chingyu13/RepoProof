@@ -6,9 +6,10 @@ app is testable end to end without spending tokens.
 """
 import json
 import random
+import re
 
 from . import config
-from .knowledge import ChunkIndex
+from .knowledge import ChunkIndex, data_engineering_expansion
 from .validator import OPTION_KEYS, validate_maq
 
 # Default blueprint (design doc §7): slots instantiated against each repo.
@@ -47,15 +48,25 @@ Return STRICT JSON with exactly these fields:
   "explanation": "shown to the taker after submission"
 }"""
 
+LOCAL_EVIDENCE_COUNT = 4
+LOCAL_EVIDENCE_CHARS = 1_000
+
 
 def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
-                     correct_count: int, difficulty: int, extra_focus: str) -> str:
-    ev_text = "\n\n".join(f"[{c['id']}] {c['title']}\n{c['text'][:1400]}" for c in evidence)
+                     correct_count: int, difficulty: int, extra_focus: str,
+                     evidence_chars: int = 1_400) -> str:
+    ev_text = "\n\n".join(f"[{c['id']}] {c['title']}\n{c['text'][:evidence_chars]}" for c in evidence)
     focus_line = f"\nAssessment creator focus/instructions: {extra_focus}" if extra_focus else ""
     return f"""Question slot: {slot['slot']} — {slot['brief']}
 Target difficulty: {difficulty} (1=recall ... 5=evaluate)
 Options: exactly {choice_count}, keyed {list(OPTION_KEYS[:choice_count])}.
 Correct options: exactly {correct_count} (the rest must be incorrect).{focus_line}
+
+OUTPUT CHECKLIST — apply this immediately before responding:
+1. Return exactly {choice_count} distinct options.
+2. Count the boolean values in `correct`: exactly {correct_count} options must be `true`.
+3. Every `true` option must be supported by the evidence; every `false` option must contradict it.
+4. Cite only the evidence ids shown below. Return JSON only, without Markdown.
 
 EVIDENCE (cite ids you used in evidence_ids):
 {ev_text}
@@ -63,17 +74,87 @@ EVIDENCE (cite ids you used in evidence_ids):
 Write the MAQ now as strict JSON."""
 
 
-def _call_openai(system: str, user: str) -> dict:
+def _repair_prompt(raw: dict, evidence: list[dict], choice_count: int,
+                   correct_count: int, errors: str) -> str:
+    """Ask the model to repair an invalid draft without repeating full retrieval.
+
+    The normal question prompt can be several thousand tokens. For common
+    local-model failures such as a wrong number of correct options, send the
+    candidate plus only the evidence it cited. This is quicker and gives the
+    model a focused correction task instead of discarding the whole question.
+    """
+    cited = set(raw.get("evidence_ids") or [])
+    repair_evidence = [c for c in evidence if c["id"] in cited] or evidence[:2]
+    ev_text = "\n\n".join(f"[{c['id']}] {c['title']}\n{c['text'][:900]}" for c in repair_evidence)
+    draft = json.dumps(raw, ensure_ascii=False)
+    return f"""Repair this RepoProof MAQ draft. The validator reported:
+{errors}
+
+Use only the evidence below. Preserve the question's intent, but rewrite
+options, `correct` flags, justifications, or evidence_ids when necessary.
+Return the complete JSON object and nothing else.
+
+Hard requirements:
+- exactly {choice_count} distinct options with keys {list(OPTION_KEYS[:choice_count])};
+- exactly {correct_count} options have `correct: true` — count them before responding;
+- true options must be supported and false options contradicted by the evidence;
+- include at least one valid evidence id.
+
+INVALID DRAFT:
+{draft}
+
+EVIDENCE:
+{ev_text}"""
+
+
+def _extract_json(text: str) -> dict:
+    """Local models often wrap the JSON in prose or ```json fences —
+    grab the outermost {...} block instead of trusting the raw output."""
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        raise ValueError("model returned no JSON object")
+    return json.loads(m.group(0))
+
+
+def _call_llm(provider: str, system: str, user: str, *, temperature: float | None = None) -> dict:
+    """One code path for both providers: the local server (Ollama/LM Studio)
+    speaks the same OpenAI chat-completions protocol, so only base_url,
+    model name, and timeout differ. Data never leaves the machine when
+    provider == 'local'."""
     from openai import OpenAI
-    client = OpenAI(api_key=config.openai_api_key())
-    resp = client.chat.completions.create(
-        model=config.OPENAI_MODEL,
+    if provider == "local":
+        # trust_env=False bypasses HTTP(S)_PROXY/ALL_PROXY env vars — localhost
+        # traffic must never be routed through a corporate/system proxy.
+        import httpx
+        client = OpenAI(base_url=config.LOCAL_LLM_URL, api_key="local-llm",
+                        http_client=httpx.Client(trust_env=False, timeout=300))
+        model, timeout = config.LOCAL_LLM_MODEL, 300   # local inference can be slow
+    else:
+        client = OpenAI(api_key=config.openai_api_key())
+        model, timeout = config.OPENAI_MODEL, 90
+    kwargs = dict(
+        model=model,
         messages=[{"role": "system", "content": system},
                   {"role": "user", "content": user}],
-        response_format={"type": "json_object"},
-        temperature=0.4,
+        # A smaller local model is much more consistent about JSON/schema
+        # constraints at low temperature. OpenAI keeps the previous setting.
+        temperature=temperature if temperature is not None else (0.2 if provider == "local" else 0.4),
+        timeout=timeout,
     )
-    return json.loads(resp.choices[0].message.content)
+    if provider == "local":
+        # Enough for one MAQ, but prevents a malformed local generation from
+        # wasting time on a long answer that the validator will reject anyway.
+        kwargs["max_tokens"] = 1_200
+    try:
+        resp = client.chat.completions.create(response_format={"type": "json_object"}, **kwargs)
+    except Exception as exc:
+        # some local servers (older Ollama, llama.cpp) reject response_format —
+        # retry once without it and rely on _extract_json instead
+        if provider == "local" and "response_format" in str(exc).lower():
+            resp = client.chat.completions.create(**kwargs)
+        else:
+            raise
+    return _extract_json(resp.choices[0].message.content)
 
 
 def _mock_question(slot: dict, evidence: list[dict], choice_count: int,
@@ -135,6 +216,9 @@ class GenerationError(Exception):
 
 
 def _pick_correct_count(cfg: dict, choice_count: int, rng: random.Random) -> int:
+    # hard_max = n-1 enforces the design rule "all options correct" is never
+    # allowed — otherwise a disclosed correct-count would trivialize the
+    # question (select everything).
     hard_max = choice_count - 1
     if cfg.get("correct_mode") == "dynamic":
         lo = max(1, int(cfg.get("correct_min", 1)))
@@ -154,7 +238,26 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
     choice_count = max(2, min(7, int(cfg.get("choice_count", 5))))
     difficulty = max(1, min(5, int(cfg.get("difficulty", 2))))
     extra_focus = (cfg.get("focus") or "").strip()
-    mock = config.mock_mode()
+
+    # Provider choice: per-request (UI dropdown) > server default. Falls back
+    # to mock with a visible warning instead of failing silently.
+    provider = (cfg.get("provider") or "").strip().lower() or config.default_provider()
+    fallback_warnings = []
+    if provider == "openai" and not config.openai_api_key():
+        fallback_warnings.append("OpenAI selected but no API key configured — using mock questions.")
+        provider = "mock"
+    elif provider == "local" and not config.local_llm_available():
+        fallback_warnings.append(
+            f"Local LLM selected but no server answered at {config.LOCAL_LLM_URL} — using mock questions. "
+            "Start it with e.g. `ollama serve` (and `ollama pull " + config.LOCAL_LLM_MODEL + "`).")
+        provider = "mock"
+    elif provider not in ("openai", "local", "mock"):
+        provider = config.default_provider()
+    mock = provider == "mock"
+    generator_label = {"mock": "mock", "openai": config.OPENAI_MODEL,
+                       "local": f"local:{config.LOCAL_LLM_MODEL}"}[provider]
+    evidence_k = LOCAL_EVIDENCE_COUNT if provider == "local" else 6
+    evidence_chars = LOCAL_EVIDENCE_CHARS if provider == "local" else 1_400
 
     # Focus-area radar weights: distribute questions across areas
     # proportionally to their configured degree (design doc §3.4).
@@ -163,50 +266,95 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
                  if str(a.get("name", "")).strip() and int(a.get("weight", 0)) > 0]
     area_seq: list[str] = []
     if areas_cfg:
+        # Proportional assignment without floating point. Example: areas
+        # {Data:4, Logic:2}, num=6 → weighted = [D,D,D,D,L,L] (each name
+        # repeated `weight` times). Question i maps to index
+        # (i*len(weighted))//num, which walks that list evenly from start to
+        # end — so 6 questions land on D,D,D,D,L,L: exactly a 4:2 split.
+        # The final % handles num > len(weighted) by wrapping around.
         weighted = [name for name, w in areas_cfg for _ in range(w)]
         area_seq = [weighted[(i * len(weighted)) // num % len(weighted)] for i in range(num)]
 
-    questions, warnings = [], []
+    questions, warnings = [], list(fallback_warnings)
     for i in range(num):
         slot = dict(DEFAULT_BLUEPRINT[i % len(DEFAULT_BLUEPRINT)])
         focus_for_prompt = extra_focus
         query = slot["query"] + (" " + extra_focus if extra_focus else "")
+        # Only expand the creator's requested topic, not generic blueprint
+        # words such as "load" or "pipeline". This keeps general-purpose
+        # questions stable while giving data-engineering assignments a small,
+        # explicit semantic bridge to code identifiers.
+        retrieval_focus = extra_focus
         if area_seq:
             area = area_seq[i]
             slot["focus"] = area
             query += " " + area
+            retrieval_focus = (retrieval_focus + " " + area).strip()
             focus_for_prompt = ((extra_focus + "; ") if extra_focus else "") + \
                 f"primary focus area: {area} — the question must test this area and focus_areas must include it"
-        evidence = index.retrieve(query, k=6)
+        evidence = index.retrieve(query, k=evidence_k,
+                                  expansion_terms=data_engineering_expansion(retrieval_focus))
         # rotate anchor evidence so consecutive comprehension slots hit different functions
         if i > 0 and len(evidence) > 2:
             evidence = evidence[i % 3:] + evidence[: i % 3]
         correct_count = _pick_correct_count(cfg, choice_count, rng)
 
+        # Generate -> validate -> focused repair -> fresh regeneration. The
+        # repair pass is especially important for local 7B models: a question
+        # may be evidence-grounded yet have one instead of two `correct` flags.
+        # Repairing that compact draft is faster and more reliable than simply
+        # rejecting it or resending the full retrieval prompt unchanged.
         last_err = None
-        for attempt in range(2):
+        for fresh_attempt in range(2):
             try:
                 if mock:
                     raw = _mock_question(slot, evidence, choice_count, correct_count, difficulty, rng)
                 else:
-                    prompt = _question_prompt(slot, evidence, choice_count, correct_count, difficulty, focus_for_prompt)
-                    if attempt == 1 and last_err:
-                        prompt += f"\n\nYour previous attempt was invalid: {last_err}. Fix these problems."
-                    raw = _call_openai(SYSTEM_PROMPT, prompt)
+                    prompt = _question_prompt(
+                        slot, evidence, choice_count, correct_count, difficulty,
+                        focus_for_prompt, evidence_chars,
+                    )
+                    if fresh_attempt and last_err:
+                        prompt += (
+                            "\n\nThe previous candidate could not be repaired. Generate a new question "
+                            f"with a different wording and obey the output checklist. Previous errors: {last_err}"
+                        )
+                    raw = _call_llm(provider, SYSTEM_PROMPT, prompt)
                 q = _normalize(raw, slot, chunk_by_id, rng)
                 errs = validate_maq(q, choice_count, correct_count)
-                if errs:
-                    last_err = "; ".join(errs)
+                if not errs:
+                    q["generator"] = generator_label
+                    questions.append(q)
+                    break
+
+                last_err = "; ".join(errs)
+                if mock:
                     continue
-                q["generator"] = "mock" if mock else config.OPENAI_MODEL
-                questions.append(q)
-                break
+
+                # Send a small correction request before consuming another
+                # full generation attempt. `raw` is retained so the model can
+                # fix its own JSON rather than starting from nothing.
+                repair_raw = _call_llm(
+                    provider,
+                    SYSTEM_PROMPT,
+                    _repair_prompt(raw, evidence, choice_count, correct_count, last_err),
+                    temperature=0.0,
+                )
+                repaired = _normalize(repair_raw, slot, chunk_by_id, rng)
+                repair_errs = validate_maq(repaired, choice_count, correct_count)
+                if not repair_errs:
+                    repaired["generator"] = generator_label
+                    questions.append(repaired)
+                    break
+                last_err = "; ".join(repair_errs)
             except GenerationError as exc:
                 last_err = str(exc)
             except Exception as exc:  # API/JSON errors -> retry once, then warn
                 last_err = f"{type(exc).__name__}: {exc}"
         else:
-            warnings.append(f"Question {i + 1} ({slot['slot']}) rejected after retry: {last_err}")
+            warnings.append(
+                f"Question {i + 1} ({slot['slot']}) rejected after repair and fresh regeneration: {last_err}"
+            )
 
     return questions, warnings
 

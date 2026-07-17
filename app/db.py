@@ -105,6 +105,11 @@ def connect():
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
+    """Naming convention that powers the whole storage layer: any column
+    ending in `_json` holds a JSON string, and is handed to callers already
+    parsed, under the shorter key. e.g. {'chunks_json': '[...]'} becomes
+    {'chunks': [...]}. insert()/update() below do the mirror-image encoding,
+    so callers never touch json.dumps/loads themselves."""
     d = dict(row)
     for key in list(d):
         if key.endswith("_json"):
@@ -115,6 +120,8 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
 def insert(table: str, values: dict) -> int:
     cols, params = [], []
     for k, v in values.items():
+        # counterpart of _row_to_dict: dicts/lists passed under a `_json` key
+        # are serialized automatically (strings pass through untouched)
         if k.endswith("_json") and not isinstance(v, str):
             v = json.dumps(v, ensure_ascii=False)
         cols.append(k)

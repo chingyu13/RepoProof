@@ -14,16 +14,46 @@ OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 ACCESS_PASSWORD = os.environ.get("REPOPROOF_ACCESS_PASSWORD", "").strip()
 SESSION_SECRET = os.environ.get("REPOPROOF_SESSION_SECRET", "").strip()
 
+# Local LLM (privacy mode): any OpenAI-compatible server works.
+#   Ollama    -> http://127.0.0.1:11434/v1   (default)
+#   LM Studio -> http://127.0.0.1:1234/v1
+LOCAL_LLM_URL = os.environ.get("REPOPROOF_LOCAL_LLM_URL", "http://127.0.0.1:11434/v1").rstrip("/")
+LOCAL_LLM_MODEL = os.environ.get("REPOPROOF_LOCAL_LLM_MODEL", "qwen2.5-coder:7b")
+# optional forced default: 'openai' | 'local' | 'mock'
+_FORCED_PROVIDER = os.environ.get("REPOPROOF_LLM_PROVIDER", "").strip().lower()
+
 
 def openai_api_key() -> str:
     return os.environ.get("OPENAI_API_KEY", "").strip()
 
 
-def mock_mode() -> bool:
-    """Mock mode is forced on when no API key is configured."""
+def local_llm_available(timeout: float = 1.2) -> bool:
+    """Ping the local server's /models endpoint. Cheap enough to call per request."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(LOCAL_LLM_URL + "/models")
+        with urllib.request.urlopen(req, timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def default_provider() -> str:
+    """Resolution order: explicit env override > MOCK_LLM flag > OpenAI key > local server > mock."""
+    if _FORCED_PROVIDER in ("openai", "local", "mock"):
+        return _FORCED_PROVIDER
     if os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
-        return True
-    return not openai_api_key()
+        return "mock"
+    if openai_api_key():
+        return "openai"
+    if local_llm_available():
+        return "local"
+    return "mock"
+
+
+def mock_mode() -> bool:
+    """Kept for backward compatibility: true when the default provider is mock."""
+    return default_provider() == "mock"
 
 
 # Consent copy (RepoProof UI / Step 1). Bump CONSENT_VERSION whenever the wording

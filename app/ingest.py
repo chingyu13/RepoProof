@@ -86,6 +86,10 @@ def extract_upload(data: bytes, filename: str) -> tuple[Path, str, str]:
     dest.mkdir(parents=True)
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            # "Zip-slip" guard: a malicious archive can contain entries like
+            # ../../etc/passwd. resolve() normalizes those traversals; if the
+            # normalized target escapes the extraction dir, reject the archive
+            # BEFORE extracting anything.
             for member in zf.infolist():
                 target = (dest / member.filename).resolve()
                 if not str(target).startswith(str(dest.resolve())):

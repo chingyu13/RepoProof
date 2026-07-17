@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RepoProof — Creator</title>
+<link href="/static/vendor/oxanium.css" rel="stylesheet"><!-- local (offline) fonts, if vendored -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -282,7 +283,9 @@ a{color:var(--accent)}
     <div id="gRangeWrap"><label>Range (min–max)</label>
       <div style="display:flex;gap:.3rem"><input type="number" id="gMin" value="1" min="1"><input type="number" id="gMax" value="3" min="1"></div></div>
     <div><label>Difficulty (1–5)</label><input type="number" id="gDiff" value="2" min="1" max="5"></div>
+    <div><label>LLM provider</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
+  <p class="small" id="providerNote"></p>
   <label>Focus areas — drag each slider to set how strongly that area is tested (0 = skip)</label>
   <div class="radar-wrap">
     <div class="radar-panel"><svg id="radar" viewBox="0 0 300 300" aria-label="Focus area radar chart"></svg></div>
@@ -335,7 +338,19 @@ a{color:var(--accent)}
 </section>
 
 </main>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/* JSZip: prefer the local vendored copy (offline), fall back to the CDN */
+(function(){
+  var s = document.createElement('script');
+  s.src = '/static/vendor/jszip.min.js';
+  s.onerror = function(){
+    var c = document.createElement('script');
+    c.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    document.head.appendChild(c);
+  };
+  document.head.appendChild(s);
+})();
+</script>
 <script>
 const $ = id => document.getElementById(id);
 let currentProject = null;
@@ -423,6 +438,24 @@ async function loadMeta(){
   $('sizeNote').textContent = `Any code project up to ${size}`;
   $('sizeNote').title = `Larger projects: Pro tier pending — ${m.pro_contact}`;
   if (m.mock_mode) $('mockBadge').classList.remove('hidden');
+
+  // LLM provider dropdown — offer what the server can actually reach
+  const p = m.providers || {};
+  const sel = $('gProvider');
+  sel.innerHTML = '';
+  const addOpt = (value, label, enabled) => {
+    const o = document.createElement('option');
+    o.value = value; o.textContent = label; o.disabled = !enabled;
+    sel.appendChild(o);
+  };
+  addOpt('openai', `GPT API (${p.openai?.model || 'no key'})${p.openai?.available ? '' : ' — no key'}`, !!p.openai?.available);
+  addOpt('local', `Local LLM (${p.local?.model || '?'})${p.local?.available ? ' — private' : ' — not running'}`, !!p.local?.available);
+  addOpt('mock', 'Mock (free, no LLM)', true);
+  sel.value = ['openai','local','mock'].includes(p.default) ? p.default : 'mock';
+  if (sel.selectedOptions[0]?.disabled) sel.value = 'mock';
+  $('providerNote').textContent = p.local?.available
+    ? `Local server detected at ${p.local.url} — "Local LLM" keeps all code on this machine.`
+    : `No local LLM detected (looked at ${p.local?.url || 'n/a'}). Install Ollama and run: ollama pull ${p.local?.model || 'qwen2.5-coder:7b'} && ollama serve`;
 }
 
 /* drag & drop */
@@ -700,11 +733,12 @@ $('generate').onclick = async ()=>{
       correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
       correct_min:+$('gMin').value, correct_max:+$('gMax').value,
       difficulty:+$('gDiff').value, focus:$('gFocus').value,
-      areas: areas.filter(a=>a.name.trim() && a.w > 0).map(a=>({name:a.name.trim(), weight:a.w}))
+      areas: areas.filter(a=>a.name.trim() && a.w > 0).map(a=>({name:a.name.trim(), weight:a.w})),
+      provider: $('gProvider').value
     };
     const res = await api(`/api/projects/${currentProject}/generate`, {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
-    $('genStatus').textContent = `Created ${res.created.length} question(s).` + (res.mock_mode?' (mock mode)':'');
+    $('genStatus').textContent = `Created ${res.created.length} question(s) via ${res.provider || (res.mock_mode ? 'mock' : 'LLM')}.`;
     if (res.warnings.length) $('genErr').textContent = res.warnings.join('\n');
     await loadQuestions();
     goToStep(3, {unlock:true});
