@@ -38,22 +38,27 @@ def local_llm_available(timeout: float = 1.2) -> bool:
         return False
 
 
-def default_provider() -> str:
-    """Resolution order: explicit env override > MOCK_LLM flag > OpenAI key > local server > mock."""
+def default_provider(*, local_available: bool | None = None) -> str:
+    """Resolution order: explicit env override > MOCK_LLM flag > OpenAI key > local server > mock.
+
+    Pass ``local_available`` when the caller already probed the local server so
+    availability and the selected default stay consistent in one response.
+    """
     if _FORCED_PROVIDER in ("openai", "local", "mock"):
         return _FORCED_PROVIDER
     if os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
         return "mock"
     if openai_api_key():
         return "openai"
-    if local_llm_available():
+    available = local_llm_available() if local_available is None else local_available
+    if available:
         return "local"
     return "mock"
 
 
-def mock_mode() -> bool:
+def mock_mode(*, local_available: bool | None = None) -> bool:
     """Kept for backward compatibility: true when the default provider is mock."""
-    return default_provider() == "mock"
+    return default_provider(local_available=local_available) == "mock"
 
 
 # Consent copy (RepoProof UI / Step 1). Bump CONSENT_VERSION whenever the wording
