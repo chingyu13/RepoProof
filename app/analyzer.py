@@ -330,6 +330,73 @@ def _imports_of(tree: ast.AST) -> list[str]:
     return sorted(mods)
 
 
+def _python_import_details(tree: ast.AST) -> list[dict]:
+    """Full import records (vs. _imports_of's display-only top-level names):
+    {"module": dotted path, "names": [(imported, local_alias)], "level": n}.
+    `level` is the number of leading dots in a relative import
+    (`from ..pkg import x` -> level=2) — needed to resolve the target file.
+    A plain `import a.b` is recorded with names=[] (it binds the module, not
+    symbols), which is all the import-graph edge needs."""
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                out.append({"module": a.name, "names": [], "level": 0})
+        elif isinstance(node, ast.ImportFrom):
+            names = [(a.name, a.asname or a.name) for a in node.names if a.name != "*"]
+            out.append({"module": node.module or "", "names": names, "level": node.level})
+    return out
+
+
+def _resolve_import_graph(out: dict) -> None:
+    """Cross-file resolution: turn per-file Python import records into
+    (1) `import_edges` — [src_file, dst_file, imported_names] limited to files
+        that actually exist in THIS repo (stdlib/third-party imports resolve to
+        nothing and are simply skipped), and
+    (2) `imported_symbols` — {file: {local_name: [dst_file, original_name]}},
+        a shallow symbol table that lets the call-graph builder follow
+        `load_tasks()` in cli.py back to its definition in storage.py.
+    Resolution is by module-path mapping only (src/storage.py <-> src.storage,
+    pkg/__init__.py <-> pkg) — no type inference, so attribute calls through
+    objects remain unresolved by design."""
+    module_to_file: dict[str, str] = {}
+    for entry in out["files"]:
+        rel = entry[0] if isinstance(entry, (list, tuple)) else entry
+        if not rel.endswith(".py"):
+            continue
+        parts = rel[:-3].split("/")
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        if parts:
+            module_to_file[".".join(parts)] = rel
+    # files may not be filled yet for the current walk order — caller invokes
+    # this AFTER the walk, so python_imports is complete here.
+    edges: list[list] = []
+    symbols: dict[str, dict[str, list]] = {}
+    for rel, imports in out.get("python_imports", {}).items():
+        pkg_parts = rel[:-3].split("/")[:-1] if rel.endswith(".py") else []
+        for imp in imports:
+            if imp["level"]:  # relative import: climb `level-1` packages up
+                base = pkg_parts[: len(pkg_parts) - (imp["level"] - 1)] if imp["level"] > 1 else pkg_parts
+                module = ".".join(base + ([imp["module"]] if imp["module"] else []))
+            else:
+                module = imp["module"]
+            dst = module_to_file.get(module)
+            if dst is None and imp["names"]:
+                # `from pkg import mod` where mod is itself a module file
+                for name, alias in imp["names"]:
+                    sub = module_to_file.get(f"{module}.{name}" if module else name)
+                    if sub:
+                        edges.append([rel, sub, [name]])
+            if dst is None or dst == rel:
+                continue
+            edges.append([rel, dst, [n for n, _ in imp["names"]]])
+            for name, alias in imp["names"]:
+                symbols.setdefault(rel, {})[alias] = [dst, name]
+    out["import_edges"] = edges
+    out["imported_symbols"] = symbols
+
+
 def _module_level_vars(tree: ast.Module, src: str, rel: str) -> list[dict]:
     """Top-level `NAME = ...` / `NAME: type = ...` statements — module-scope
     constants/config (schemas, topic lists, intervals, ...) that _Visitor
@@ -373,6 +440,9 @@ def _analyze_python(path: Path, rel: str, src: str, out: dict) -> None:
     imports = _imports_of(tree)
     if imports:
         out["file_imports"][rel] = imports
+    details = _python_import_details(tree)
+    if details:
+        out.setdefault("python_imports", {})[rel] = details
 
 
 def _analyze_notebook(rel: str, raw: str, out: dict) -> str | None:
@@ -734,12 +804,61 @@ def _find_dependencies(root: Path) -> list[str]:
     return sorted(set(deps))
 
 
+# ---------------------------------------------------------------------------
+# Parser plugin registry.
+# A parser is `handler(rel, src, out) -> language_label | None`; it appends
+# into the IR dict (see analyze_project docstring). Returning None means "this
+# file could not be parsed — skip it". Extensions NOT in the registry fall
+# through analyze_project's built-in ladder: tree-sitter pilot -> generic
+# regex. To add a language properly, write a handler that fills the same IR
+# keys (functions/classes/calls/...) and call register_parser(".ext", handler).
+# ---------------------------------------------------------------------------
+
+def _parse_python(rel: str, src: str, out: dict) -> str:
+    _analyze_python(None, rel, src, out)
+    return "Python"
+
+
+def _parse_notebook(rel: str, src: str, out: dict) -> str | None:
+    return _analyze_notebook(rel, src, out)
+
+
+PARSER_REGISTRY: dict[str, object] = {
+    ".py": _parse_python,
+    ".ipynb": _parse_notebook,
+}
+
+
+def register_parser(ext: str, handler) -> None:
+    """Plug in an additional language parser (see registry note above)."""
+    PARSER_REGISTRY[ext.lower()] = handler
+
+
 def analyze_project(root: Path) -> dict:
-    """Build the structured analysis dict the knowledge layer consumes."""
+    """Build the intermediate representation (IR) the knowledge layer consumes.
+
+    IR SCHEMA — every parser writes into this shared shape, which is what
+    makes the downstream (chunking, retrieval, generation) language-agnostic:
+      files            [(rel_path, language)]
+      functions        [{name, qualname, file, start/end_line, args,
+                         docstring, code, is_async}]
+      classes          [{name, qualname, file, start/end_line, bases,
+                         docstring, methods}]
+      calls            [(caller "file::qualname", callee_name)] — name-level
+      module_vars      [{names, file, start/end_line, code}]
+      file_imports     {file: [top-level module names]} — display only
+      python_imports   {file: [{module, names, level}]} — full records
+      import_edges     [[src_file, dst_file, [names]]] — repo-internal only
+      imported_symbols {file: {local_name: [dst_file, original_name]}}
+      notebooks        [{file, language, cells}]
+      other_files      [{file, language, line_count, declarations, text}]
+      readme, dependencies, errors, stats
+    """
     out = {
         "files": [],                # [(rel, language)]
         "functions": [], "classes": [], "calls": [], "module_vars": [],
         "file_imports": {},
+        "python_imports": {},
         "notebooks": [],
         "other_files": [],
         "readme": _find_readme(root),
@@ -757,10 +876,9 @@ def analyze_project(root: Path) -> dict:
         except OSError:
             continue
         language = LANG_BY_EXT[ext]
-        if ext == ".py":
-            _analyze_python(path, rel, src, out)
-        elif ext == ".ipynb":
-            label = _analyze_notebook(rel, src, out)
+        handler = PARSER_REGISTRY.get(ext)
+        if handler is not None:
+            label = handler(rel, src, out)
             if label is None:
                 continue
             language = label
@@ -772,6 +890,9 @@ def analyze_project(root: Path) -> dict:
         by_language[language] = by_language.get(language, 0) + 1
         loc += src.count("\n") + 1
 
+    # cross-file pass: needs the complete file list + import records
+    _resolve_import_graph(out)
+
     out["stats"] = {
         "source_files": len(out["files"]),
         "files_by_language": dict(sorted(by_language.items(), key=lambda kv: -kv[1])),
@@ -780,6 +901,7 @@ def analyze_project(root: Path) -> dict:
         "functions": len(out["functions"]),
         "classes": len(out["classes"]),
         "module_vars": len(out["module_vars"]),
+        "import_edges": len(out.get("import_edges", [])),
         "lines_of_code": loc,
         "parse_errors": len(out["errors"]),
         "skipped_files": skipped[:10],

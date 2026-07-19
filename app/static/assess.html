@@ -99,25 +99,75 @@ async function api(path, opts={}) {
 }
 function esc(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
+/* --- adaptive state: answers accumulate locally, order is what the server
+       uses to judge the previous answer and pick the next difficulty --- */
+let adaptive = false;
+const accResponses = {};
+const accOrder = [];
+
+function renderQuestionBlock(q, label){
+  const d = document.createElement('div');
+  d.className = 'q';
+  const hint = q.correct_count ? ` <span class="small">(${q.correct_count} correct)</span>` : '';
+  // pre-wrap: stems may embed quoted code blocks with meaningful line breaks
+  d.innerHTML = `<p style="white-space:pre-wrap"><strong>${label}.</strong> ${esc(q.stem)}${hint}</p>`;
+  q.options.forEach(o=>{
+    const l = document.createElement('label');
+    l.className = 'opt';
+    l.innerHTML = `<input type="checkbox" data-q="${q.id}" value="${o.key}"> <span><strong>${o.key}.</strong> ${esc(o.text)}</span>`;
+    d.appendChild(l);
+  });
+  return d;
+}
+
 async function load(){
   try { data = await api('/api/take/'+token); }
   catch(e){ $('title').textContent = 'Not found'; $('err').textContent = e.message; return; }
   $('title').textContent = data.title;
   $('scoring').textContent = data.scoring;
+  adaptive = !!data.adaptive;
+  if (adaptive){
+    $('scoring').textContent += ' Question order adapts to your answers.';
+    $('submit').parentElement.style.display = 'none';   // auto-submits at the end
+    await nextAdaptive();
+    return;
+  }
   const paper = $('paper');
-  data.questions.forEach((q,i)=>{
-    const d = document.createElement('div');
-    d.className = 'q';
-    const hint = q.correct_count ? ` <span class="small">(${q.correct_count} correct)</span>` : '';
-    d.innerHTML = `<p><strong>Q${i+1}.</strong> ${esc(q.stem)}${hint}</p>`;
-    q.options.forEach(o=>{
-      const l = document.createElement('label');
-      l.className = 'opt';
-      l.innerHTML = `<input type="checkbox" data-q="${q.id}" value="${o.key}"> <span><strong>${o.key}.</strong> ${esc(o.text)}</span>`;
-      d.appendChild(l);
-    });
-    paper.appendChild(d);
-  });
+  data.questions.forEach((q,i)=> paper.appendChild(renderQuestionBlock(q, 'Q'+(i+1))));
+}
+
+async function nextAdaptive(){
+  const r = await api('/api/take/'+token+'/next', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({responses: accResponses, order: accOrder})});
+  const paper = $('paper');
+  paper.innerHTML = '';
+  if (r.done){
+    paper.innerHTML = '<p class="small">All questions answered — submitting…</p>';
+    await doSubmit(accResponses);
+    return;
+  }
+  const q = r.question;
+  paper.appendChild(renderQuestionBlock(q, `Question ${r.answered+1} / ${r.total}`));
+  const btn = document.createElement('button');
+  btn.textContent = (r.answered + 1 === r.total) ? 'Finish' : 'Next question';
+  btn.onclick = async ()=>{
+    accResponses[q.id] = [...paper.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
+    accOrder.push(q.id);
+    btn.disabled = true;
+    try { await nextAdaptive(); }
+    catch(e){ $('err').textContent = e.message; btn.disabled = false; }
+  };
+  paper.appendChild(btn);
+}
+
+async function doSubmit(responses){
+  try {
+    const score = await api('/api/take/'+token+'/submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({taker_name:$('taker').value, responses})});
+    showReport(score);
+  } catch(e){ $('err').textContent = e.message; }
 }
 
 $('submit').onclick = async ()=>{
@@ -127,12 +177,7 @@ $('submit').onclick = async ()=>{
   document.querySelectorAll('#paper input[type=checkbox]:checked').forEach(c=>{
     responses[c.dataset.q].push(c.value);
   });
-  try {
-    const score = await api('/api/take/'+token+'/submit', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({taker_name:$('taker').value, responses})});
-    showReport(score);
-  } catch(e){ $('err').textContent = e.message; }
+  await doSubmit(responses);
 };
 
 function showReport(s){
@@ -140,8 +185,17 @@ function showReport(s){
   const r = $('report');
   r.style.display = 'block';
   let html = `<h1>Result: ${s.correct}/${s.total} (${s.percent}%)</h1>`;
-  html += '<h3>By focus area</h3><ul>' + Object.entries(s.per_focus).map(([k,v])=>
-    `<li>${esc(k)}: ${v.correct}/${v.total}</li>`).join('') + '</ul><h3>Per question</h3>';
+  // Understanding Profile: per-strategy (or per-topic) bars, e.g. Explain 92% / Debugging 45%
+  html += '<h3>Understanding profile</h3>' + Object.entries(s.per_focus).map(([k,v])=>{
+    const pct = v.total ? Math.round(100*v.correct/v.total) : 0;
+    return `<div style="display:flex;align-items:center;gap:.6rem;margin:.25rem 0">
+      <span style="flex:0 0 9em">${esc(k)}</span>
+      <span style="flex:1;height:10px;background:var(--line);border-radius:5px;overflow:hidden">
+        <span style="display:block;height:100%;width:${pct}%;background:${pct>=60?'var(--ok)':pct>=40?'#d9a514':'var(--bad)'}"></span>
+      </span>
+      <span class="small" style="flex:0 0 6em">${pct}% (${v.correct}/${v.total})</span>
+    </div>`;
+  }).join('') + '<h3>Per question</h3>';
   s.per_question.forEach((pq,i)=>{
     html += `<div class="result-q ${pq.correct?'ok':'bad'}">
       <p><strong>Q${i+1}</strong> — <span class="${pq.correct?'correct':'wrong'}">${pq.correct?'correct':'incorrect'}</span>.

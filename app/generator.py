@@ -10,6 +10,7 @@ import re
 
 from . import config
 from .knowledge import ChunkIndex, data_engineering_expansion
+from .strategies import STRATEGY_BY_ID, default_template
 from .validator import OPTION_KEYS, validate_maq
 
 # Default blueprint (design doc §7): slots instantiated against each repo.
@@ -38,14 +39,27 @@ SYSTEM_PROMPT = """You are RepoProof, an assessment generator. You write ONE mul
 about a specific software project, grounded ONLY in the evidence provided. Never invent facts that are \
 not in the evidence. Incorrect options must be plausible but verifiably wrong given the evidence.
 
+THE TAKER SEES ONLY THE STEM AND OPTIONS — never the evidence. Evidence titles, chunk ids, and \
+notebook cell numbers (e.g. "cell 40") are meaningless to them. File paths are fine; cell/chunk \
+numbers are not. NOT EVERY QUESTION NEEDS CODE: conceptual questions (why/design/comparison) \
+should refer to functions, modules, and files BY NAME. When the question hinges on specific code, \
+keep the quote as short as the question allows — the taker's exam time is limited. A small \
+function (<= ~7 lines) may be shown whole; for longer code keep only the lines that matter and \
+replace irrelevant ones with a line containing just "..." like:
+    def process(items):
+        ...
+        total += item.value
+        return total
+Never make the taker read code the question does not need.
+
 Return STRICT JSON with exactly these fields:
 {
-  "stem": "question text",
-  "options": [{"key": "A", "text": "...", "correct": true, "justification": "why correct/incorrect, citing evidence"}],
+  "stem": "self-contained question text (include the quoted code it refers to)",
+  "options": [{"key": "A", "text": "...", "correct": true, "justification": "ONE short sentence (<15 words)"}],
   "difficulty": 1,
   "focus_areas": ["..."],
   "evidence_ids": ["c1", "c2"],
-  "explanation": "shown to the taker after submission"
+  "explanation": "1-2 sentences shown to the taker after submission"
 }"""
 
 LOCAL_EVIDENCE_COUNT = 4
@@ -57,6 +71,27 @@ def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
                      evidence_chars: int = 1_400) -> str:
     ev_text = "\n\n".join(f"[{c['id']}] {c['title']}\n{c['text'][:evidence_chars]}" for c in evidence)
     focus_line = f"\nAssessment creator focus/instructions: {extra_focus}" if extra_focus else ""
+    # Assessment strategies carry a fixed distractor-generation method — how
+    # wrong options must be constructed for this way of probing understanding.
+    if slot.get("distractors"):
+        focus_line += f"\nDistractor construction rule: {slot['distractors']}"
+    # Small-model scaffolding: a fixed stem skeleton plus an explicit
+    # code-quoting policy keeps local 7B models from pasting code into every
+    # question (see strategies.STEM_PATTERNS / CODE_QUOTE).
+    if slot.get("pattern"):
+        focus_line += ("\nStem pattern to follow — fill in the <placeholders> from the evidence: "
+                       f"{slot['pattern']}")
+    policy = slot.get("code_quote")
+    if policy == "snippet":
+        focus_line += ("\nCode in stem: quote the code the question hinges on — ideally 3-7 "
+                       "lines (hard max 12 shown). A small function may be shown whole; elide "
+                       "irrelevant lines with `...` so the taker reads only what matters.")
+    elif policy == "minimal":
+        focus_line += ("\nCode in stem: at most 1-3 lines (e.g. a signature) and only if needed; "
+                       "prefer referring to functions/files by name.")
+    elif policy == "none":
+        focus_line += ("\nCode in stem: NONE — this is a conceptual question; refer to functions, "
+                       "modules, and files by name only.")
     return f"""Question slot: {slot['slot']} — {slot['brief']}
 Target difficulty: {difficulty} (1=recall ... 5=evaluate)
 Options: exactly {choice_count}, keyed {list(OPTION_KEYS[:choice_count])}.
@@ -67,6 +102,8 @@ OUTPUT CHECKLIST — apply this immediately before responding:
 2. Count the boolean values in `correct`: exactly {correct_count} options must be `true`.
 3. Every `true` option must be supported by the evidence; every `false` option must contradict it.
 4. Cite only the evidence ids shown below. Return JSON only, without Markdown.
+5. The stem is SELF-CONTAINED: quote the code lines it asks about inside the stem; never mention
+   cell numbers, chunk ids, evidence titles, or phrases like "according to the evidence".
 
 EVIDENCE (cite ids you used in evidence_ids):
 {ev_text}
@@ -259,13 +296,32 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
     evidence_k = LOCAL_EVIDENCE_COUNT if provider == "local" else 6
     evidence_chars = LOCAL_EVIDENCE_CHARS if provider == "local" else 1_400
 
-    # Focus-area radar weights: distribute questions across areas
-    # proportionally to their configured degree (design doc §3.4).
+    # Assessment strategies (preferred config): HOW understanding is verified.
+    # Each entry {id, weight 1-5, template} maps to a catalog strategy with a
+    # fixed prompt directive + fixed distractor rule; questions distribute
+    # across strategies proportionally to weight (same integer algorithm as
+    # the legacy focus areas below). focus_areas is tagged with the strategy
+    # name so per-focus scoring becomes the Student Understanding Profile.
+    strategies_cfg = []
+    for s in cfg.get("strategies", []):
+        strat = STRATEGY_BY_ID.get(str(s.get("id", "")).strip())
+        w = int(s.get("weight", 0))
+        if strat and w > 0:
+            tmpl = next((t for t in strat["templates"] if t["id"] == s.get("template")),
+                        default_template(strat))
+            strategies_cfg.append((strat, tmpl, w))
+    strategy_seq: list[tuple] = []
+    if strategies_cfg:
+        weighted = [(strat, tmpl) for strat, tmpl, w in strategies_cfg for _ in range(w)]
+        strategy_seq = [weighted[(i * len(weighted)) // num % len(weighted)] for i in range(num)]
+
+    # Legacy focus-area radar weights (kept for API compatibility; the UI now
+    # sends `strategies` instead): distribute questions across topic areas.
     areas_cfg = [(str(a.get("name", "")).strip(), int(a.get("weight", 0)))
                  for a in cfg.get("areas", [])
                  if str(a.get("name", "")).strip() and int(a.get("weight", 0)) > 0]
     area_seq: list[str] = []
-    if areas_cfg:
+    if not strategies_cfg and areas_cfg:
         # Proportional assignment without floating point. Example: areas
         # {Data:4, Logic:2}, num=6 → weighted = [D,D,D,D,L,L] (each name
         # repeated `weight` times). Question i maps to index
@@ -275,9 +331,28 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
         weighted = [name for name, w in areas_cfg for _ in range(w)]
         area_seq = [weighted[(i * len(weighted)) // num % len(weighted)] for i in range(num)]
 
-    questions, warnings = [], list(fallback_warnings)
+    # ---- Pre-compute every per-question input in the MAIN thread (slot,
+    # retrieval, correct count, per-task RNG) so the LLM calls themselves can
+    # run in parallel. random.Random isn't safe to share across threads, so
+    # each task gets its own deterministically-seeded instance.
+    seed = int(cfg.get("seed", 42))
+    tasks = []
     for i in range(num):
-        slot = dict(DEFAULT_BLUEPRINT[i % len(DEFAULT_BLUEPRINT)])
+        if strategy_seq:
+            strat, tmpl = strategy_seq[i]
+            # slot carries the strategy's fixed prompt + distractor method;
+            # `focus` tags focus_areas -> per-strategy Understanding Profile.
+            slot = {
+                "slot": f"{strat['id']}:{tmpl['id']}",
+                "focus": strat["name"],
+                "query": strat["query"] + " " + tmpl["name"].lower(),
+                "brief": f"{tmpl['directive']} Strategy goal: {strat['goal']}",
+                "distractors": strat["distractors"],
+                "pattern": tmpl.get("pattern", ""),
+                "code_quote": strat.get("code_quote", ""),
+            }
+        else:
+            slot = dict(DEFAULT_BLUEPRINT[i % len(DEFAULT_BLUEPRINT)])
         focus_for_prompt = extra_focus
         query = slot["query"] + (" " + extra_focus if extra_focus else "")
         # Only expand the creator's requested topic, not generic blueprint
@@ -298,21 +373,39 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
         if i > 0 and len(evidence) > 2:
             evidence = evidence[i % 3:] + evidence[: i % 3]
         correct_count = _pick_correct_count(cfg, choice_count, rng)
+        tasks.append({"i": i, "slot": slot, "evidence": evidence,
+                      "focus_for_prompt": focus_for_prompt,
+                      "correct_count": correct_count,
+                      "rng": random.Random(seed * 1000 + i)})
 
-        # Generate -> validate -> focused repair -> fresh regeneration. The
-        # repair pass is especially important for local 7B models: a question
-        # may be evidence-grounded yet have one instead of two `correct` flags.
-        # Repairing that compact draft is faster and more reliable than simply
-        # rejecting it or resending the full retrieval prompt unchanged.
+    tag_strategy = bool(strategy_seq)
+
+    def _run(task):
+        """Generate -> validate -> focused repair -> fresh regeneration for ONE
+        question. Returns (index, question | None, last_error). The repair pass
+        is especially important for local 7B models: a question may be
+        evidence-grounded yet have one instead of two `correct` flags —
+        repairing that compact draft beats resending the full prompt."""
+        slot, evidence = task["slot"], task["evidence"]
+        correct_count, trng = task["correct_count"], task["rng"]
+
+        def _accept(cand):
+            cand["generator"] = generator_label
+            if tag_strategy:
+                # deterministic profile bucket — don't let the model's own
+                # labels leak into the per-strategy Understanding Profile
+                cand["focus_areas"] = [slot["focus"]]
+            return task["i"], cand, None
+
         last_err = None
         for fresh_attempt in range(2):
             try:
                 if mock:
-                    raw = _mock_question(slot, evidence, choice_count, correct_count, difficulty, rng)
+                    raw = _mock_question(slot, evidence, choice_count, correct_count, difficulty, trng)
                 else:
                     prompt = _question_prompt(
                         slot, evidence, choice_count, correct_count, difficulty,
-                        focus_for_prompt, evidence_chars,
+                        task["focus_for_prompt"], evidence_chars,
                     )
                     if fresh_attempt and last_err:
                         prompt += (
@@ -320,13 +413,10 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
                             f"with a different wording and obey the output checklist. Previous errors: {last_err}"
                         )
                     raw = _call_llm(provider, SYSTEM_PROMPT, prompt)
-                q = _normalize(raw, slot, chunk_by_id, rng)
+                q = _normalize(raw, slot, chunk_by_id, trng)
                 errs = validate_maq(q, choice_count, correct_count)
                 if not errs:
-                    q["generator"] = generator_label
-                    questions.append(q)
-                    break
-
+                    return _accept(q)
                 last_err = "; ".join(errs)
                 if mock:
                     continue
@@ -340,20 +430,35 @@ def generate_questions(chunks: list[dict], cfg: dict) -> tuple[list[dict], list[
                     _repair_prompt(raw, evidence, choice_count, correct_count, last_err),
                     temperature=0.0,
                 )
-                repaired = _normalize(repair_raw, slot, chunk_by_id, rng)
+                repaired = _normalize(repair_raw, slot, chunk_by_id, trng)
                 repair_errs = validate_maq(repaired, choice_count, correct_count)
                 if not repair_errs:
-                    repaired["generator"] = generator_label
-                    questions.append(repaired)
-                    break
+                    return _accept(repaired)
                 last_err = "; ".join(repair_errs)
             except GenerationError as exc:
                 last_err = str(exc)
             except Exception as exc:  # API/JSON errors -> retry once, then warn
                 last_err = f"{type(exc).__name__}: {exc}"
+        return task["i"], None, last_err
+
+    questions, warnings = [], list(fallback_warnings)
+    # OpenAI calls are network-bound, so a small thread pool cuts a typical
+    # batch from ~30s to <10s. Ollama/LM Studio serialize requests internally
+    # (parallel submits would just queue) and mock is instant — both stay
+    # sequential.
+    if provider == "openai" and num > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(4, num)) as pool:
+            results = list(pool.map(_run, tasks))
+    else:
+        results = [_run(t) for t in tasks]
+
+    for i, q, err in results:      # pool.map preserves task order
+        if q is not None:
+            questions.append(q)
         else:
             warnings.append(
-                f"Question {i + 1} ({slot['slot']}) rejected after repair and fresh regeneration: {last_err}"
+                f"Question {i + 1} ({tasks[i]['slot']['slot']}) rejected after repair and fresh regeneration: {err}"
             )
 
     return questions, warnings

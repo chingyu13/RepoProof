@@ -10,3 +10,5 @@ PRODUCT_DESIGN.md
 overview_repoproof.md
 notebooks/*.ipynb
 task_progress.md
+strategy_overrides.json
+.claude/

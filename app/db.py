@@ -144,6 +144,11 @@ def update(table: str, row_id: int, values: dict) -> None:
         con.execute(f"UPDATE {table} SET {','.join(cols)} WHERE id=?", params)
 
 
+def delete(table: str, row_id: int) -> None:
+    with connect() as con:
+        con.execute(f"DELETE FROM {table} WHERE id=?", (row_id,))
+
+
 def get(table: str, row_id: int) -> dict | None:
     with connect() as con:
         row = con.execute(f"SELECT * FROM {table} WHERE id=?", (row_id,)).fetchone()

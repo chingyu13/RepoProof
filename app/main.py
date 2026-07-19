@@ -15,7 +15,8 @@ from .generator import generate_questions
 from .ingest import IngestError, clone_github, extract_upload
 from .knowledge import build_chunks
 from .scoring import score_attempt
-from .validator import validate_maq
+from .strategies import public_catalog
+from .validator import normalize_answer, validate_maq
 
 app = FastAPI(title="RepoProof", version="0.1.0")
 db.init()
@@ -133,6 +134,7 @@ def meta():
             "openai": {"available": bool(config.openai_api_key()), "model": config.OPENAI_MODEL},
             "local": {"available": local_up, "model": config.LOCAL_LLM_MODEL, "url": config.LOCAL_LLM_URL},
         },
+        "strategies": public_catalog(),
         "max_project_mb": config.MAX_PROJECT_MB,
         "consent_text": config.CONSENT_TEXT,
         "data_sharing_text": config.DATA_SHARING_TEXT,
@@ -246,8 +248,11 @@ class GenerateConfig(BaseModel):
     correct_max: int = 3
     difficulty: int = 2
     focus: str = ""
-    areas: list[dict] = []          # [{name, weight 1-5}] — focus-area radar weights
+    areas: list[dict] = []          # legacy topic radar [{name, weight}] — kept for compat
+    strategies: list[dict] = []     # [{id, weight 0-5, template}] — assessment strategies
     provider: str = ""              # '' = server default | 'openai' | 'local' | 'mock'
+    keep_approved: bool = False     # unchecked (default): regenerate EVERYTHING fresh;
+                                    # checked: previously approved questions survive
 
 
 @app.post("/api/projects/{project_id}/generate")
@@ -255,6 +260,27 @@ def generate(project_id: int, cfg: GenerateConfig):
     p = db.get("projects", project_id)
     if not p:
         raise HTTPException(404, "Project not found")
+    # A fresh generation REPLACES the previous pool so the review list shows
+    # exactly the batch just requested. By default everything goes; with
+    # keep_approved, approved questions survive. Questions referenced by a
+    # published assessment are ALWAYS kept (assessment integrity).
+    replaced = 0
+    used: set[int] = set()
+    for a in db.list_where("assessments", "project_id=?", (project_id,)):
+        used.update(a["question_ids"])
+    for old in db.list_where("questions", "project_id=?", (project_id,)):
+        if cfg.keep_approved and old["status"] == "approved":
+            continue
+        if old["id"] in used:
+            # referenced by a published assessment: the row must survive so old
+            # take-links keep working, but ARCHIVE it so it leaves the review
+            # pool — it stays visible in the Step-4 assessment history instead.
+            if old["status"] != "archived":
+                db.update("questions", old["id"], {"status": "archived"})
+                replaced += 1
+            continue
+        db.delete("questions", old["id"])
+        replaced += 1
     questions, warnings = generate_questions(p["chunks"], cfg.model_dump())
     ids = []
     for q in questions:
@@ -282,15 +308,41 @@ def generate(project_id: int, cfg: GenerateConfig):
         "correct_mode": cfg.correct_mode,
         "difficulty": cfg.difficulty,
         "areas": [a.get("name") for a in cfg.areas if a.get("name")],
+        "strategies": [{"id": s.get("id"), "weight": s.get("weight"), "template": s.get("template")}
+                       for s in cfg.strategies if s.get("id")],
         "warnings": len(warnings),
     }, project_id=project_id)
     return {"created": ids, "warnings": warnings, "mock_mode": config.mock_mode(),
-            "provider": provider_used}
+            "provider": provider_used, "replaced_drafts": replaced}
 
 
 @app.get("/api/projects/{project_id}/questions")
 def list_questions(project_id: int):
-    return db.list_where("questions", "project_id=?", (project_id,), order="id ASC")
+    # Newest first: every generation batch APPENDS to this project's question
+    # pool, so ascending order buried fresh questions under old batches and
+    # made new settings look like they "did nothing". Archived questions
+    # (kept only because a published assessment references them) are hidden —
+    # they live in the Step-4 assessment history instead.
+    return db.list_where("questions", "project_id=? AND status != 'archived'",
+                         (project_id,), order="id DESC")
+
+
+@app.delete("/api/questions/{question_id}")
+def delete_question(question_id: int):
+    """Permanently remove a draft — refused if any published assessment uses it."""
+    q = db.get("questions", question_id)
+    if not q:
+        raise HTTPException(404, "Question not found")
+    for a in db.list_where("assessments", "project_id=?", (q["project_id"],)):
+        if question_id in a["question_ids"]:
+            raise HTTPException(400, f"Question {question_id} is part of assessment "
+                                     f"“{a['title']}” and cannot be deleted.")
+    db.delete("questions", question_id)
+    db.log_event("question_review", {
+        "question_id": question_id, "action": "deleted",
+        "generator": q["generator"], "slot": q["slot"],
+    }, project_id=q["project_id"])
+    return {"ok": True}
 
 
 class QuestionEdit(BaseModel):
@@ -362,6 +414,8 @@ class PublishRequest(BaseModel):
     title: str
     question_ids: list[int]
     show_correct_count: bool = False
+    adaptive: bool = False             # adaptive ORDER: all questions still asked
+    framework: dict = {}               # step-2 settings snapshot, shown in assessment history
 
 
 @app.post("/api/projects/{project_id}/assessments")
@@ -370,23 +424,36 @@ def publish(project_id: int, req: PublishRequest):
         raise HTTPException(404, "Project not found")
     if not req.question_ids:
         raise HTTPException(400, "Select at least one question.")
+    # Positions as shown in the review list (newest first, archived hidden) so
+    # error messages say "Q4", matching what the creator sees on screen.
+    review = db.list_where("questions", "project_id=? AND status != 'archived'",
+                           (project_id,), order="id DESC")
+    pos = {q["id"]: i + 1 for i, q in enumerate(review)}
+
+    def _label(qid: int) -> str:
+        return f"Q{pos[qid]} (ref #{qid})" if qid in pos else f"question ref #{qid}"
+
     for qid in req.question_ids:
         q = db.get("questions", qid)
         if not q or q["project_id"] != project_id:
-            raise HTTPException(400, f"Question {qid} does not belong to this project.")
+            raise HTTPException(400, f"{_label(qid)} no longer exists in this project — "
+                                     "it was probably replaced by a newer generation. Reload and reselect.")
         if q["status"] != "approved":
-            raise HTTPException(400, f"Question {qid} is not approved yet. Approve all questions before publishing.")
+            raise HTTPException(400, f"{_label(qid)} is not approved yet. Approve all questions before publishing.")
     token = secrets.token_urlsafe(8)
     aid = db.insert("assessments", {
         "project_id": project_id,
         "title": req.title.strip() or "Untitled assessment",
         "token": token,
         "question_ids_json": req.question_ids,
-        "config_json": {"show_correct_count": req.show_correct_count},
+        "config_json": {"show_correct_count": req.show_correct_count,
+                        "adaptive": req.adaptive,
+                        "framework": req.framework},
     })
     db.log_event("publish", {
         "assessment_id": aid, "questions": len(req.question_ids),
         "show_correct_count": req.show_correct_count,
+        "adaptive": req.adaptive,
     }, project_id=project_id)
     return {"id": aid, "token": token, "take_url": f"/a/{token}", "print_url": f"/print/{aid}"}
 
@@ -429,6 +496,21 @@ def list_assessments(project_id: int):
     return out
 
 
+@app.get("/api/assessments/{assessment_id}")
+def assessment_detail(assessment_id: int):
+    """Creator-side history view: the step-2 framework snapshot this assessment
+    was generated/published with, plus that version's full question set
+    (including answers — this route is behind creator auth)."""
+    a = db.get("assessments", assessment_id)
+    if not a:
+        raise HTTPException(404, "Assessment not found")
+    questions = [q for qid in a["question_ids"] if (q := db.get("questions", qid))]
+    return {"id": a["id"], "title": a["title"], "created_at": a["created_at"],
+            "token": a["token"], "config": a["config"],
+            "framework": a["config"].get("framework", {}),
+            "questions": questions}
+
+
 @app.get("/api/assessments/{assessment_id}/attempts")
 def list_attempts(assessment_id: int):
     return db.list_where("attempts", "assessment_id=?", (assessment_id,))
@@ -443,22 +525,62 @@ def _assessment_by_token(token: str) -> dict:
     return a
 
 
+def _taker_item(q: dict, show_count: bool) -> dict:
+    # SECURITY: build the taker payload by whitelisting fields — answer,
+    # justifications, and evidence must never reach the taker's browser.
+    item = {"id": q["id"], "stem": q["stem"], "options": q["options"],
+            "difficulty": q["difficulty"]}
+    if show_count:
+        item["correct_count"] = len(q["answer"])
+    return item
+
+
 @app.get("/api/take/{token}")
 def take(token: str):
     a = _assessment_by_token(token)
     show_count = a["config"].get("show_correct_count", False)
-    questions = []
-    for qid in a["question_ids"]:
-        q = db.get("questions", qid)
-        # SECURITY: build the taker payload by whitelisting fields — answer,
-        # justifications, and evidence must never reach the taker's browser.
-        item = {"id": q["id"], "stem": q["stem"], "options": q["options"],
-                "difficulty": q["difficulty"]}
-        if show_count:
-            item["correct_count"] = len(q["answer"])
-        questions.append(item)
+    adaptive = a["config"].get("adaptive", False)
+    # Adaptive assessments deliver questions one at a time via /next, so the
+    # full list (which would reveal the ordering pool) is withheld here.
+    questions = [] if adaptive else [_taker_item(db.get("questions", qid), show_count)
+                                     for qid in a["question_ids"]]
     return {"title": a["title"], "questions": questions,
+            "adaptive": adaptive, "total": len(a["question_ids"]),
             "scoring": "Exact match: a question is correct only when your selected set exactly matches the answer key."}
+
+
+class NextRequest(BaseModel):
+    responses: dict[str, list[str]] = {}
+    order: list[int] = []              # question ids in the order they were answered
+
+
+@app.post("/api/take/{token}/next")
+def take_next(token: str, req: NextRequest):
+    """Adaptive ORDER selection from the pre-approved bank. Every question is
+    still asked exactly once (so scoring/comparability are unchanged) — only
+    the sequence adapts: answer correctly and the next question is one
+    difficulty step harder, miss and it is one step easier. Correctness is
+    judged server-side and never returned, so nothing leaks mid-assessment.
+    Stateless by design: the client resends its answers-so-far each time."""
+    a = _assessment_by_token(token)
+    if not a["config"].get("adaptive", False):
+        raise HTTPException(400, "This assessment is not adaptive — use GET /api/take/{token}.")
+    bank = {qid: db.get("questions", qid) for qid in a["question_ids"]}
+    answered = [qid for qid in req.order if qid in bank]
+    remaining = [qid for qid in a["question_ids"] if qid not in set(answered)]
+    total = len(a["question_ids"])
+    if not remaining:
+        return {"done": True, "answered": len(answered), "total": total}
+    if answered:
+        last = bank[answered[-1]]
+        correct = normalize_answer(req.responses.get(str(last["id"]), [])) == normalize_answer(last["answer"])
+        target = max(1, min(5, last["difficulty"] + (1 if correct else -1)))
+    else:
+        target = 3   # start mid-difficulty
+    next_id = min(remaining, key=lambda qid: (abs(bank[qid]["difficulty"] - target), qid))
+    return {"done": False,
+            "question": _taker_item(bank[next_id], a["config"].get("show_correct_count", False)),
+            "answered": len(answered), "total": total}
 
 
 class SubmitRequest(BaseModel):
@@ -496,7 +618,8 @@ def print_view(assessment_id: int, key: int = 0):
 <title>{a['title']} — RepoProof</title>
 <style>
  body{{font-family:Georgia,serif;max-width:800px;margin:2rem auto;line-height:1.5;color:#111}}
- .q{{margin:1.5rem 0;page-break-inside:avoid}} .opt{{margin:.25rem 0 .25rem 1.5rem}}
+ .q{{margin:1.5rem 0;page-break-inside:avoid}} .q p{{white-space:pre-wrap}}
+ .opt{{margin:.25rem 0 .25rem 1.5rem}}
  .meta{{color:#555;font-size:.9rem}} .key{{background:#f6f6f6;padding:.5rem 1rem;border-left:3px solid #888}}
  @media print{{.noprint{{display:none}}}}
 </style></head><body>

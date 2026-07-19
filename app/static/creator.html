@@ -286,19 +286,24 @@ a{color:var(--accent)}
     <div><label>LLM provider</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
   <p class="small" id="providerNote"></p>
-  <label>Focus areas — drag each slider to set how strongly that area is tested (0 = skip)</label>
+  <label>Assessment Strategy — weight HOW the AI verifies understanding (0 = skip a strategy).
+    Topics (algorithms, SQL, OOP, …) are not configured here: they will be extracted automatically
+    from the assignment description and grading rubric.</label>
   <div class="radar-wrap">
-    <div class="radar-panel"><svg id="radar" viewBox="0 0 300 300" aria-label="Focus area radar chart"></svg></div>
-    <div style="flex:1;min-width:250px">
-      <div class="area-list" id="areaList"></div>
+    <div class="radar-panel"><svg id="radar" viewBox="0 0 300 300" aria-label="Assessment strategy radar chart"></svg></div>
+    <div style="flex:1;min-width:270px">
+      <div class="area-list" id="strategyList"><span class="small">Loading strategies…</span></div>
       <div class="add-area">
-        <input type="text" id="newArea" placeholder="Add focus area (e.g. Security)">
-        <button class="secondary" id="addArea" type="button">Add</button>
+        <select id="newStrat" style="flex:1"></select>
+        <button class="secondary" id="addStrat" type="button">Add</button>
       </div>
     </div>
   </div>
   <label>Extra instructions (optional — e.g. "recursion, testing; don't ask about deployment")</label>
   <input type="text" id="gFocus">
+  <label style="display:flex;gap:.4rem;align-items:center;margin-top:.6rem">
+    <input type="checkbox" id="gKeepApproved" style="width:auto">
+    Keep approved questions — otherwise everything is regenerated fresh</label>
   <p style="margin-top:.8rem"><button id="generate">Generate questions</button> <span class="small" id="genStatus"></span></p>
   <p class="err" id="genErr"></p>
 </div>
@@ -311,7 +316,9 @@ a{color:var(--accent)}
   </svg>
 </button>
 <div class="card project-content hidden">
-  <h2>3 · Review and Approve</h2>
+  <h2 style="display:flex;align-items:center;gap:.8rem">3 · Review and Approve
+    <label class="small" style="margin-left:auto;font-weight:400;display:flex;gap:.35rem;align-items:center;cursor:pointer">
+      <input type="checkbox" id="approveAll" style="width:auto">approve all questions</label></h2>
   <div id="questions" class="small">No questions yet.</div>
   <div class="actions"><button id="continuePublish">Continue to publish</button></div>
   <p class="err" id="reviewErr"></p>
@@ -329,10 +336,12 @@ a{color:var(--accent)}
   <label>Title</label>
   <input type="text" id="aTitle" placeholder="Assignment 3 — understanding check">
   <label style="display:flex;gap:.4rem;align-items:center"><input type="checkbox" id="aShowCount" style="width:auto">Show the taker how many options are correct</label>
+  <label style="display:flex;gap:.4rem;align-items:center"><input type="checkbox" id="aAdaptive" style="width:auto">Adaptive question order — one at a time, difficulty follows the taker's answers (all questions still asked)</label>
   <p><button id="publish">Publish selected approved questions</button></p>
   <p class="err" id="pubErr"></p><p class="okmsg" id="pubOk"></p>
 
-  <h2>Assessments</h2>
+  <h2>Previous generated assessments</h2>
+  <p class="small" style="margin:.1rem 0 .5rem">Click a title to see the Question Framework it was configured with and that version's questions.</p>
   <div id="assessments" class="small">None yet.</div>
 </div>
 </section>
@@ -456,6 +465,11 @@ async function loadMeta(){
   $('providerNote').textContent = p.local?.available
     ? `Local server detected at ${p.local.url} — "Local LLM" keeps all code on this machine.`
     : `No local LLM detected (looked at ${p.local?.url || 'n/a'}). Install Ollama and run: ollama pull ${p.local?.model || 'qwen2.5-coder:7b'} && ollama serve`;
+
+  // Assessment-strategy catalog; first five active by default, weights from stars
+  strategyCatalog = m.strategies || [];
+  strategies = strategyCatalog.slice(0, 5).map(s=>({id: s.id, w: s.default_weight}));
+  renderStrategies();
 }
 
 /* drag & drop */
@@ -658,22 +672,26 @@ $('gMode').onchange = ()=>{
 };
 
 /* focus-area radar picker */
-let areas = [
-  {name:'Project logic', w:4},
-  {name:'Architecture', w:3},
-  {name:'Data modelling', w:3},
-  {name:'Algorithms', w:2},
-  {name:'Testing', w:2},
-];
+/* Assessment strategies: HOW the AI verifies understanding. Catalog comes
+   from /api/meta (single source of truth in app/strategies.py). The UI keeps
+   the original focus-area layout: rows of [name, slider, ×] + an Add row —
+   the only change is that names are picked from the catalog dropdown instead
+   of typed freely. The first five strategies load by default; templates use
+   each strategy's default (server falls back to it automatically). */
+let strategyCatalog = [];   // all 10, from /api/meta
+let strategies = [];        // active rows: {id, w}
+function radarAxes(){ return strategies; }
+const stratById = id => strategyCatalog.find(s => s.id === id);
 function escXml(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function drawRadar(){
   const svg = $('radar');
-  const n = areas.length, cx = 150, cy = 150, R = 102, LVL = 5;
+  const axes = radarAxes();
+  const n = axes.length, cx = 150, cy = 150, R = 102, LVL = 5;
   const pt = (i, r) => {
     const a = -Math.PI/2 + i * 2 * Math.PI / n;
     return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
   };
-  if (n < 3) { svg.innerHTML = `<text x="150" y="155" text-anchor="middle" class="radar-label">Add at least 3 focus areas</text>`; return; }
+  if (n < 3) { svg.innerHTML = `<text x="150" y="155" text-anchor="middle" class="radar-label">Enable at least 3 strategies</text>`; return; }
   let s = '';
   for (let l = 1; l <= LVL; l++) {
     const pts = Array.from({length:n}, (_,i)=>pt(i, R*l/LVL).join(',')).join(' ');
@@ -683,45 +701,64 @@ function drawRadar(){
     const [x,y] = pt(i, R);
     s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" class="radar-spoke"/>`;
   }
-  const dataPts = areas.map((a,i)=>pt(i, R * Math.max(0, Math.min(5, a.w)) / LVL));
+  const dataPts = axes.map((a,i)=>pt(i, R * Math.max(0, Math.min(5, a.w)) / LVL));
   s += `<polygon points="${dataPts.map(p=>p.join(',')).join(' ')}" class="radar-area"/>`;
   dataPts.forEach(p=>{ s += `<circle cx="${p[0]}" cy="${p[1]}" r="4" class="radar-dot"/>`; });
-  areas.forEach((a,i)=>{
+  axes.forEach((a,i)=>{
     const [x,y] = pt(i, R + 14);
     const anchor = Math.abs(x - cx) < 10 ? 'middle' : (x > cx ? 'start' : 'end');
-    s += `<text x="${x}" y="${y + 3}" text-anchor="${anchor}" class="radar-label">${escXml(a.name.slice(0, 18))}</text>`;
+    const name = (stratById(a.id) || {name: a.id}).name;
+    s += `<text x="${x}" y="${y + 3}" text-anchor="${anchor}" class="radar-label">${escXml(name.slice(0, 18))}</text>`;
   });
   svg.innerHTML = s;
 }
-function renderAreas(){
-  const list = $('areaList');
+function renderStrategies(){
+  const list = $('strategyList');
   list.innerHTML = '';
-  areas.forEach((a, idx)=>{
+  strategies.forEach((a, idx)=>{
+    const cat = stratById(a.id) || {name: a.id, goal: '', example: '', templates: []};
     const row = document.createElement('div');
     row.className = 'area-row';
-    row.innerHTML = `<input type="text" class="aname" value="${esc(a.name)}">
+    row.innerHTML = `<select class="aname" title="${esc(cat.goal)} Example: ${esc(cat.example)}"></select>
       <input type="range" class="aw" min="0" max="5" step="1" value="${a.w}">
       <span class="aval">${a.w}</span>
-      <button class="secondary adel" type="button" title="Remove area">×</button>`;
+      <button class="secondary adel" type="button" title="Remove strategy">×</button>`;
+    // name dropdown: this row's strategy + every strategy not used by another row
+    const sel = row.querySelector('.aname');
+    strategyCatalog.forEach(c=>{
+      if (c.id !== a.id && strategies.some(x=>x.id === c.id)) return;
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.name;
+      sel.appendChild(o);
+    });
+    sel.value = a.id;
+    sel.onchange = ()=>{ a.id = sel.value; renderStrategies(); };
     const range = row.querySelector('.aw');
     const setFill = ()=>{ range.style.setProperty('--pct', (a.w/5*100)+'%'); };
     setFill();
-    row.querySelector('.aname').oninput = e=>{ a.name = e.target.value; drawRadar(); };
-    range.oninput = e=>{ a.w = +e.target.value; row.querySelector('.aval').textContent = a.w; setFill(); drawRadar(); };
-    row.querySelector('.adel').onclick = ()=>{ areas.splice(idx, 1); renderAreas(); };
+    range.oninput = ()=>{ a.w = +range.value; row.querySelector('.aval').textContent = a.w; setFill(); drawRadar(); };
+    row.querySelector('.adel').onclick = ()=>{ strategies.splice(idx, 1); renderStrategies(); };
     list.appendChild(row);
   });
+  // Add row: only strategies not already active
+  const ns = $('newStrat');
+  ns.innerHTML = '';
+  const unused = strategyCatalog.filter(c=>!strategies.some(x=>x.id === c.id));
+  unused.forEach(c=>{
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.name + ' — ' + c.goal;
+    ns.appendChild(o);
+  });
+  ns.parentElement.style.display = unused.length ? '' : 'none';
   drawRadar();
 }
-$('addArea').onclick = ()=>{
-  const name = $('newArea').value.trim();
-  if (!name) return;
-  areas.push({name, w:3});
-  $('newArea').value = '';
-  renderAreas();
+$('addStrat').onclick = ()=>{
+  const id = $('newStrat').value;
+  const cat = stratById(id);
+  if (!cat) return;
+  strategies.push({id, w: cat.default_weight});
+  renderStrategies();
 };
-$('newArea').addEventListener('keydown', e=>{ if (e.key === 'Enter') $('addArea').click(); });
-renderAreas();
 
 $('generate').onclick = async ()=>{
   $('genErr').textContent=''; $('genStatus').textContent='Generating…';
@@ -733,12 +770,14 @@ $('generate').onclick = async ()=>{
       correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
       correct_min:+$('gMin').value, correct_max:+$('gMax').value,
       difficulty:+$('gDiff').value, focus:$('gFocus').value,
-      areas: areas.filter(a=>a.name.trim() && a.w > 0).map(a=>({name:a.name.trim(), weight:a.w})),
-      provider: $('gProvider').value
+      strategies: strategies.filter(s=>s.w > 0).map(s=>({id:s.id, weight:s.w})),
+      provider: $('gProvider').value,
+      keep_approved: $('gKeepApproved').checked
     };
     const res = await api(`/api/projects/${currentProject}/generate`, {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
-    $('genStatus').textContent = `Created ${res.created.length} question(s) via ${res.provider || (res.mock_mode ? 'mock' : 'LLM')}.`;
+    $('genStatus').textContent = `Created ${res.created.length} question(s) via ${res.provider || (res.mock_mode ? 'mock' : 'LLM')}`
+      + (res.replaced_drafts ? ` (replaced ${res.replaced_drafts} previous draft(s))` : '') + '.';
     if (res.warnings.length) $('genErr').textContent = res.warnings.join('\n');
     await loadQuestions();
     goToStep(3, {unlock:true});
@@ -751,7 +790,12 @@ async function loadQuestions(){
   const qs = await api(`/api/projects/${currentProject}/questions`);
   const wrap = $('questions');
   wrap.innerHTML = qs.length ? '' : 'No questions yet.';
-  qs.forEach(q=>wrap.appendChild(renderQuestion(q)));
+  // Rebuild the publish selection from THIS list — stale ids from replaced/
+  // archived batches must never leak into a publish request.
+  selectedForPublish.clear();
+  qs.forEach((q, i)=>wrap.appendChild(renderQuestion(q, i + 1)));
+  const aa = $('approveAll');
+  if (aa) aa.checked = qs.length > 0 && qs.every(q=>q.status === 'approved');
   return qs;
 }
 
@@ -766,7 +810,7 @@ $('continuePublish').onclick = ()=>{
 
 const selectedForPublish = new Set();
 
-function renderQuestion(q){
+function renderQuestion(q, pos){
   const div = document.createElement('div');
   div.className = 'q';
   const approved = q.status === 'approved';
@@ -774,7 +818,7 @@ function renderQuestion(q){
   const ev = (q.evidence||[]).map(e=>`${e.title}${e.file?` — ${e.file}${e.lines?' : '+e.lines:''}`:''}`).join('<br>') || 'No evidence linked';
   div.innerHTML = `
     <span class="status ${q.status}">${q.status}</span>
-    <div class="small" style="margin:0 0 .4rem">#${q.id} · slot: ${q.slot} · by ${q.generator}</div>
+    <div class="small" style="margin:0 0 .4rem"><strong>Q${pos}</strong> · slot: ${q.slot} · by ${q.generator} · ref #${q.id}</div>
     <textarea class="stem">${esc(q.stem)}</textarea>
     <div class="opts"></div>
     <div class="row" style="margin-top:.4rem">
@@ -786,6 +830,7 @@ function renderQuestion(q){
       <button class="save secondary">Save</button>
       <button class="approve${approved?' is-approved':''}" type="button">${approved?'Approved':'Approve'}</button>
       <button class="reject secondary">Reject</button>
+      <button class="qdel secondary" type="button" title="Delete this question permanently">Delete</button>
       <span class="err msg"></span>
     </p>`;
   const opts = div.querySelector('.opts');
@@ -862,6 +907,15 @@ function renderQuestion(q){
     selectedForPublish.delete(q.id);
     send({status:'rejected'});
   };
+  div.querySelector('.qdel').onclick = async ()=>{
+    if (!confirm(`Delete question #${q.id} permanently?`)) return;
+    div.querySelector('.msg').textContent = '';
+    try {
+      await api('/api/questions/'+q.id, {method:'DELETE'});
+      selectedForPublish.delete(q.id);
+      await loadQuestions();
+    } catch(e){ div.querySelector('.msg').textContent = e.message; }
+  };
   return div;
 }
 
@@ -871,12 +925,55 @@ $('publish').onclick = async ()=>{
   try {
     const res = await api(`/api/projects/${currentProject}/assessments`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({title:$('aTitle').value, question_ids:ids, show_correct_count:$('aShowCount').checked})});
+      body: JSON.stringify({title:$('aTitle').value, question_ids:ids,
+                            show_correct_count:$('aShowCount').checked,
+                            adaptive:$('aAdaptive').checked,
+                            // step-2 framework snapshot, shown in the assessment history
+                            framework: {
+                              num_questions:+$('gNum').value, choice_count:+$('gChoices').value,
+                              correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
+                              correct_min:+$('gMin').value, correct_max:+$('gMax').value,
+                              difficulty:+$('gDiff').value, focus:$('gFocus').value,
+                              provider:$('gProvider').value,
+                              strategies: strategies.filter(s=>s.w > 0).map(s=>({
+                                id:s.id, name:(stratById(s.id)||{}).name || s.id, weight:s.w})),
+                            }})});
     $('pubOk').innerHTML = `Published. Take link: <a href="${res.take_url}" target="_blank">${location.origin}${res.take_url}</a> · <a href="${res.print_url}" target="_blank">printable</a> (<a href="${res.print_url}?key=1" target="_blank">with answer key</a>)`;
     await loadAssessments();
     goToStep(4, {unlock:true});
   } catch(e){ $('pubErr').textContent = e.message; }
 };
+
+/* One-click approve/unapprove everything in the current review list */
+$('approveAll').onchange = async ()=>{
+  const target = $('approveAll').checked ? 'approved' : 'draft';
+  const qs = await api(`/api/projects/${currentProject}/questions`);
+  const errors = [];
+  for (let i = 0; i < qs.length; i++){
+    const q = qs[i];
+    if (q.status === target) continue;
+    if (target === 'draft' && q.status !== 'approved') continue;
+    try { await api('/api/questions/'+q.id, {method:'PUT', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({status: target})}); }
+    catch(e){ errors.push(`Q${i + 1}: ${e.message.replace('Cannot approve: ', '')}`); }
+  }
+  $('reviewErr').textContent = errors.length
+    ? `${errors.length} question(s) could not be approved — fix or delete them: ` + errors.join(' | ')
+    : '';
+  await loadQuestions();   // also re-syncs the checkbox to the real state
+};
+
+function frameworkSummary(fw){
+  if (!fw || !Object.keys(fw).length) return 'No framework snapshot recorded for this assessment.';
+  const cc = fw.correct_mode === 'exact'
+    ? `exact ${fw.correct_exact} correct`
+    : `dynamic ${fw.correct_min}–${fw.correct_max} correct`;
+  const strats = (fw.strategies || []).map(s=>`${s.name || s.id} ${s.weight}`).join(', ') || '—';
+  return `${fw.num_questions} questions · ${fw.choice_count} options · ${cc} · difficulty ${fw.difficulty}`
+    + ` · provider: ${fw.provider || 'default'}`
+    + `\nStrategies: ${strats}`
+    + (fw.focus ? `\nInstructions: ${fw.focus}` : '');
+}
 
 async function loadAssessments(){
   const as = await api(`/api/projects/${currentProject}/assessments`);
@@ -884,12 +981,33 @@ async function loadAssessments(){
   wrap.innerHTML = as.length ? '' : 'None yet.';
   as.forEach(a=>{
     const d = document.createElement('div');
-    d.style.padding='.35rem 0';
-    d.innerHTML = `<strong>${esc(a.title)}</strong> · ${a.questions} questions · ${a.attempts} attempt(s) ·
-      <a href="/a/${a.token}" target="_blank">take</a> ·
-      <a href="/print/${a.id}" target="_blank">print</a> ·
-      <a href="/print/${a.id}?key=1" target="_blank">answer key</a> ·
-      <a href="#" data-id="${a.id}" class="viewAttempts">results</a><div class="small results"></div>`;
+    d.style.cssText = 'padding:.5rem .7rem;border:1px solid var(--line);border-radius:5px;background:var(--input-bg);margin:.35rem 0';
+    d.innerHTML = `
+      <a href="#" class="toggleDetail"><strong>${esc(a.title)}</strong> — ${esc(a.created_at)}</a>
+      <span class="small"> · ${a.questions} questions · ${a.attempts} attempt(s) ·
+        <a href="/a/${a.token}" target="_blank">take</a> ·
+        <a href="/print/${a.id}" target="_blank">print</a> ·
+        <a href="/print/${a.id}?key=1" target="_blank">answer key</a> ·
+        <a href="#" class="viewAttempts">results</a></span>
+      <div class="small results"></div>
+      <div class="detail hidden" style="margin-top:.5rem"></div>`;
+    d.querySelector('.toggleDetail').onclick = async (ev)=>{
+      ev.preventDefault();
+      const det = d.querySelector('.detail');
+      if (!det.classList.contains('hidden')) { det.classList.add('hidden'); return; }
+      if (!det.dataset.loaded){
+        const full = await api(`/api/assessments/${a.id}`);
+        let html = `<div style="white-space:pre-wrap;border-left:3px solid var(--card-border);padding-left:.6rem;margin-bottom:.5rem">${esc(frameworkSummary(full.framework))}</div>`;
+        full.questions.forEach((q, i)=>{
+          html += `<div style="margin:.45rem 0"><strong>Q${i+1}.</strong> ${esc(q.stem)}<br>` +
+            q.options.map(o=>`<span style="margin-left:1em">${q.answer.includes(o.key)?'☑':'☐'} ${o.key}. ${esc(o.text)}</span>`).join('<br>') +
+            `</div>`;
+        });
+        det.innerHTML = html;
+        det.dataset.loaded = '1';
+      }
+      det.classList.remove('hidden');
+    };
     d.querySelector('.viewAttempts').onclick = async (ev)=>{
       ev.preventDefault();
       const ats = await api(`/api/assessments/${a.id}/attempts`);

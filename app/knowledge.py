@@ -97,6 +97,18 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
         add("imports", f"Imports in {rel}",
             f"The module {rel} imports: {', '.join(mods)}", file=rel)
 
+    # Repo-internal import graph (which file depends on which) — resolved by
+    # analyzer._resolve_import_graph, so stdlib/third-party edges never appear.
+    import_edges = analysis.get("import_edges") or []
+    if import_edges:
+        rows = []
+        for src, dst, names in import_edges[:200]:
+            what = f" ({', '.join(names)})" if names else ""
+            rows.append(f"{src} -> {dst}{what}")
+        add("import_graph", "Internal import graph",
+            "Repo-internal import dependencies (importer -> imported file (symbols)):\n"
+            + "\n".join(rows))
+
     for mv in analysis.get("module_vars", [])[:200]:
         names = ", ".join(mv["names"])
         text = (
@@ -158,7 +170,8 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
                 f"Content (lines {start}-{end}):\n" + "\n".join(line for _, line in seg),
                 file=f["file"], start=start, end=end)
 
-    for tree in _build_call_flow(analysis.get("functions", []), analysis.get("calls", [])):
+    for tree in _build_call_flow(analysis.get("functions", []), analysis.get("calls", []),
+                                 analysis.get("imported_symbols")):
         if len(chunks) >= MAX_CHUNKS:
             break
         entry = tree["entry"]
@@ -176,7 +189,8 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
     return chunks
 
 
-def _build_call_flow(functions: list[dict], calls: list[tuple[str, str]]) -> list[dict]:
+def _build_call_flow(functions: list[dict], calls: list[tuple[str, str]],
+                     imported_symbols: dict | None = None) -> list[dict]:
     """Group the flat (caller, callee) edge list into one call tree per likely
     entry point, instead of leaving the LLM to reassemble a "flowchart" from
     an unordered edge list itself. An entry point here just means: a function
@@ -199,11 +213,21 @@ def _build_call_flow(functions: list[dict], calls: list[tuple[str, str]]) -> lis
 
     edges: dict[str, list[str]] = {}
     callees_seen: set[str] = set()
+    imported_symbols = imported_symbols or {}
     for caller, callee in calls:
         caller_fn = by_key.get(caller)
         if caller_fn is None:
             continue
         matches = by_name_in_file.get(caller_fn["file"], {}).get(callee, [])
+        if not matches:
+            # Cross-file step: if the caller's file imported this name
+            # (`from src.storage import load_tasks`), the analyzer's shallow
+            # symbol table tells us the defining file + original name — so the
+            # flow tree can follow the call across module boundaries.
+            sym = imported_symbols.get(caller_fn["file"], {}).get(callee)
+            if sym:
+                dst_file, original = sym
+                matches = by_name_in_file.get(dst_file, {}).get(original, [])
         if len(matches) == 1:  # skip ambiguous/unresolved callees (stdlib, overloads, ...)
             target = matches[0]
             edges.setdefault(caller, []).append(target)
