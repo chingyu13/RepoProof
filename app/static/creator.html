@@ -494,11 +494,12 @@ async function loadMeta(){
   const p = m.providers || {};
   const sel = $('gProvider');
   sel.innerHTML = '';
-  const addOpt = (value, label, enabled, provider, model='') => {
+  const addOpt = (value, label, enabled, provider, model='', hidden=false) => {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = label;
     option.disabled = !enabled;
+    option.hidden = hidden;
     option.dataset.provider = provider;
     option.dataset.model = model;
     sel.appendChild(option);
@@ -524,14 +525,25 @@ async function loadMeta(){
     'local',
     p.local?.model || '',
   );
-  addOpt('mock', 'Mock (free, no LLM)', true, 'mock');
+  const hasRealModel = !!p.openai?.available || !!p.local?.available;
+  addOpt(
+    'mock',
+    'Mock (free, no LLM)',
+    true,
+    'mock',
+    '',
+    hasRealModel && p.default !== 'mock',
+  );
   const preferred = p.default === 'openai'
     ? `openai:${p.openai?.model || ''}`
     : p.default === 'local'
       ? `local:${p.local?.model || ''}`
       : 'mock';
   sel.value = preferred;
-  if (sel.selectedOptions[0]?.disabled) sel.value = 'mock';
+  if (!sel.selectedOptions[0] || sel.selectedOptions[0].disabled) {
+    const fallback = [...sel.options].find(option=>!option.disabled && !option.hidden);
+    sel.value = fallback?.value || 'mock';
+  }
   $('providerNote').classList.toggle('hidden', !!p.local?.available);
   $('providerNote').textContent = p.local?.available
     ? ''

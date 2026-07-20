@@ -22,19 +22,9 @@ _OPENAI_MODEL_OPTIONS = (
         "note": "recommended balance",
     },
     {
-        "id": "gpt-5.6-sol",
-        "name": "GPT-5.6 Sol",
-        "note": "highest quality",
-    },
-    {
         "id": "gpt-5.6-luna",
         "name": "GPT-5.6 Luna",
         "note": "lower cost",
-    },
-    {
-        "id": "gpt-4o",
-        "name": "GPT-4o",
-        "note": "older baseline",
     },
     {
         "id": "gpt-4o-mini",
@@ -42,6 +32,8 @@ _OPENAI_MODEL_OPTIONS = (
         "note": "fast baseline",
     },
 )
+if OPENAI_MODEL not in {option["id"] for option in _OPENAI_MODEL_OPTIONS}:
+    OPENAI_MODEL = "gpt-5.6-terra"
 
 # Local LLM (privacy mode): any OpenAI-compatible server works.
 #   Ollama    -> http://127.0.0.1:11434/v1   (default)
@@ -58,14 +50,7 @@ def openai_api_key() -> str:
 
 
 def openai_model_options() -> list[dict]:
-    options = [dict(option) for option in _OPENAI_MODEL_OPTIONS]
-    if OPENAI_MODEL not in {option["id"] for option in options}:
-        options.append({
-            "id": OPENAI_MODEL,
-            "name": OPENAI_MODEL,
-            "note": "configured",
-        })
-    return options
+    return [dict(option) for option in _OPENAI_MODEL_OPTIONS]
 
 
 def resolve_model(provider: str, requested: str = "") -> str:

@@ -8,15 +8,15 @@ from .knowledge import EvidenceStore, data_engineering_expansion
 
 
 _CONTEXT_LABELS = {
-    "architecture": "the project's architecture",
-    "api": "the project's external integration",
-    "data_flow": "the project's data workflow",
-    "project_logic": "the project's implementation logic",
-    "database": "the project's data model",
-    "security": "the project's security behavior",
-    "testing": "the project's testable behavior",
-    "complexity": "the project's performance behavior",
-    "oop": "the project's object collaboration",
+    "architecture": "project architecture",
+    "api": "integration",
+    "data_flow": "data workflow",
+    "project_logic": "implementation logic",
+    "database": "data modelling",
+    "security": "security",
+    "testing": "testing",
+    "complexity": "complexity",
+    "oop": "object collaboration",
 }
 _INSTRUCTION_PREFIX_RE = re.compile(
     r"^(?:explain|describe|identify|analyse|analyze|evaluate|demonstrate|"
@@ -215,13 +215,24 @@ def _target_evidence_ids(target: dict | None) -> set[str]:
 
 
 def _compact_context(target: dict | None, topic: dict) -> str:
+    fallback = _CONTEXT_LABELS.get(topic["id"], topic["name"].casefold())
     if not target:
-        return _CONTEXT_LABELS.get(topic["id"], topic["name"].casefold())
+        return fallback
     value = " ".join(
         str(target.get("label") or target.get("description") or "").split()
     )
+    value = re.sub(r"[*_#>`]", "", value)
     value = _INSTRUCTION_PREFIX_RE.sub("", value).strip(" .:;-")
-    return value[:150] or _CONTEXT_LABELS.get(topic["id"], topic["name"].casefold())
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9_./+-]*", value)
+    if (
+        not value
+        or len(value) > 64
+        or len(words) > 8
+        or re.match(r"^(?:this|the)\s+assignment\b", value, re.I)
+        or re.search(r"\b(?:marks?|points?|bonus|capped|total)\b", value, re.I)
+    ):
+        return fallback
+    return value
 
 
 def _display_entity(entity_type: str, value: str) -> str:

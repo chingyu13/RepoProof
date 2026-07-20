@@ -205,6 +205,11 @@ def _is_assessable_target(text: str) -> bool:
     plain = re.sub(r"[*_`]", "", visible)
     if not visible or compact.lstrip().startswith("#"):
         return False
+    if (
+        re.match(r"^(?:total|overall|maximum)\b", plain, re.I)
+        and re.search(r"\b(?:marks?|points?|score|bonus|capped)\b", plain, re.I)
+    ):
+        return False
     if re.fullmatch(
         r"total(?:\s+(?:marks?|points?))?\s*:?\s*"
         r"\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)?\s*(?:marks?|points?)?",

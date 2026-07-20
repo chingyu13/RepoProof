@@ -165,9 +165,9 @@
       "name": "Interaction / Flow",
       "strategy": "execution",
       "stem_frames": [
-        "Within {context}, which statement correctly describes the interaction between {subject} and {counterpart}?",
-        "Within {context}, which statement is consistent with the evidenced dependency from {subject} to {counterpart}?",
-        "For {context}, which statement correctly traces what passes from {subject} to {counterpart}?"
+        "Which statement correctly describes the evidenced interaction between {subject} and {counterpart}?",
+        "Which statement is consistent with the evidenced dependency from {subject} to {counterpart}?",
+        "Which statement correctly traces what passes from {subject} to {counterpart}?"
       ],
       "option_task": "Test an evidenced direction, ordering, transferred data, or cross-component consequence. Every option must be a complete relational claim.",
       "slots": {
@@ -245,7 +245,7 @@
       "name": "Condition / Outcome",
       "strategy": "prediction",
       "stem_frames": [
-        "For the shown code within {context}, if {condition}, which observable behavior occurs?"
+        "For the shown code, if {condition}, which observable behavior occurs?"
       ],
       "option_task": "State exact calls, assignments, output, exceptions, or return behavior visible in the complete shown branch.",
       "slots": {
@@ -299,7 +299,7 @@
       "name": "Code Explain",
       "strategy": "explain",
       "stem_frames": [
-        "Within {context}, which statement correctly describes the complete effect of the shown code?"
+        "Which statement correctly describes the complete effect of the shown code?"
       ],
       "option_task": "Test the complete visible effect, including material calls, transformations, state changes, and return behavior.",
       "slots": {
@@ -350,7 +350,7 @@
       "name": "Fault / Correction",
       "strategy": "debugging",
       "stem_frames": [
-        "A maintainer proposes to {mutation}. For the shown code within {context}, which statement correctly identifies the resulting fault and the correction?"
+        "A maintainer proposes to {mutation}. For the shown code, which statement correctly identifies the resulting fault and the correction?"
       ],
       "option_task": "Exactly one option must pair the observable consequence of the explicit hypothetical mutation with the correction that restores the shown behavior. Do not claim the original code is faulty.",
       "slots": {
@@ -459,8 +459,8 @@
       "name": "Constraint / Verification",
       "strategy": "explain",
       "stem_frames": [
-        "Within {context}, which statement is consistent with the evidenced constraint on {subject}?",
-        "For {context}, which statement correctly describes the verified behavior of {subject}?"
+        "Which statement is consistent with the evidenced constraint on {subject}?",
+        "Which statement correctly describes the verified behavior of {subject}?"
       ],
       "option_task": "Test a concrete schema rule, validation guard, test expectation, security condition, data-quality rule, or measured complexity indicator. Do not ask for an undocumented design preference.",
       "slots": {

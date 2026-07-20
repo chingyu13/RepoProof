@@ -15,7 +15,12 @@ from app.assessment_catalog import (
     TOPIC_BY_ID,
     weighted_template_schedule,
 )
-from app.question_planner import display_code, render_question_plan, template_bundle
+from app.question_planner import (
+    _compact_context,
+    display_code,
+    render_question_plan,
+    template_bundle,
+)
 from app.validator import find_similar_question, validate_maq
 
 
@@ -234,6 +239,63 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertFalse(problem)
         self.assertIn("MQTT acquisition", plan["rendered_stem"])
         self.assertRegex(plan["rendered_stem"], r"`[^`]+`")
+
+    def test_only_contextual_use_displays_a_compact_target_context(self):
+        noisy_targets = [
+            {
+                "label": (
+                    "This assignment focuses on acquiring and visualising real-time "
+                    "electricity generation and emissions data"
+                ),
+            },
+            {
+                "label": (
+                    "Total: 25 points (plus up to 2 bonus points for Assignment 1 "
+                    "integration, capped at 25 overall)"
+                ),
+            },
+        ]
+        for target in noisy_targets:
+            self.assertEqual(
+                _compact_context(target, TOPIC_BY_ID["api"]),
+                "integration",
+            )
+        self.assertEqual(
+            _compact_context(
+                {"label": "Explain MQTT acquisition"},
+                TOPIC_BY_ID["api"],
+            ),
+            "MQTT acquisition",
+        )
+        for template in TEMPLATES:
+            frames = " ".join(template["stem_frames"])
+            if template["id"] == "contextual_use":
+                self.assertIn("{context}", frames)
+            else:
+                self.assertNotIn("{context}", frames, template["id"])
+
+    def test_code_and_constraint_stems_do_not_display_alignment_prose(self):
+        target = {
+            "kind": "project_scope",
+            "label": (
+                "Total: 25 points (plus up to 2 bonus points for Assignment 1 "
+                "integration, capped at 25 overall)"
+            ),
+            "description": "This assignment focuses on real-time electricity data.",
+            "evidence": [{"chunk_id": "c1"}],
+        }
+        code_plan, problem = render_question_plan(
+            TEMPLATE_BY_ID["code_explain"],
+            TOPIC_BY_ID["project_logic"],
+            target,
+            [CHUNKS[1]],
+        )
+        self.assertFalse(problem)
+        self.assertEqual(
+            code_plan["rendered_stem"],
+            "Which statement correctly describes the complete effect of the shown code?",
+        )
+        self.assertNotIn("25 points", code_plan["rendered_stem"])
 
     def test_target_rejects_an_unrelated_preferred_relationship(self):
         target = {

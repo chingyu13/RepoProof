@@ -97,6 +97,22 @@ Most files are integrated.
         self.assertEqual(len(targets), 1)
         self.assertIn("validation workflow", targets[0]["description"])
 
+    def test_extended_total_and_bonus_line_is_not_an_assessment_target(self):
+        targets = build_assessment_targets(
+            "",
+            "",
+            scope_documents=[{
+                "name": "rubric.md",
+                "text": (
+                    "Explain the dashboard integration behavior. 8 points.\n\n"
+                    "**Total:** 25 points (plus up to 2 bonus points for Assignment 1 "
+                    "integration, capped at 25 overall)"
+                ),
+            }],
+        )
+        self.assertEqual(len(targets), 1)
+        self.assertIn("dashboard integration", targets[0]["description"])
+
     def test_targets_align_to_project_evidence(self):
         targets = build_assessment_targets(
             "",

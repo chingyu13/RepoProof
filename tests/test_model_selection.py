@@ -10,13 +10,11 @@ from app.main import GenerateConfig, meta
 class ModelSelectionTests(unittest.TestCase):
     def test_openai_catalog_has_current_choices(self):
         model_ids = [model["id"] for model in config.openai_model_options()]
-        self.assertEqual(model_ids[:3], [
+        self.assertEqual(model_ids, [
             "gpt-5.6-terra",
-            "gpt-5.6-sol",
             "gpt-5.6-luna",
+            "gpt-4o-mini",
         ])
-        self.assertIn("gpt-4o", model_ids)
-        self.assertIn("gpt-4o-mini", model_ids)
 
     def test_model_resolution_rejects_unlisted_request(self):
         self.assertEqual(
@@ -40,8 +38,8 @@ class ModelSelectionTests(unittest.TestCase):
         )
 
     def test_generation_config_accepts_selected_model(self):
-        cfg = GenerateConfig(provider="openai", model="gpt-5.6-sol")
-        self.assertEqual(cfg.model, "gpt-5.6-sol")
+        cfg = GenerateConfig(provider="openai", model="gpt-5.6-luna")
+        self.assertEqual(cfg.model, "gpt-5.6-luna")
 
     def test_gpt_56_uses_reasoning_compatible_chat_parameters(self):
         completion = SimpleNamespace(
