@@ -10,10 +10,38 @@ DB_PATH = Path(os.environ.get("REPOPROOF_DB", WORK_DIR / "repoproof.db"))
 MAX_PROJECT_MB = int(os.environ.get("REPOPROOF_MAX_MB", "1024"))
 PRO_CONTACT = "jobs@chingyu.site"
 
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-terra")
 OPENAI_RAW_MAX_CHARS = int(os.environ.get("REPOPROOF_OPENAI_RAW_MAX_CHARS", "350000"))
 ACCESS_PASSWORD = os.environ.get("REPOPROOF_ACCESS_PASSWORD", "").strip()
 SESSION_SECRET = os.environ.get("REPOPROOF_SESSION_SECRET", "").strip()
+
+_OPENAI_MODEL_OPTIONS = (
+    {
+        "id": "gpt-5.6-terra",
+        "name": "GPT-5.6 Terra",
+        "note": "recommended balance",
+    },
+    {
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "note": "highest quality",
+    },
+    {
+        "id": "gpt-5.6-luna",
+        "name": "GPT-5.6 Luna",
+        "note": "lower cost",
+    },
+    {
+        "id": "gpt-4o",
+        "name": "GPT-4o",
+        "note": "older baseline",
+    },
+    {
+        "id": "gpt-4o-mini",
+        "name": "GPT-4o mini",
+        "note": "fast baseline",
+    },
+)
 
 # Local LLM (privacy mode): any OpenAI-compatible server works.
 #   Ollama    -> http://127.0.0.1:11434/v1   (default)
@@ -27,6 +55,26 @@ _FORCED_PROVIDER = os.environ.get("REPOPROOF_LLM_PROVIDER", "").strip().lower()
 
 def openai_api_key() -> str:
     return os.environ.get("OPENAI_API_KEY", "").strip()
+
+
+def openai_model_options() -> list[dict]:
+    options = [dict(option) for option in _OPENAI_MODEL_OPTIONS]
+    if OPENAI_MODEL not in {option["id"] for option in options}:
+        options.append({
+            "id": OPENAI_MODEL,
+            "name": OPENAI_MODEL,
+            "note": "configured",
+        })
+    return options
+
+
+def resolve_model(provider: str, requested: str = "") -> str:
+    if provider == "local":
+        return LOCAL_LLM_MODEL
+    if provider == "openai":
+        allowed = {option["id"] for option in openai_model_options()}
+        return requested if requested in allowed else OPENAI_MODEL
+    return "mock"
 
 
 def local_llm_available(timeout: float = 1.2) -> bool:

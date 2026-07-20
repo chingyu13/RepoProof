@@ -310,7 +310,7 @@ a{color:var(--accent)}
     <div id="gRangeWrap" class="hidden"><label>Range (min–max)</label>
       <div style="display:flex;gap:.3rem"><input type="number" id="gMin" value="1" min="1"><input type="number" id="gMax" value="3" min="1"></div></div>
     <div><label>Difficulty (1–5)</label><input type="number" id="gDiff" value="3" min="1" max="5"></div>
-    <div><label>LLM provider</label><select id="gProvider"><option value="">Loading…</option></select></div>
+    <div><label>LLM model</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
   <p class="small" id="providerNote"></p>
   <label>Focus areas — drag each slider to set how strongly that area is tested (0 = skip)</label>
@@ -468,6 +468,14 @@ function bindContextFiles(buttonId, inputId, namesId, target){
 bindContextFiles('uploadPrior', 'priorFiles', 'priorFileNames', priorContextFiles);
 bindContextFiles('uploadScope', 'scopeFiles', 'scopeFileNames', scopeContextFiles);
 
+function selectedLlm(){
+  const option = $('gProvider').selectedOptions[0];
+  return {
+    provider: option?.dataset.provider || 'mock',
+    model: option?.dataset.model || '',
+  };
+}
+
 $('logout').onclick = async ()=>{
   await fetch('/api/logout', {method:'POST'});
   location.href = '/';
@@ -486,17 +494,43 @@ async function loadMeta(){
   const p = m.providers || {};
   const sel = $('gProvider');
   sel.innerHTML = '';
-  const addOpt = (value, label, enabled) => {
+  const addOpt = (value, label, enabled, provider, model='') => {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = label;
     option.disabled = !enabled;
+    option.dataset.provider = provider;
+    option.dataset.model = model;
     sel.appendChild(option);
   };
-  addOpt('openai', `GPT API (${p.openai?.model || 'no key'})${p.openai?.available ? '' : ' — no key'}`, !!p.openai?.available);
-  addOpt('local', `Local LLM (${p.local?.model || '?'})${p.local?.available ? ' — private' : ' — not running'}`, !!p.local?.available);
-  addOpt('mock', 'Mock (free, no LLM)', true);
-  sel.value = ['openai', 'local', 'mock'].includes(p.default) ? p.default : 'mock';
+  const openaiModels = p.openai?.models || [
+    {id:p.openai?.model || 'gpt-4o-mini', name:p.openai?.model || 'GPT API', note:''},
+  ];
+  openaiModels.forEach(model=>{
+    const note = model.note ? ` — ${model.note}` : '';
+    const unavailable = p.openai?.available ? '' : ' — no key';
+    addOpt(
+      `openai:${model.id}`,
+      `OpenAI · ${model.name}${note}${unavailable}`,
+      !!p.openai?.available,
+      'openai',
+      model.id,
+    );
+  });
+  addOpt(
+    `local:${p.local?.model || ''}`,
+    `Local · ${p.local?.model || '?'}${p.local?.available ? ' — private' : ' — not running'}`,
+    !!p.local?.available,
+    'local',
+    p.local?.model || '',
+  );
+  addOpt('mock', 'Mock (free, no LLM)', true, 'mock');
+  const preferred = p.default === 'openai'
+    ? `openai:${p.openai?.model || ''}`
+    : p.default === 'local'
+      ? `local:${p.local?.model || ''}`
+      : 'mock';
+  sel.value = preferred;
   if (sel.selectedOptions[0]?.disabled) sel.value = 'mock';
   $('providerNote').classList.toggle('hidden', !!p.local?.available);
   $('providerNote').textContent = p.local?.available
@@ -871,7 +905,7 @@ $('generate').onclick = async ()=>{
       difficulty:+$('gDiff').value, focus:$('gFocus').value,
       focus_areas: areas.filter(area=>area.w > 0).map(area=>({
         id:area.id, name:(topicById(area.id)||{}).name || area.id, weight:area.w})),
-      provider: $('gProvider').value
+      ...selectedLlm()
     };
     const form = new FormData();
     form.append('config_json', JSON.stringify(cfg));
@@ -1043,7 +1077,7 @@ $('publish').onclick = async ()=>{
                               correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
                               correct_min:+$('gMin').value, correct_max:+$('gMax').value,
                               difficulty:+$('gDiff').value, focus:$('gFocus').value,
-                              provider:$('gProvider').value,
+                              ...selectedLlm(),
                               assumed_knowledge:$('assumedKnowledge').value,
                               project_scope:$('projectScope').value,
                               context_files:[
@@ -1085,7 +1119,7 @@ function frameworkSummary(fw){
     : `dynamic ${fw.correct_min}–${fw.correct_max} correct`;
   const areas = (fw.focus_areas || []).map(area=>`${area.name || area.id} ${area.weight}`).join(', ') || '—';
   return `${fw.num_questions} questions · ${fw.choice_count} options · ${cc} · difficulty ${fw.difficulty}`
-    + ` · provider: ${fw.provider || 'default'}`
+    + ` · provider: ${fw.model || fw.provider || 'default'}`
     + `\nFocus areas: ${areas}`
     + (fw.assumed_knowledge ? `\nAssumed prior knowledge: ${fw.assumed_knowledge}` : '')
     + (fw.project_scope ? `\nProject scope: ${fw.project_scope}` : '')

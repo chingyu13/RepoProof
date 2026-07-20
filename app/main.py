@@ -146,7 +146,11 @@ def meta():
         "model": config.OPENAI_MODEL,
         "providers": {
             "default": default_provider,
-            "openai": {"available": bool(config.openai_api_key()), "model": config.OPENAI_MODEL},
+            "openai": {
+                "available": bool(config.openai_api_key()),
+                "model": config.OPENAI_MODEL,
+                "models": config.openai_model_options(),
+            },
             "local": {"available": local_up, "model": config.LOCAL_LLM_MODEL, "url": config.LOCAL_LLM_URL},
         },
         "topics": public_topics(),
@@ -267,6 +271,7 @@ class GenerateConfig(BaseModel):
     focus: str = ""
     focus_areas: list[dict] = Field(default_factory=list)
     provider: str = ""
+    model: str = ""
 
 
 def _project_root(project: dict) -> Path | None:

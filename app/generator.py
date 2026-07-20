@@ -252,29 +252,41 @@ def _extract_json(text: str) -> dict:
     return json.loads(m.group(0))
 
 
-def _call_llm(provider: str, system: str, user: str, *, temperature: float | None = None) -> dict:
+def _call_llm(
+    provider: str,
+    system: str,
+    user: str,
+    *,
+    model: str = "",
+    temperature: float | None = None,
+) -> dict:
     """Call an OpenAI-compatible local or hosted provider."""
     from openai import OpenAI
+    selected_model = config.resolve_model(provider, model)
     if provider == "local":
         # trust_env=False bypasses HTTP(S)_PROXY/ALL_PROXY env vars — localhost
         # traffic must never be routed through a corporate/system proxy.
         import httpx
         client = OpenAI(base_url=config.LOCAL_LLM_URL, api_key="local-llm",
                         http_client=httpx.Client(trust_env=False, timeout=300))
-        model, timeout = config.LOCAL_LLM_MODEL, 300   # local inference can be slow
+        timeout = 300
     else:
         client = OpenAI(api_key=config.openai_api_key())
-        model, timeout = config.OPENAI_MODEL, 90
+        timeout = 90
     kwargs = dict(
-        model=model,
+        model=selected_model,
         messages=[{"role": "system", "content": system},
                   {"role": "user", "content": user}],
-        temperature=temperature if temperature is not None else (0.2 if provider == "local" else 0.4),
         timeout=timeout,
     )
     if provider == "local":
+        kwargs["temperature"] = temperature if temperature is not None else 0.2
         kwargs["max_tokens"] = config.LOCAL_LLM_MAX_TOKENS
+    elif selected_model.startswith("gpt-5.6"):
+        kwargs["max_completion_tokens"] = 16_000
+        kwargs["reasoning_effort"] = "low"
     else:
+        kwargs["temperature"] = temperature if temperature is not None else 0.4
         kwargs["max_tokens"] = 16_000
     try:
         resp = client.chat.completions.create(response_format={"type": "json_object"}, **kwargs)
@@ -826,7 +838,7 @@ def _normalize_raw_question(raw: dict, index: int, cfg: dict, source_by_id: dict
     errors.extend(validate_maq(question, choice_count, correct_count, semantic_checks=False))
     if errors:
         return None, errors
-    question["generator"] = config.OPENAI_MODEL
+    question["generator"] = config.resolve_model("openai", cfg.get("model", ""))
     return question, []
 
 
@@ -853,7 +865,12 @@ def _generate_raw_openai_questions(
     try:
         _notify(progress, "generating_questions", current=0, total=num,
                 message="Generating the question batch from the project.")
-        response = _call_llm("openai", RAW_OPENAI_SYSTEM_PROMPT, prompt)
+        response = _call_llm(
+            "openai",
+            RAW_OPENAI_SYSTEM_PROMPT,
+            prompt,
+            model=cfg.get("model", ""),
+        )
         raw_questions = response.get("questions")
         if not isinstance(raw_questions, list):
             raw_questions = []
@@ -888,7 +905,13 @@ def _generate_raw_openai_questions(
                 code_logic_plan.get(index, ""), draft, errors_by_index[index],
             )
             try:
-                response = _call_llm("openai", RAW_OPENAI_SYSTEM_PROMPT, repair_prompt, temperature=0.2)
+                response = _call_llm(
+                    "openai",
+                    RAW_OPENAI_SYSTEM_PROMPT,
+                    repair_prompt,
+                    model=cfg.get("model", ""),
+                    temperature=0.2,
+                )
             except Exception as exc:
                 errors_by_index[index].append(f"{type(exc).__name__}: {exc}")
                 continue
@@ -1165,6 +1188,8 @@ def generate_questions(
             message="Building the evidence-grounded question plan.")
     provider = (cfg.get("provider") or "").strip().lower() or config.default_provider()
     fallback_warnings = []
+    if provider not in ("openai", "local", "mock"):
+        provider = config.default_provider()
     if provider == "openai" and not config.openai_api_key():
         fallback_warnings.append("OpenAI selected but no API key configured — using mock questions.")
         provider = "mock"
@@ -1173,8 +1198,9 @@ def generate_questions(
             f"Local LLM selected but no server answered at {config.LOCAL_LLM_URL} — using mock questions. "
             "Start it with e.g. `ollama serve` (and `ollama pull " + config.LOCAL_LLM_MODEL + "`).")
         provider = "mock"
-    elif provider not in ("openai", "local", "mock"):
-        provider = config.default_provider()
+    model = config.resolve_model(provider, cfg.get("model", ""))
+    cfg["provider"] = provider
+    cfg["model"] = model
 
     if provider == "openai":
         if not raw_files:
@@ -1193,7 +1219,7 @@ def generate_questions(
     difficulty = max(1, min(5, int(cfg.get("difficulty", 3))))
 
     mock = provider == "mock"
-    generator_label = {"mock": "mock", "local": f"local:{config.LOCAL_LLM_MODEL}"}[provider]
+    generator_label = {"mock": "mock", "local": f"local:{model}"}[provider]
     metrics = None
     if provider == "local":
         metrics = {
@@ -1224,7 +1250,11 @@ def generate_questions(
             started = time.perf_counter()
             try:
                 return _call_llm(
-                    provider, SYSTEM_PROMPT, user_prompt, temperature=temperature
+                    provider,
+                    SYSTEM_PROMPT,
+                    user_prompt,
+                    model=model,
+                    temperature=temperature,
                 )
             finally:
                 if metrics is not None:
