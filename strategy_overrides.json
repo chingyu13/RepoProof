@@ -178,14 +178,14 @@
       "id": "scenario_edge",
       "name": "Scenario / Edge Case",
       "strategy": "prediction",
-      "pattern": "Give a short, evidence-grounded condition or failure and ask which behavior or handling follows. Avoid unsupported hypothetical features.",
+      "pattern": "Show the complete minimal code branch for a concrete condition, failure, state change, or side effect. Use a neutral stem such as 'For the shown code, if <condition>, which observable behavior occurs?' and do not presuppose that a print, update, error, or return happens. The student must be able to derive every option from the displayed code without remembering the project. The correct answer must state the executed calls, assignments, return, or output exactly; never call a visible print or update 'no action' or 'nothing happens'. Avoid unsupported hypothetical features.",
       "query": "scenario failure empty invalid boundary exception retry state outcome",
       "evidence": {
         "required": [
           {
             "label": "conditional behavior",
             "types": ["control_flow_graph", "data_flow_graph", "api_discovery", "test_discovery"],
-            "kinds": ["function", "notebook_cell", "source", "flow", "test_discovery"],
+            "kinds": ["function", "notebook_cell", "source"],
             "count": 1,
             "query": "if else except error retry empty missing invalid"
           }

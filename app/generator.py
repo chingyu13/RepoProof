@@ -123,6 +123,14 @@ RAW_TOPIC_GUIDANCE = {
     ),
 }
 
+DISPLAY_CODE_TEMPLATE_IDS = frozenset({
+    "scenario_edge",
+    "code_explain",
+    "code_trace",
+    "debugging",
+    "modification",
+})
+
 
 def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
                      correct_count: int, difficulty: int, extra_focus: str,
@@ -179,6 +187,11 @@ OUTPUT CHECKLIST — apply this immediately before responding:
 10. Do not use "best", "better", "most appropriate", "preferable", or "why". Ask which concrete
     statement is correct. Every incorrect justification must identify a contradiction, never only
     say that something is not mentioned or not explicitly stated.
+11. A scenario about a condition, state change, or side effect must be answerable from DISPLAYED
+    CODE. Do not test the student's memory of unshown project code. State the executed calls,
+    assignments, return, or output exactly; never summarize a visible side effect as "no action",
+    "nothing happens", or "does nothing". Use a neutral stem such as "which observable behavior
+    occurs?"; do not presuppose that a print, update, error, or return happens.
 
 EVIDENCE (cite ids you used in evidence_ids):
 {ev_text}
@@ -434,12 +447,27 @@ def _code_grounding_errors(question: dict, slot: dict,
 
 def _specific_evidence_errors(question: dict, slot: dict, chunk_by_id: dict[str, dict]) -> list[str]:
     template_id = slot.get("template_id")
-    if template_id in {"code_explain", "code_trace", "debugging", "modification"}:
+    if template_id in DISPLAY_CODE_TEMPLATE_IDS:
         if not re.search(r"```(?:[a-zA-Z0-9_+.#-]+)?\s*\n.*?```", question["stem"], re.S):
             return [f"{slot['template_name']} needs a self-contained fenced code excerpt."]
         grounding_errors = _code_grounding_errors(question, slot, chunk_by_id)
         if grounding_errors:
             return grounding_errors
+        if template_id == "scenario_edge":
+            correct_text = " ".join(
+                option.get("text", "")
+                for option in question.get("options", [])
+                if option.get("key") in set(question.get("answer", []))
+            )
+            if re.search(
+                r"\b(?:no action is taken|nothing happens|does nothing)\b",
+                correct_text,
+                re.I,
+            ):
+                return [
+                    "A Scenario / Edge Case correct option must name the exact observable "
+                    "calls, state changes, return, or output instead of saying nothing happens."
+                ]
     if template_id not in {"purpose_responsibility", "workflow"}:
         return []
     cited = [chunk_by_id.get(item.get("chunk_id")) for item in question["evidence"]]
@@ -919,7 +947,7 @@ def _template_bundle(evidence_store: EvidenceStore, topic: dict, template: dict,
     )
 
 
-def _display_code(evidence: list[dict]) -> tuple[str, str, str] | None:
+def _display_code(evidence: list[dict], template_id: str = "") -> tuple[str, str, str] | None:
     candidates = []
     for chunk in evidence:
         if chunk["kind"] not in {"function", "notebook_cell", "source"}:
@@ -947,6 +975,12 @@ def _display_code(evidence: list[dict]) -> tuple[str, str, str] | None:
                 except SyntaxError:
                     continue
             if tree:
+                if template_id == "scenario_edge":
+                    for node in ast.walk(tree):
+                        if isinstance(node, (ast.If, ast.Try, ast.Match)):
+                            snippet = ast.get_source_segment(parsed_source, node)
+                            if snippet:
+                                snippets.append(snippet)
                 for node in ast.walk(tree):
                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         snippet = ast.get_source_segment(parsed_source, node)
@@ -1090,8 +1124,8 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
         usable_evidence_variants = []
         for evidence in evidence_variants:
             variant_slot = dict(slot)
-            if template["id"] in {"code_explain", "code_trace", "debugging", "modification"}:
-                code_display = _display_code(evidence)
+            if template["id"] in DISPLAY_CODE_TEMPLATE_IDS:
+                code_display = _display_code(evidence, template["id"])
                 if code_display is None:
                     continue
                 (

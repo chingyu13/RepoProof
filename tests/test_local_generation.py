@@ -70,6 +70,15 @@ CHUNKS = [
         "The pipeline retrieves records, validates values, and stores clean results.",
         [],
     ),
+    chunk(
+        "c8", "function", "Function stop_services (pipeline.py)",
+        "Function stop_services in pipeline.py.\nCode:\ndef stop_services(stop):\n"
+        "    if stop:\n"
+        "        subscriber.loop_stop()\n"
+        "        subscriber.disconnect()\n"
+        "        dashboard_stop.set()",
+        ["symbol_table", "data_flow_graph", "control_flow_graph"],
+    ),
 ]
 
 
@@ -111,6 +120,54 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertTrue(
             any("module_graph" in item["evidence_types"] for item in evidence)
         )
+
+    def test_scenario_edge_injects_the_cited_condition_branch(self):
+        tasks, warnings, tagged = _catalog_tasks(
+            EvidenceStore(CHUNKS),
+            {
+                "choice_count": 4,
+                "correct_mode": "exact",
+                "correct_exact": 1,
+                "focus_areas": [{"id": "data_flow", "weight": 5}],
+                "template": "scenario_edge",
+                "focus": "stop services subscriber dashboard state",
+            },
+            1,
+            random.Random(42),
+        )
+        self.assertTrue(tagged)
+        self.assertFalse(warnings)
+        slot = tasks[0]["slot"]
+        self.assertIn("if stop:", slot["display_code"])
+        self.assertIn("dashboard_stop.set()", slot["display_code"])
+        self.assertNotIn("def stop_services", slot["display_code"])
+
+        no_code_question = {
+            "stem": "What happens when stop is true?",
+            "evidence": [{"chunk_id": "c8"}],
+        }
+        errors = _specific_evidence_errors(
+            no_code_question, slot, {item["id"]: item for item in CHUNKS}
+        )
+        self.assertTrue(any("self-contained fenced code excerpt" in error for error in errors))
+
+        vague_correct_answer = {
+            "stem": (
+                "What happens when stop is true?\n```python\n"
+                + slot["display_code"]
+                + "\n```"
+            ),
+            "options": [
+                {"key": "A", "text": "Nothing happens."},
+                {"key": "B", "text": "The dashboard stop event is set."},
+            ],
+            "answer": ["A"],
+            "evidence": [{"chunk_id": slot["display_evidence_id"]}],
+        }
+        errors = _specific_evidence_errors(
+            vague_correct_answer, slot, {item["id"]: item for item in CHUNKS}
+        )
+        self.assertTrue(any("exact observable" in error for error in errors))
 
     def test_focus_weights_allocate_question_topics(self):
         config = {
