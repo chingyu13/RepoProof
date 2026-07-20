@@ -8,7 +8,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* Theme tokens synced from Figma: RepoProof UI / Step 1 (user's monochrome restyle) */
 :root{
   --bg:#ffffff; --card:#f4f4f4; --card-border:#888888; --ink:#0c1421; --heading:#333333;
   --muted:#7d7d7d; --line:#d8daeb; --strong:#626262; --input-bg:#fefefe; --input-border:#7d7d7d;
@@ -40,7 +39,6 @@ header h1{font-size:1.15rem;margin:0;font-weight:600}
 .step-back:hover{background:var(--card);color:var(--ink)}
 .step-back svg{width:22px;height:22px;display:block;stroke:currentColor}
 .card{background:var(--card);border:3px solid var(--card-border);border-radius:10px;padding:1.4rem 1.6rem;box-shadow:var(--shadow);position:relative}
-/* generation loading overlay */
 .gen-overlay{position:absolute;inset:0;background:rgba(255,255,255,.5);backdrop-filter:blur(1.5px);border-radius:16px;
   display:flex;flex-direction:column;gap:.9rem;align-items:center;justify-content:center;z-index:5}
 [data-theme="dark"] .gen-overlay{background:rgba(22,22,24,.5)}
@@ -58,7 +56,6 @@ button.secondary{background:var(--input-bg);color:var(--ink);border:2px solid va
 button.secondary:hover{background:var(--card)}
 button:disabled{opacity:.5;cursor:default}
 .row{display:flex;gap:.8rem;flex-wrap:wrap}.row>div{flex:1;min-width:130px}
-/* Figma drop zone */
 .drop{border:2.5px dashed var(--input-border);border-radius:10px;padding:2rem 1rem;text-align:center;transition:border-color .15s, background .15s}
 .drop.hover{border-color:var(--ink);background:var(--consent-bg)}
 .drop .icon{width:52px;height:52px;margin:0 auto .6rem;color:var(--muted)}
@@ -77,8 +74,10 @@ button:disabled{opacity:.5;cursor:default}
 .err{color:var(--bad);font-size:.85rem;white-space:pre-wrap}
 .okmsg{color:var(--ok);font-size:.85rem}
 .plist{list-style:none;padding:0;margin:0;display:grid;gap:.4rem}
-.plist li{padding:.55rem .8rem;border:1px solid var(--line);background:var(--input-bg);display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-radius:5px}
+.plist li{padding:.55rem .8rem;border:1px solid var(--line);background:var(--input-bg);display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:1rem;align-items:center;cursor:pointer;border-radius:5px}
 .plist li:hover{border-color:var(--input-border)}
+.plist .project-delete{padding:.1rem .25rem;border:0;background:transparent;color:var(--ink);font-size:1.25rem;line-height:1}
+.plist .project-delete:hover{background:transparent;color:var(--muted)}
 .q{border:1px solid var(--line);border-radius:12px;padding:1rem;margin:.8rem 0}
 .q .status{float:right;font-size:.75rem;padding:.15rem .55rem;border-radius:999px}
 .status.draft{background:var(--chip);color:var(--chip-ink)}
@@ -93,7 +92,6 @@ button:disabled{opacity:.5;cursor:default}
 .opt.dragging{opacity:.45}
 .opt.drop-above{box-shadow:0 -2px 0 var(--accent)}
 .opt.drop-below{box-shadow:0 2px 0 var(--accent)}
-/* Approve = green toggle (synced from Figma Step 3) */
 .q .approve{background:var(--input-bg);color:var(--ok);border:2px solid var(--ok)}
 .q .approve:hover{background:rgba(6,191,92,.10)}
 .q .approve.is-approved{background:var(--ok);color:#fff;border-color:#05913f}
@@ -102,7 +100,6 @@ button:disabled{opacity:.5;cursor:default}
 .small{font-size:.8rem;color:var(--muted)}
 a{color:var(--accent)}
 .hidden{display:none}
-/* Focus-area radar — monochrome restyle synced from Figma (Step 2 spider UI) */
 :root{
   --radar-grid:var(--line); --radar-fill:rgba(98,98,98,.26); --radar-stroke:var(--strong);
   --radar-dot:var(--strong); --radar-dot-ring:var(--card); --radar-label:var(--muted);
@@ -121,7 +118,6 @@ a{color:var(--accent)}
 .area-list{flex:1;min-width:250px;display:grid;gap:.45rem;align-content:start}
 .area-row{display:flex;gap:.5rem;align-items:center}
 .area-row .aname{flex:1.2;min-width:90px}
-/* Slider: track background = outline only (no fill); left-of-thumb bar + thumb keep accent color */
 .area-row input[type=range]{-webkit-appearance:none;appearance:none;flex:1;min-width:80px;height:16px;background:transparent;cursor:pointer}
 .area-row input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:transparent;border:1px solid var(--accent);
   background-image:linear-gradient(var(--accent),var(--accent));background-repeat:no-repeat;background-size:var(--pct,0%) 100%}
@@ -132,7 +128,6 @@ a{color:var(--accent)}
 .area-row .aval{width:1.4em;text-align:center;color:var(--muted);font-size:.85rem}
 .area-row .adel{padding:.2rem .6rem}
 .add-area{display:flex;gap:.5rem;margin-top:.5rem}
-/* scrollable review list */
 #questions{max-height:62vh;overflow-y:auto;padding-right:.4rem}
 #questions::-webkit-scrollbar{width:8px}
 #questions::-webkit-scrollbar-track{background:transparent}
@@ -147,7 +142,6 @@ a{color:var(--accent)}
 #logout{padding:.45rem .7rem;background:var(--input-bg);color:var(--ink);border:1px solid var(--card-border)}
 .actions{display:flex;justify-content:center;margin:.9rem 0 0}
 .actions button{min-width:150px}
-/* Stepper — style from Figma: Stepper / Step indicator (Community) */
 .stepper{display:flex;max-width:980px;margin:0 auto;padding:.75rem 2.5rem;background:var(--bg)}
 .step{flex:1;position:relative;text-align:center;cursor:pointer;user-select:none;outline:none}
 .step.locked{cursor:not-allowed;opacity:.55}
@@ -276,34 +270,29 @@ a{color:var(--accent)}
   <h2 style="margin-top:1.2rem">2 · Question Framework</h2>
   <div class="row">
     <div><label># Questions</label><input type="number" id="gNum" value="5" min="1" max="20"></div>
-    <div><label>Options per question</label><input type="number" id="gChoices" value="5" min="2" max="7"></div>
+    <div><label>Options per question</label><input type="number" id="gChoices" value="4" min="2" max="7"></div>
     <div><label>Correct-count mode</label>
-      <select id="gMode"><option value="dynamic">Dynamic range</option><option value="exact">Exact</option></select></div>
-    <div id="gExactWrap" class="hidden"><label>Exact correct</label><input type="number" id="gExact" value="2" min="1"></div>
-    <div id="gRangeWrap"><label>Range (min–max)</label>
+      <select id="gMode"><option value="exact" selected>Exact</option><option value="dynamic">Dynamic range</option></select></div>
+    <div id="gExactWrap"><label>Exact correct</label><input type="number" id="gExact" value="1" min="1"></div>
+    <div id="gRangeWrap" class="hidden"><label>Range (min–max)</label>
       <div style="display:flex;gap:.3rem"><input type="number" id="gMin" value="1" min="1"><input type="number" id="gMax" value="3" min="1"></div></div>
-    <div><label>Difficulty (1–5)</label><input type="number" id="gDiff" value="2" min="1" max="5"></div>
+    <div><label>Difficulty (1–5)</label><input type="number" id="gDiff" value="3" min="1" max="5"></div>
     <div><label>LLM provider</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
   <p class="small" id="providerNote"></p>
-  <label>Assessment Strategy — weight HOW the AI verifies understanding (0 = skip a strategy).
-    Topics (algorithms, SQL, OOP, …) are not configured here: they will be extracted automatically
-    from the assignment description and grading rubric.</label>
+  <label>Focus areas — drag each slider to set how strongly that area is tested (0 = skip)</label>
   <div class="radar-wrap">
-    <div class="radar-panel"><svg id="radar" viewBox="0 0 300 300" aria-label="Assessment strategy radar chart"></svg></div>
-    <div style="flex:1;min-width:270px">
-      <div class="area-list" id="strategyList"><span class="small">Loading strategies…</span></div>
+    <div class="radar-panel"><svg id="radar" viewBox="0 0 300 300" aria-label="Focus areas radar chart"></svg></div>
+    <div style="flex:1;min-width:250px">
+      <div class="area-list" id="areaList"></div>
       <div class="add-area">
-        <select id="newStrat" style="flex:1"></select>
-        <button class="secondary" id="addStrat" type="button">Add</button>
+        <select id="newArea" aria-label="Add focus area"></select>
+        <button class="secondary" id="addArea" type="button">Add</button>
       </div>
     </div>
   </div>
   <label>Extra instructions (optional — e.g. "recursion, testing; don't ask about deployment")</label>
   <input type="text" id="gFocus">
-  <label style="display:flex;gap:.4rem;align-items:center;margin-top:.6rem">
-    <input type="checkbox" id="gKeepApproved" style="width:auto">
-    Keep approved questions — otherwise everything is regenerated fresh</label>
   <p style="margin-top:.8rem"><button id="generate">Generate questions</button> <span class="small" id="genStatus"></span></p>
   <p class="err" id="genErr"></p>
 </div>
@@ -448,28 +437,31 @@ async function loadMeta(){
   $('sizeNote').title = `Larger projects: Pro tier pending — ${m.pro_contact}`;
   if (m.mock_mode) $('mockBadge').classList.remove('hidden');
 
-  // LLM provider dropdown — offer what the server can actually reach
   const p = m.providers || {};
   const sel = $('gProvider');
   sel.innerHTML = '';
   const addOpt = (value, label, enabled) => {
-    const o = document.createElement('option');
-    o.value = value; o.textContent = label; o.disabled = !enabled;
-    sel.appendChild(o);
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    option.disabled = !enabled;
+    sel.appendChild(option);
   };
   addOpt('openai', `GPT API (${p.openai?.model || 'no key'})${p.openai?.available ? '' : ' — no key'}`, !!p.openai?.available);
   addOpt('local', `Local LLM (${p.local?.model || '?'})${p.local?.available ? ' — private' : ' — not running'}`, !!p.local?.available);
   addOpt('mock', 'Mock (free, no LLM)', true);
-  sel.value = ['openai','local','mock'].includes(p.default) ? p.default : 'mock';
+  sel.value = ['openai', 'local', 'mock'].includes(p.default) ? p.default : 'mock';
   if (sel.selectedOptions[0]?.disabled) sel.value = 'mock';
+  $('providerNote').classList.toggle('hidden', !!p.local?.available);
   $('providerNote').textContent = p.local?.available
-    ? `Local server detected at ${p.local.url} — "Local LLM" keeps all code on this machine.`
+    ? ''
     : `No local LLM detected (looked at ${p.local?.url || 'n/a'}). Install Ollama and run: ollama pull ${p.local?.model || 'qwen2.5-coder:7b'} && ollama serve`;
 
-  // Assessment-strategy catalog; first five active by default, weights from stars
-  strategyCatalog = m.strategies || [];
-  strategies = strategyCatalog.slice(0, 5).map(s=>({id: s.id, w: s.default_weight}));
-  renderStrategies();
+  topicCatalog = m.topics || [];
+  areas = [
+    ['architecture', 4], ['api', 3], ['data_flow', 5], ['project_logic', 2], ['database', 3],
+  ].filter(([id])=>topicCatalog.some(topic=>topic.id === id)).map(([id, w])=>({id, w}));
+  renderAreas();
 }
 
 /* drag & drop */
@@ -531,16 +523,12 @@ $('folderInput').addEventListener('change', async ()=>{
   } catch(e){ $('projectErr').textContent = 'Folder selection failed: ' + e.message; }
 });
 
-// File types RepoProof analyzes (mirrors the server analyzer's LANG_BY_EXT,
-// plus common text/config). Everything else (images, video, audio, fonts,
-// archives, binaries, models) is left out of the upload.
 const ANALYZE_EXT = new Set([
   'py','ipynb','r','rmd','java','kt','scala','js','jsx','mjs','ts','tsx','vue',
   'html','htm','css','scss','sql','c','h','cpp','cc','hpp','cs','go','rs','rb',
   'php','sh','ps1','swift','jl','lua','pl','m','dart','yaml','yml','toml','json',
   'md','txt','csv','tsv','xml','cfg','ini','gradle','env','properties'
 ]);
-// Extensionless files worth keeping for project context.
 const KEEP_NAMES = new Set(['dockerfile','procfile','makefile','license','description','gemfile','rakefile']);
 const NOTEBOOK_MAX = 25 * 1_000_000;   // notebooks embed outputs — allow larger
 const TEXT_FILE_MAX = 3 * 1_000_000;   // skip oversized data/text files (server skips them too)
@@ -563,9 +551,6 @@ async function packAndStage(list, folderName){
   }
   const SKIP = /(^|\/)(\.git|node_modules|\.venv|venv|__pycache__|dist|build|\.idea|\.vscode)(\/|$)/;
   const preDir = list.filter(x => !SKIP.test('/' + x.rel));
-  // Only upload file types RepoProof actually analyzes. Skip images, video,
-  // audio, fonts, archives, and other binaries so large asset folders don't
-  // bloat the upload (and trip the server's request-size limit).
   const kept = preDir.filter(x => analyzableFile(x.rel, x.file.size));
   const skipped = preDir.length - kept.length;
   if (!kept.length) {
@@ -644,8 +629,39 @@ async function loadProjects(){
   ul.innerHTML = ps.length ? '' : '<li class="small">None yet.</li>';
   ps.forEach(p=>{
     const li = document.createElement('li');
-    li.innerHTML = `<span><strong>${p.name}</strong> <span class="small">· ${p.source_type} · snapshot ${p.snapshot_id}</span></span>
-                    <span class="small">${p.stats.source_files ?? p.stats.python_files} source files</span>`;
+    const title = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = p.name;
+    const meta = document.createElement('span');
+    meta.className = 'small';
+    meta.textContent = ` · ${p.source_type} · snapshot ${p.snapshot_id}`;
+    title.append(name, meta);
+    const files = document.createElement('span');
+    files.className = 'small';
+    files.textContent = `${p.stats.source_files ?? p.stats.python_files} source files`;
+    const remove = document.createElement('button');
+    remove.className = 'secondary project-delete';
+    remove.type = 'button';
+    remove.title = 'Delete project';
+    remove.setAttribute('aria-label', `Delete ${p.name}`);
+    remove.textContent = '×';
+    remove.onclick = async event=>{
+      event.stopPropagation();
+      if (!confirm(`Delete ${p.name} and its generated assessments?`)) return;
+      try {
+        await api(`/api/projects/${p.id}`, {method:'DELETE'});
+        if (currentProject === p.id) {
+          currentProject = null;
+          document.querySelectorAll('.project-content').forEach(el=>el.classList.add('hidden'));
+          maxUnlockedStep = 1;
+          goToStep(1);
+        }
+        await loadProjects();
+      } catch (error) {
+        $('projectErr').textContent = error.message;
+      }
+    };
+    li.append(title, files, remove);
     li.onclick = ()=>openProject(p.id);
     ul.appendChild(li);
   });
@@ -671,27 +687,18 @@ $('gMode').onchange = ()=>{
   $('gRangeWrap').classList.toggle('hidden', exact);
 };
 
-/* focus-area radar picker */
-/* Assessment strategies: HOW the AI verifies understanding. Catalog comes
-   from /api/meta (single source of truth in app/strategies.py). The UI keeps
-   the original focus-area layout: rows of [name, slider, ×] + an Add row —
-   the only change is that names are picked from the catalog dropdown instead
-   of typed freely. The first five strategies load by default; templates use
-   each strategy's default (server falls back to it automatically). */
-let strategyCatalog = [];   // all 10, from /api/meta
-let strategies = [];        // active rows: {id, w}
-function radarAxes(){ return strategies; }
-const stratById = id => strategyCatalog.find(s => s.id === id);
+let topicCatalog = [];
+let areas = [];
+const topicById = id => topicCatalog.find(topic => topic.id === id);
 function escXml(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function drawRadar(){
   const svg = $('radar');
-  const axes = radarAxes();
-  const n = axes.length, cx = 150, cy = 150, R = 102, LVL = 5;
+  const n = areas.length, cx = 150, cy = 150, R = 102, LVL = 5;
   const pt = (i, r) => {
     const a = -Math.PI/2 + i * 2 * Math.PI / n;
     return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
   };
-  if (n < 3) { svg.innerHTML = `<text x="150" y="155" text-anchor="middle" class="radar-label">Enable at least 3 strategies</text>`; return; }
+  if (n < 3) { svg.innerHTML = `<text x="150" y="155" text-anchor="middle" class="radar-label">Add at least 3 focus areas</text>`; return; }
   let s = '';
   for (let l = 1; l <= LVL; l++) {
     const pts = Array.from({length:n}, (_,i)=>pt(i, R*l/LVL).join(',')).join(' ');
@@ -701,63 +708,63 @@ function drawRadar(){
     const [x,y] = pt(i, R);
     s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" class="radar-spoke"/>`;
   }
-  const dataPts = axes.map((a,i)=>pt(i, R * Math.max(0, Math.min(5, a.w)) / LVL));
+  const dataPts = areas.map((a,i)=>pt(i, R * Math.max(0, Math.min(5, a.w)) / LVL));
   s += `<polygon points="${dataPts.map(p=>p.join(',')).join(' ')}" class="radar-area"/>`;
   dataPts.forEach(p=>{ s += `<circle cx="${p[0]}" cy="${p[1]}" r="4" class="radar-dot"/>`; });
-  axes.forEach((a,i)=>{
+  areas.forEach((a,i)=>{
     const [x,y] = pt(i, R + 14);
     const anchor = Math.abs(x - cx) < 10 ? 'middle' : (x > cx ? 'start' : 'end');
-    const name = (stratById(a.id) || {name: a.id}).name;
+    const name = (topicById(a.id) || {name:a.id}).name;
     s += `<text x="${x}" y="${y + 3}" text-anchor="${anchor}" class="radar-label">${escXml(name.slice(0, 18))}</text>`;
   });
   svg.innerHTML = s;
 }
-function renderStrategies(){
-  const list = $('strategyList');
+
+function renderAreas(){
+  const list = $('areaList');
   list.innerHTML = '';
-  strategies.forEach((a, idx)=>{
-    const cat = stratById(a.id) || {name: a.id, goal: '', example: '', templates: []};
+  areas.forEach((area, idx)=>{
     const row = document.createElement('div');
     row.className = 'area-row';
-    row.innerHTML = `<select class="aname" title="${esc(cat.goal)} Example: ${esc(cat.example)}"></select>
-      <input type="range" class="aw" min="0" max="5" step="1" value="${a.w}">
-      <span class="aval">${a.w}</span>
-      <button class="secondary adel" type="button" title="Remove strategy">×</button>`;
-    // name dropdown: this row's strategy + every strategy not used by another row
-    const sel = row.querySelector('.aname');
-    strategyCatalog.forEach(c=>{
-      if (c.id !== a.id && strategies.some(x=>x.id === c.id)) return;
-      const o = document.createElement('option');
-      o.value = c.id; o.textContent = c.name;
-      sel.appendChild(o);
+    row.innerHTML = `<select class="aname" aria-label="Focus area"></select>
+      <input type="range" class="aw" min="0" max="5" step="1" value="${area.w}">
+      <span class="aval">${area.w}</span>
+      <button class="secondary adel" type="button" title="Remove focus area">×</button>`;
+    const select = row.querySelector('.aname');
+    topicCatalog.forEach(topic=>{
+      if (topic.id !== area.id && areas.some(item=>item.id === topic.id)) return;
+      const option = document.createElement('option');
+      option.value = topic.id;
+      option.textContent = topic.name;
+      select.appendChild(option);
     });
-    sel.value = a.id;
-    sel.onchange = ()=>{ a.id = sel.value; renderStrategies(); };
+    select.value = area.id;
+    select.onchange = ()=>{ area.id = select.value; renderAreas(); };
     const range = row.querySelector('.aw');
-    const setFill = ()=>{ range.style.setProperty('--pct', (a.w/5*100)+'%'); };
+    const setFill = ()=>{ range.style.setProperty('--pct', (area.w/5*100)+'%'); };
     setFill();
-    range.oninput = ()=>{ a.w = +range.value; row.querySelector('.aval').textContent = a.w; setFill(); drawRadar(); };
-    row.querySelector('.adel').onclick = ()=>{ strategies.splice(idx, 1); renderStrategies(); };
+    range.oninput = ()=>{ area.w = +range.value; row.querySelector('.aval').textContent = area.w; setFill(); drawRadar(); };
+    row.querySelector('.adel').onclick = ()=>{ areas.splice(idx, 1); renderAreas(); };
     list.appendChild(row);
   });
-  // Add row: only strategies not already active
-  const ns = $('newStrat');
-  ns.innerHTML = '';
-  const unused = strategyCatalog.filter(c=>!strategies.some(x=>x.id === c.id));
-  unused.forEach(c=>{
-    const o = document.createElement('option');
-    o.value = c.id; o.textContent = c.name + ' — ' + c.goal;
-    ns.appendChild(o);
+  const add = $('newArea');
+  add.innerHTML = '';
+  const unused = topicCatalog.filter(topic=>!areas.some(area=>area.id === topic.id));
+  unused.forEach(topic=>{
+    const option = document.createElement('option');
+    option.value = topic.id;
+    option.textContent = topic.name;
+    add.appendChild(option);
   });
-  ns.parentElement.style.display = unused.length ? '' : 'none';
+  add.parentElement.style.display = unused.length ? '' : 'none';
   drawRadar();
 }
-$('addStrat').onclick = ()=>{
-  const id = $('newStrat').value;
-  const cat = stratById(id);
-  if (!cat) return;
-  strategies.push({id, w: cat.default_weight});
-  renderStrategies();
+
+$('addArea').onclick = ()=>{
+  const id = $('newArea').value;
+  if (!topicById(id)) return;
+  areas.push({id, w:3});
+  renderAreas();
 };
 
 $('generate').onclick = async ()=>{
@@ -770,9 +777,10 @@ $('generate').onclick = async ()=>{
       correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
       correct_min:+$('gMin').value, correct_max:+$('gMax').value,
       difficulty:+$('gDiff').value, focus:$('gFocus').value,
-      strategies: strategies.filter(s=>s.w > 0).map(s=>({id:s.id, weight:s.w})),
+      focus_areas: areas.filter(area=>area.w > 0).map(area=>({
+        id:area.id, name:(topicById(area.id)||{}).name || area.id, weight:area.w})),
       provider: $('gProvider').value,
-      keep_approved: $('gKeepApproved').checked
+      keep_approved: false
     };
     const res = await api(`/api/projects/${currentProject}/generate`, {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
@@ -790,8 +798,6 @@ async function loadQuestions(){
   const qs = await api(`/api/projects/${currentProject}/questions`);
   const wrap = $('questions');
   wrap.innerHTML = qs.length ? '' : 'No questions yet.';
-  // Rebuild the publish selection from THIS list — stale ids from replaced/
-  // archived batches must never leak into a publish request.
   selectedForPublish.clear();
   qs.forEach((q, i)=>wrap.appendChild(renderQuestion(q, i + 1)));
   const aa = $('approveAll');
@@ -928,15 +934,14 @@ $('publish').onclick = async ()=>{
       body: JSON.stringify({title:$('aTitle').value, question_ids:ids,
                             show_correct_count:$('aShowCount').checked,
                             adaptive:$('aAdaptive').checked,
-                            // step-2 framework snapshot, shown in the assessment history
                             framework: {
                               num_questions:+$('gNum').value, choice_count:+$('gChoices').value,
                               correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
                               correct_min:+$('gMin').value, correct_max:+$('gMax').value,
                               difficulty:+$('gDiff').value, focus:$('gFocus').value,
                               provider:$('gProvider').value,
-                              strategies: strategies.filter(s=>s.w > 0).map(s=>({
-                                id:s.id, name:(stratById(s.id)||{}).name || s.id, weight:s.w})),
+                              focus_areas: areas.filter(area=>area.w > 0).map(area=>({
+                                id:area.id, name:(topicById(area.id)||{}).name || area.id, weight:area.w})),
                             }})});
     $('pubOk').innerHTML = `Published. Take link: <a href="${res.take_url}" target="_blank">${location.origin}${res.take_url}</a> · <a href="${res.print_url}" target="_blank">printable</a> (<a href="${res.print_url}?key=1" target="_blank">with answer key</a>)`;
     await loadAssessments();
@@ -968,10 +973,10 @@ function frameworkSummary(fw){
   const cc = fw.correct_mode === 'exact'
     ? `exact ${fw.correct_exact} correct`
     : `dynamic ${fw.correct_min}–${fw.correct_max} correct`;
-  const strats = (fw.strategies || []).map(s=>`${s.name || s.id} ${s.weight}`).join(', ') || '—';
+  const areas = (fw.focus_areas || []).map(area=>`${area.name || area.id} ${area.weight}`).join(', ') || '—';
   return `${fw.num_questions} questions · ${fw.choice_count} options · ${cc} · difficulty ${fw.difficulty}`
     + ` · provider: ${fw.provider || 'default'}`
-    + `\nStrategies: ${strats}`
+    + `\nFocus areas: ${areas}`
     + (fw.focus ? `\nInstructions: ${fw.focus}` : '');
 }
 

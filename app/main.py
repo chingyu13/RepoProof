@@ -12,8 +12,8 @@ from pydantic import BaseModel
 from . import config, db
 from .analyzer import analyze_project, prune_non_source
 from .generator import generate_questions
-from .ingest import IngestError, clone_github, extract_upload
-from .knowledge import build_chunks
+from .ingest import IngestError, clone_github, delete_project_files, extract_upload, raw_project_files
+from .knowledge import available_evidence_types, build_chunks
 from .scoring import score_attempt
 from .strategies import public_catalog
 from .validator import normalize_answer, validate_maq
@@ -126,6 +126,7 @@ def logout():
 @app.get("/api/meta")
 def meta():
     local_up = config.local_llm_available()
+    assessment_catalog = public_catalog()
     return {
         "mock_mode": config.mock_mode(),
         "model": config.OPENAI_MODEL,
@@ -134,7 +135,10 @@ def meta():
             "openai": {"available": bool(config.openai_api_key()), "model": config.OPENAI_MODEL},
             "local": {"available": local_up, "model": config.LOCAL_LLM_MODEL, "url": config.LOCAL_LLM_URL},
         },
-        "strategies": public_catalog(),
+        "strategies": assessment_catalog["strategies"],
+        "topics": assessment_catalog["topics"],
+        "templates": assessment_catalog["templates"],
+        "evidence_types": assessment_catalog["evidence_types"],
         "max_project_mb": config.MAX_PROJECT_MB,
         "consent_text": config.CONSENT_TEXT,
         "data_sharing_text": config.DATA_SHARING_TEXT,
@@ -200,6 +204,7 @@ async def create_project(
         "name": name,
         "source_type": source_type,
         "source": source,
+        "project_path": str(root.resolve()),
         "snapshot_id": snapshot,
         "stats_json": analysis["stats"],
         "chunks_json": chunks,
@@ -225,14 +230,15 @@ async def create_project(
 def list_projects():
     rows = db.list_where("projects")
     return [{k: r[k] for k in ("id", "name", "source_type", "source", "snapshot_id", "stats", "created_at")}
-            for r in rows]
+            for r in rows if _project_root(r) is not None]
 
 
 @app.get("/api/projects/{project_id}")
 def get_project(project_id: int):
     p = db.get("projects", project_id)
-    if not p:
+    if not p or _project_root(p) is None:
         raise HTTPException(404, "Project not found")
+    p["evidence_types"] = available_evidence_types(p["chunks"])
     p["chunk_count"] = len(p.pop("chunks"))
     return p
 
@@ -241,18 +247,50 @@ def get_project(project_id: int):
 
 class GenerateConfig(BaseModel):
     num_questions: int = 5
-    choice_count: int = 5
-    correct_mode: str = "dynamic"      # 'exact' | 'dynamic'
-    correct_exact: int = 2
+    choice_count: int = 4
+    correct_mode: str = "exact"
+    correct_exact: int = 1
     correct_min: int = 1
     correct_max: int = 3
-    difficulty: int = 2
+    difficulty: int = 3
     focus: str = ""
-    areas: list[dict] = []          # legacy topic radar [{name, weight}] — kept for compat
-    strategies: list[dict] = []     # [{id, weight 0-5, template}] — assessment strategies
-    provider: str = ""              # '' = server default | 'openai' | 'local' | 'mock'
-    keep_approved: bool = False     # unchecked (default): regenerate EVERYTHING fresh;
-                                    # checked: previously approved questions survive
+    topic: str = ""
+    focus_areas: list[dict] = []
+    template: str = ""
+    areas: list[dict] = []
+    provider: str = ""
+    keep_approved: bool = False
+
+
+def _project_root(project: dict) -> Path | None:
+    stored_value = str(project.get("project_path") or "").strip()
+    if not stored_value:
+        return None
+    stored = Path(stored_value)
+    if stored.is_dir():
+        return stored
+    return None
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: int):
+    project = db.get("projects", project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    root = _project_root(project)
+    if root is not None:
+        delete_project_files(root)
+
+    assessment_ids = [row["id"] for row in db.list_where(
+        "assessments", "project_id=?", (project_id,), order="id ASC",
+    )]
+    for assessment_id in assessment_ids:
+        db.delete_where("attempts", "assessment_id=?", (assessment_id,))
+    db.delete_where("assessments", "project_id=?", (project_id,))
+    db.delete_where("questions", "project_id=?", (project_id,))
+    db.delete_where("events", "project_id=?", (project_id,))
+    db.delete("projects", project_id)
+    return {"ok": True}
 
 
 @app.post("/api/projects/{project_id}/generate")
@@ -260,28 +298,42 @@ def generate(project_id: int, cfg: GenerateConfig):
     p = db.get("projects", project_id)
     if not p:
         raise HTTPException(404, "Project not found")
+    raw_files = None
+    provider = (cfg.provider or config.default_provider()).lower()
+    if provider == "openai":
+        root = _project_root(p)
+        if root is None:
+            raise HTTPException(
+                409,
+                "Raw GPT generation needs the original project files. Re-upload this older project first.",
+            )
+        try:
+            raw_files = raw_project_files(root, config.OPENAI_RAW_MAX_CHARS)
+        except IngestError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    questions, warnings = generate_questions(p["chunks"], cfg.model_dump(), raw_files=raw_files)
     # A fresh generation REPLACES the previous pool so the review list shows
     # exactly the batch just requested. By default everything goes; with
     # keep_approved, approved questions survive. Questions referenced by a
     # published assessment are ALWAYS kept (assessment integrity).
     replaced = 0
     used: set[int] = set()
-    for a in db.list_where("assessments", "project_id=?", (project_id,)):
-        used.update(a["question_ids"])
-    for old in db.list_where("questions", "project_id=?", (project_id,)):
-        if cfg.keep_approved and old["status"] == "approved":
-            continue
-        if old["id"] in used:
-            # referenced by a published assessment: the row must survive so old
-            # take-links keep working, but ARCHIVE it so it leaves the review
-            # pool — it stays visible in the Step-4 assessment history instead.
-            if old["status"] != "archived":
-                db.update("questions", old["id"], {"status": "archived"})
-                replaced += 1
-            continue
-        db.delete("questions", old["id"])
-        replaced += 1
-    questions, warnings = generate_questions(p["chunks"], cfg.model_dump())
+    if questions:
+        for a in db.list_where("assessments", "project_id=?", (project_id,)):
+            used.update(a["question_ids"])
+        for old in db.list_where("questions", "project_id=?", (project_id,)):
+            if cfg.keep_approved and old["status"] == "approved":
+                continue
+            if old["id"] in used:
+                # referenced by a published assessment: the row must survive so old
+                # take-links keep working, but ARCHIVE it so it leaves the review
+                # pool — it stays visible in the Step-4 assessment history instead.
+                if old["status"] != "archived":
+                    db.update("questions", old["id"], {"status": "archived"})
+                    replaced += 1
+                continue
+            db.delete("questions", old["id"])
+            replaced += 1
     ids = []
     for q in questions:
         qid = db.insert("questions", {
@@ -307,9 +359,14 @@ def generate(project_id: int, cfg: GenerateConfig):
         "choice_count": cfg.choice_count,
         "correct_mode": cfg.correct_mode,
         "difficulty": cfg.difficulty,
+        "topic": cfg.topic,
+        "focus_areas": [
+            {"id": area.get("id"), "name": area.get("name"), "weight": area.get("weight")}
+            for area in cfg.focus_areas if area.get("id") or area.get("name")
+        ],
+        "template_selection": "focus_matrix",
+        "template_override": cfg.template or None,
         "areas": [a.get("name") for a in cfg.areas if a.get("name")],
-        "strategies": [{"id": s.get("id"), "weight": s.get("weight"), "template": s.get("template")}
-                       for s in cfg.strategies if s.get("id")],
         "warnings": len(warnings),
     }, project_id=project_id)
     return {"created": ids, "warnings": warnings, "mock_mode": config.mock_mode(),
@@ -610,10 +667,7 @@ def print_view(assessment_id: int, key: int = 0):
     if not a:
         raise HTTPException(404, "Assessment not found")
     project = db.get("projects", a["project_id"])
-    # NOTE (review finding): stems/options/explanations are interpolated into
-    # this HTML unescaped. They originate from LLM output over repo content,
-    # so a hostile repository could inject markup here. Wrap the dynamic
-    # values in html.escape() before any multi-tenant/production use.
+    # Escape dynamic assessment content before using this route in multi-tenant mode.
     parts = [f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{a['title']} — RepoProof</title>
 <style>

@@ -1,29 +1,10 @@
-"""Evidence chunks with provenance, plus BM25 keyword retrieval.
-
-Embeddings are deliberately absent from the prototype: BM25 over
-structured chunks is enough to ground MAQ generation, and it needs no
-API key. Hybrid (dense + sparse) retrieval is a design-doc feature for
-the integral version.
-
-The raw (caller, callee) call graph is a flat, unordered edge list that
-would otherwise leave "what's the high-level flow here" entirely up to the
-LLM to reassemble at generation time. _build_call_flow() groups it into one
-call tree per likely entry point — Python and the tree-sitter pilot
-languages (Java/JS/TS/C/C++) alike, since analyzer.py now extracts calls for
-both — so a "flow" chunk reads as an ordered trace instead of a bag of
-edges. Both the grouped trees and the raw edge list are kept as separate
-chunk kinds.
-"""
+"""Static-analysis evidence and BM25 retrieval."""
 import re
 
 from rank_bm25 import BM25Okapi
 
 MAX_CHUNKS = 800
 
-# Domain lexicon for the Python data-engineering focus.  This is deliberately
-# query-side expansion: source chunks keep their original identifiers, while a
-# natural-language focus such as "data ingestion" can also find load_csv() or
-# read_parquet().  Aliases are scored below the words the user actually wrote.
 DATA_ENGINEERING_CONCEPTS = {
     "data_ingestion": {
         "triggers": ("data ingestion", "ingestion", "ingest", "extract load", "etl", "elt"),
@@ -49,12 +30,6 @@ DATA_ENGINEERING_CONCEPTS = {
 
 
 def data_engineering_expansion(text: str) -> list[str]:
-    """Return domain aliases for concepts explicitly present in a focus text.
-
-    The original words are intentionally not rewritten or merged. Callers use
-    this list as a lower-weighted second BM25 query, preserving exact matches
-    while making an assignment description more useful for retrieval.
-    """
     normalized = " ".join(_tokenize(text))
     terms: list[str] = []
     for concept in DATA_ENGINEERING_CONCEPTS.values():
@@ -66,7 +41,10 @@ def data_engineering_expansion(text: str) -> list[str]:
 def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
     chunks: list[dict] = []
 
-    def add(kind: str, title: str, text: str, file: str = "", start: int = 0, end: int = 0):
+    def add(kind: str, title: str, text: str, file: str = "", start: int = 0, end: int = 0,
+            evidence_types: tuple[str, ...] = ()):
+        if len(chunks) >= MAX_CHUNKS:
+            return
         chunks.append({
             "id": f"c{len(chunks)}",
             "kind": kind,
@@ -76,6 +54,7 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
             "start_line": start,
             "end_line": end,
             "snapshot": snapshot_id,
+            "evidence_types": list(dict.fromkeys(evidence_types)),
         })
 
     if analysis.get("readme"):
@@ -83,7 +62,8 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
 
     if analysis.get("dependencies"):
         add("dependencies", "Declared dependencies",
-            "The project declares these dependencies:\n" + "\n".join(analysis["dependencies"]))
+            "The project declares these dependencies:\n" + "\n".join(analysis["dependencies"]),
+            evidence_types=("dependency_graph",))
 
     if analysis.get("files"):
         rows = []
@@ -91,14 +71,14 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
             rel, lang = entry if isinstance(entry, (list, tuple)) else (entry, "Python")
             rows.append(f"{rel}  [{lang}]")
         add("structure", "Project file structure",
-            "Source files in the project (path [language]):\n" + "\n".join(rows))
+            "Source files in the project (path [language]):\n" + "\n".join(rows),
+            evidence_types=("module_graph",))
 
     for rel, mods in list(analysis.get("file_imports", {}).items())[:150]:
         add("imports", f"Imports in {rel}",
-            f"The module {rel} imports: {', '.join(mods)}", file=rel)
+            f"The module {rel} imports: {', '.join(mods)}", file=rel,
+            evidence_types=("dependency_graph",))
 
-    # Repo-internal import graph (which file depends on which) — resolved by
-    # analyzer._resolve_import_graph, so stdlib/third-party edges never appear.
     import_edges = analysis.get("import_edges") or []
     if import_edges:
         rows = []
@@ -107,7 +87,7 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
             rows.append(f"{src} -> {dst}{what}")
         add("import_graph", "Internal import graph",
             "Repo-internal import dependencies (importer -> imported file (symbols)):\n"
-            + "\n".join(rows))
+            + "\n".join(rows), evidence_types=("module_graph", "dependency_graph"))
 
     for mv in analysis.get("module_vars", [])[:200]:
         names = ", ".join(mv["names"])
@@ -116,7 +96,8 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
             f"(lines {mv['start_line']}-{mv['end_line']}).\nCode:\n{mv['code']}"
         )
         add("module_var", f"Constant {names} ({mv['file']})", text,
-            file=mv["file"], start=mv["start_line"], end=mv["end_line"])
+            file=mv["file"], start=mv["start_line"], end=mv["end_line"],
+            evidence_types=("symbol_table",))
 
     for cls in analysis.get("classes", [])[:200]:
         text = (
@@ -127,30 +108,42 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
             f"Docstring: {cls['docstring'] or '(none)'}"
         )
         add("class", f"Class {cls['qualname']}", text,
-            file=cls["file"], start=cls["start_line"], end=cls["end_line"])
+            file=cls["file"], start=cls["start_line"], end=cls["end_line"],
+            evidence_types=("symbol_table",))
 
     for fn in analysis.get("functions", []):
         if len(chunks) >= MAX_CHUNKS:
             break
+        location = (
+            f"cell {fn['cell_index']}"
+            if "cell_index" in fn
+            else f"lines {fn['start_line']}-{fn['end_line']}"
+        )
         text = (
             f"{'Async function' if fn['is_async'] else 'Function'} {fn['qualname']} "
-            f"in {fn['file']} (lines {fn['start_line']}-{fn['end_line']}).\n"
+            f"in {fn['file']} ({location}).\n"
             f"Parameters: {', '.join(fn['args']) or 'none'}.\n"
             f"Docstring: {fn['docstring'] or '(none)'}\n"
             f"Code:\n{fn['code']}"
         )
-        add("function", f"Function {fn['qualname']} ({fn['file']})", text,
-            file=fn["file"], start=fn["start_line"], end=fn["end_line"])
+        title_location = f", cell {fn['cell_index']}" if "cell_index" in fn else ""
+        add("function", f"Function {fn['qualname']} ({fn['file']}{title_location})", text,
+            file=fn["file"], start=fn["start_line"], end=fn["end_line"],
+            evidence_types=("symbol_table", "data_flow_graph", "control_flow_graph"))
 
     # Jupyter notebook code cells (one chunk per non-trivial, comment-cleaned cell)
     for nb in analysis.get("notebooks", []):
         for cell in nb["cells"]:
             if len(chunks) >= MAX_CHUNKS:
                 break
+            cell_evidence_types = ("data_flow_graph", "control_flow_graph")
+            if cell["type"] == "code":
+                cell_evidence_types += ("symbol_table",)
             add("notebook_cell",
                 f"{nb['file']} — cell {cell['index']} ({cell['type']}, {nb['language']})",
                 f"Notebook {nb['file']}, cell {cell['index']} ({cell['type']}):\n{cell['source']}",
-                file=nb["file"], start=cell["index"], end=cell["index"])
+                file=nb["file"], start=cell["index"], end=cell["index"],
+                evidence_types=cell_evidence_types)
 
     # Generic source files (R, Java, JS, HTML, CSS, SQL, ...): split non-empty,
     # comment-cleaned lines into segments. Empty former-comment lines do not
@@ -168,7 +161,12 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
                 f"{f['language']} file {f['file']} (lines {start}-{end})",
                 f"{f['language']} file {f['file']} ({f['line_count']} lines{decls}).\n"
                 f"Content (lines {start}-{end}):\n" + "\n".join(line for _, line in seg),
-                file=f["file"], start=start, end=end)
+                file=f["file"], start=start, end=end,
+                evidence_types=(
+                    ("sql_analysis",)
+                    if f["language"].lower() == "sql"
+                    else ("symbol_table", "data_flow_graph", "control_flow_graph")
+                ))
 
     for tree in _build_call_flow(analysis.get("functions", []), analysis.get("calls", []),
                                  analysis.get("imported_symbols")):
@@ -179,14 +177,113 @@ def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
             f"Call flow from {entry['qualname']} ({entry['file']})",
             f"Approximate execution flow starting at {entry['qualname']} — likely an entry "
             f"point, since no other analyzed function calls it:\n{tree['text']}",
-            file=entry["file"], start=entry["start_line"], end=entry["end_line"])
+            file=entry["file"], start=entry["start_line"], end=entry["end_line"],
+            evidence_types=("call_graph", "data_flow_graph", "control_flow_graph"))
 
     calls = analysis.get("calls", [])
     if calls:
         edges = "\n".join(f"{caller} -> {callee}" for caller, callee in calls[:400])
-        add("callgraph", "Approximate call graph", "Approximate call edges (caller -> callee):\n" + edges)
+        add("callgraph", "Approximate call graph", "Approximate call edges (caller -> callee):\n" + edges,
+            evidence_types=("call_graph",))
+
+    _add_evidence_summaries(add, analysis)
 
     return chunks
+
+
+def _add_evidence_summaries(add, analysis: dict) -> None:
+    """Add compact static summaries without passing a raw project to an LLM."""
+    files = analysis.get("files", [])
+    functions = analysis.get("functions", [])
+    classes = analysis.get("classes", [])
+    module_vars = analysis.get("module_vars", [])
+
+    # Module graph inventory is useful even when a project has no resolvable
+    # internal imports (for example, a single-file notebook assignment).
+    module_rows = []
+    for entry in files[:300]:
+        rel, language = entry if isinstance(entry, (list, tuple)) else (entry, "Unknown")
+        module_rows.append(f"{rel} [{language}]")
+    for src, dst, _ in (analysis.get("import_edges") or [])[:200]:
+        module_rows.append(f"{src} -> {dst}")
+    if module_rows:
+        add("module_graph", "Module graph summary",
+            "Static module inventory and internal relationships:\n" + "\n".join(module_rows),
+            evidence_types=("module_graph",))
+
+    symbols = []
+    symbols.extend(f"module variable {', '.join(item['names'])} — {item['file']}"
+                   for item in module_vars[:160])
+    symbols.extend(f"class {item['qualname']} — {item['file']} (methods: {', '.join(item['methods']) or 'none'})"
+                   for item in classes[:160])
+    symbols.extend(f"function {item['qualname']}({', '.join(item['args'])}) — {item['file']}"
+                   for item in functions[:300])
+    if symbols:
+        add("symbol_table", "Symbol table summary",
+            "Statically discovered project symbols:\n" + "\n".join(symbols),
+            evidence_types=("symbol_table",))
+
+    complexity_rows = []
+    branch_re = re.compile(r"\b(if|elif|else|case|except|catch|switch)\b")
+    loop_re = re.compile(r"\b(for|while|do)\b")
+    call_re = re.compile(r"\w+\s*\(")
+    for fn in functions[:300]:
+        code = fn.get("code", "")
+        complexity_rows.append(
+            f"{fn['qualname']} ({fn['file']} lines {fn['start_line']}-{fn['end_line']}): "
+            f"{len(code.splitlines())} code lines; {len(loop_re.findall(code))} loop keyword(s); "
+            f"{len(branch_re.findall(code))} branch keyword(s); {len(call_re.findall(code))} call-like expression(s)."
+        )
+    if complexity_rows:
+        add("complexity", "Static complexity indicators",
+            "Heuristic indicators only — not a formal Big-O proof:\n" + "\n".join(complexity_rows),
+            evidence_types=("complexity_analysis",))
+
+    test_rows = []
+    for entry in files[:300]:
+        rel = entry[0] if isinstance(entry, (list, tuple)) else entry
+        name = rel.rsplit("/", 1)[-1].lower()
+        if name.startswith("test_") or name.endswith("_test.py") or "/tests/" in f"/{rel.lower()}":
+            test_rows.append(f"test-like file: {rel}")
+    for fn in functions[:300]:
+        if fn["name"].lower().startswith("test"):
+            test_rows.append(f"test-like function: {fn['qualname']} ({fn['file']})")
+    if test_rows:
+        add("test_discovery", "Test discovery summary",
+            "Statically discovered test artefacts:\n" + "\n".join(dict.fromkeys(test_rows)),
+            evidence_types=("test_discovery",))
+
+    api_rows = []
+    route_re = re.compile(
+        r"@(app|router|blueprint|bp)\.(get|post|put|patch|delete|route)\b|"
+        r"\b(GET|POST|PUT|PATCH|DELETE)\s+(/[A-Za-z0-9_./{}:-]+)", re.I
+    )
+    for fn in functions[:300]:
+        if route_re.search(fn.get("code", "")):
+            api_rows.append(f"route/endpoint indicator: {fn['qualname']} ({fn['file']} lines {fn['start_line']}-{fn['end_line']})")
+    for source in analysis.get("other_files", [])[:150]:
+        for line_no, line in enumerate(source.get("text", "").splitlines(), start=1):
+            if route_re.search(line):
+                api_rows.append(f"route/endpoint indicator: {source['file']} line {line_no}: {line.strip()[:160]}")
+    if api_rows:
+        add("api_discovery", "API discovery summary",
+            "Statically discovered API/route indicators:\n" + "\n".join(list(dict.fromkeys(api_rows))[:200]),
+            evidence_types=("api_discovery",))
+
+    sql_rows = []
+    sql_re = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE|CREATE\s+TABLE|ALTER\s+TABLE|FROM|JOIN)\b", re.I)
+    for source in analysis.get("other_files", [])[:150]:
+        if source.get("language", "").lower() == "sql":
+            sql_rows.append(f"SQL source file: {source['file']} ({source['line_count']} lines)")
+        elif sql_re.search(source.get("text", "")):
+            sql_rows.append(f"SQL-like statement detected in: {source['file']}")
+    for fn in functions[:300]:
+        if sql_re.search(fn.get("code", "")):
+            sql_rows.append(f"SQL-like statement detected in function: {fn['qualname']} ({fn['file']})")
+    if sql_rows:
+        add("sql_analysis", "SQL analysis summary",
+            "Statically discovered SQL artefacts:\n" + "\n".join(dict.fromkeys(sql_rows)),
+            evidence_types=("sql_analysis",))
 
 
 def _build_call_flow(functions: list[dict], calls: list[tuple[str, str]],
@@ -278,30 +375,116 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
-class ChunkIndex:
+_LEGACY_KIND_EVIDENCE_TYPES = {
+    "dependencies": ("dependency_graph",),
+    "structure": ("module_graph",),
+    "imports": ("dependency_graph",),
+    "import_graph": ("module_graph", "dependency_graph"),
+    "module_var": ("symbol_table",),
+    "class": ("symbol_table",),
+    "function": ("symbol_table", "data_flow_graph", "control_flow_graph"),
+    "notebook_cell": ("symbol_table", "data_flow_graph", "control_flow_graph"),
+    "source": ("symbol_table", "data_flow_graph", "control_flow_graph"),
+    "flow": ("call_graph", "data_flow_graph", "control_flow_graph"),
+    "callgraph": ("call_graph",),
+}
+
+
+def evidence_types_for_chunk(chunk: dict) -> tuple[str, ...]:
+    stored = chunk.get("evidence_types")
+    if stored:
+        return tuple(stored)
+    return _LEGACY_KIND_EVIDENCE_TYPES.get(chunk.get("kind"), ())
+
+
+def available_evidence_types(chunks: list[dict]) -> list[str]:
+    return sorted({evidence_type for chunk in chunks for evidence_type in evidence_types_for_chunk(chunk)})
+
+
+class EvidenceStore:
     def __init__(self, chunks: list[dict]):
         self.chunks = chunks
         corpus = [_tokenize(c["title"] + " " + c["text"]) for c in chunks] or [["empty"]]
         self.bm25 = BM25Okapi(corpus)
 
     def retrieve(self, query: str, k: int = 6, kinds: tuple[str, ...] = (),
-                 expansion_terms: list[str] | tuple[str, ...] = ()) -> list[dict]:
-        # BM25 scores every chunk against the query terms (rewarding rare
-        # terms, damping very long chunks), then we take the top k. `kinds`
-        # optionally restricts results to chunk types, e.g. only functions.
+                 evidence_types: tuple[str, ...] = (),
+                 expansion_terms: list[str] | tuple[str, ...] = (),
+                 exclude_ids: set[str] | frozenset[str] = frozenset()) -> list[dict]:
         scores = self.bm25.get_scores(_tokenize(query))
         if expansion_terms:
-            # An alias match is useful but must not outweigh the user's own
-            # wording.  BM25 has no semantic model; this fixed, transparent
-            # bonus is the domain knowledge supplied by the lexicon above.
             scores = scores + 0.35 * self.bm25.get_scores(_tokenize(" ".join(expansion_terms)))
         ranked = sorted(range(len(self.chunks)), key=lambda i: scores[i], reverse=True)
         out = []
         for i in ranked:
             c = self.chunks[i]
+            if c["id"] in exclude_ids:
+                continue
             if kinds and c["kind"] not in kinds:
+                continue
+            if evidence_types and not set(evidence_types_for_chunk(c)).intersection(evidence_types):
                 continue
             out.append(c)
             if len(out) >= k:
                 break
         return out
+
+    def retrieve_bundle(self, query: str, evidence_spec: dict, *,
+                        fallback_evidence_types: tuple[str, ...] = (),
+                        expansion_terms: list[str] | tuple[str, ...] = (),
+                        variant: int = 0) -> tuple[list[dict], list[str]]:
+        max_chunks = evidence_spec["max_chunks"]
+        selected: list[dict] = []
+        selected_ids: set[str] = set()
+        missing: list[str] = []
+
+        def add_group(group: dict, required: bool) -> None:
+            group_query = " ".join(part for part in (query, group["query"]) if part)
+            candidates = self.retrieve(
+                group_query,
+                k=max(8, max_chunks * 4),
+                kinds=tuple(group["kinds"]),
+                evidence_types=tuple(group["types"]),
+                expansion_terms=expansion_terms,
+            )
+            if candidates:
+                start = variant % len(candidates)
+                candidates = candidates[start:] + candidates[:start]
+            added = 0
+            for chunk in candidates:
+                if chunk["id"] in selected_ids:
+                    continue
+                selected.append(chunk)
+                selected_ids.add(chunk["id"])
+                added += 1
+                if added >= group["count"] or len(selected) >= max_chunks:
+                    break
+            if required and added < group["count"]:
+                missing.append(group["label"])
+
+        for group in evidence_spec["required"]:
+            add_group(group, True)
+        if missing:
+            return selected, missing
+
+        for group in evidence_spec["optional"]:
+            if len(selected) >= max_chunks:
+                break
+            add_group(group, False)
+
+        if len(selected) < max_chunks:
+            fill = self.retrieve(
+                query,
+                k=max_chunks * 4,
+                evidence_types=fallback_evidence_types,
+                expansion_terms=expansion_terms,
+                exclude_ids=frozenset(selected_ids),
+            )
+            if fill:
+                start = variant % len(fill)
+                fill = fill[start:] + fill[:start]
+            selected.extend(fill[:max_chunks - len(selected)])
+        return selected[:max_chunks], []
+
+
+ChunkIndex = EvidenceStore

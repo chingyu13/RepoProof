@@ -1,6 +1,7 @@
 """Project intake: public GitHub clone or uploaded zip, with the 1 GB size gate."""
 import hashlib
 import io
+import json
 import re
 import shutil
 import subprocess
@@ -16,6 +17,22 @@ SKIP_DIRS = {
     ".git", "node_modules", ".venv", "venv", "__pycache__", ".mypy_cache",
     ".pytest_cache", ".tox", "dist", "build", ".idea", ".vscode", ".eggs",
 }
+
+RAW_CODE_EXTENSIONS = {
+    ".py", ".ipynb", ".r", ".rmd", ".java", ".kt", ".scala", ".js", ".jsx", ".mjs",
+    ".ts", ".tsx", ".vue", ".html", ".htm", ".css", ".scss", ".sql", ".c", ".h",
+    ".cpp", ".cc", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".sh", ".ps1",
+    ".swift", ".jl", ".lua", ".pl", ".m", ".dart",
+}
+RAW_CONTEXT_NAMES = {
+    "dockerfile", "procfile", "makefile", "gemfile", "rakefile", "requirements.txt",
+    "pyproject.toml", "setup.py", "setup.cfg", "package.json", "composer.json", "runtime.txt",
+    "pom.xml", "build.gradle", "build.gradle.kts", "cargo.toml", "go.mod",
+}
+RAW_SKIP_NAMES = {
+    "package-lock.json", "yarn.lock", "poetry.lock", "pnpm-lock.yaml",
+}
+RAW_SKIP_DIRS = {".claude", "coverage"}
 
 
 class IngestError(Exception):
@@ -107,11 +124,73 @@ def extract_upload(data: bytes, filename: str) -> tuple[Path, str, str]:
     return root, checksum, name
 
 
+def _notebook_source(text: str) -> str:
+    try:
+        notebook = json.loads(text)
+    except json.JSONDecodeError:
+        return ""
+    cells = []
+    for cell in notebook.get("cells", []):
+        if cell.get("cell_type") not in {"code", "markdown"}:
+            continue
+        source = cell.get("source", [])
+        cells.append(source if isinstance(source, str) else "".join(source))
+    return "\n\n".join(cells)
+
+
+def _raw_file_priority(path: Path, root: Path) -> int | None:
+    relative = path.relative_to(root)
+    name = path.name.lower()
+    parts = {part.lower() for part in relative.parts}
+    if parts & RAW_SKIP_DIRS or name in RAW_SKIP_NAMES or ".min." in name:
+        return None
+    if name == ".env" or name.startswith(".env.") or any(
+        marker in name for marker in ("credential", "secret", ".pem", ".key")
+    ):
+        return None
+    if name.startswith("readme") or name in RAW_CONTEXT_NAMES:
+        return 0
+    if path.suffix.lower() in RAW_CODE_EXTENSIONS:
+        return 2 if any(part in {"test", "tests"} for part in parts) else 1
+    return None
+
+
+def raw_project_files(root: Path, max_chars: int) -> list[dict]:
+    candidates = []
+    for path in root.rglob("*"):
+        if not path.is_file() or set(path.parts) & SKIP_DIRS:
+            continue
+        priority = _raw_file_priority(path, root)
+        if priority is not None:
+            candidates.append((priority, path))
+
+    files = []
+    total_chars = 0
+    max_file_chars = max_chars // 2
+    for _, path in sorted(candidates, key=lambda item: (item[0], item[1].as_posix())):
+        try:
+            raw_text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise IngestError(f"Could not read source file {path.name}: {exc}") from exc
+        text = _notebook_source(raw_text) if path.suffix.lower() == ".ipynb" else raw_text
+        if not text.strip() or len(text) > max_file_chars or total_chars + len(text) > max_chars:
+            continue
+        files.append({
+            "id": f"f{len(files)}",
+            "file": path.relative_to(root).as_posix(),
+            "text": text,
+        })
+        total_chars += len(text)
+    if not files:
+        raise IngestError("No usable source files fit the GPT context limit.")
+    return files
+
+
 def delete_project_files(root: Path) -> None:
-    """Secure-enough deletion for the prototype: remove the working copy."""
-    base = root
-    if base.parent != config.PROJECTS_DIR and config.PROJECTS_DIR in base.parents:
-        # extracted zips may nest one level down; remove the outer dir
-        while base.parent != config.PROJECTS_DIR:
-            base = base.parent
+    base = root.resolve()
+    projects_root = config.PROJECTS_DIR.resolve()
+    if base == projects_root or projects_root not in base.parents:
+        return
+    while base.parent != projects_root:
+        base = base.parent
     shutil.rmtree(base, ignore_errors=True)

@@ -39,7 +39,7 @@ Static analysis  (Python AST + multi-language text analysis)
         ↓
 Evidence-chunk construction  (file / line / cell / snapshot provenance)
         ↓
-BM25 retrieval  (steered by question blueprint + focus-area weights)
+Focus × Template selection  →  template-specific BM25 evidence bundle
         ↓
 LLM generation  (strict-JSON, evidence-grounded)  OR  deterministic mock
         ↓
@@ -56,7 +56,7 @@ Publish → Take → Exact-match scoring  (per-focus-area breakdown)
 - **Static analysis.** Python gets a deep `ast` walk — functions, classes, imports, and an approximate **call graph**. Jupyter notebooks are parsed per cell. 30+ other file types get lightweight declaration extraction.
 - **Constrained generation + self-correction.** The model is called in **strict JSON mode** against a fixed schema; options are shuffled to remove positional bias; each candidate is validated, and on failure the generator **retries once with the validation errors fed back into the prompt**.
 - **Constraint validation.** Every MAQ must have 2–7 distinct options, one unambiguous correct combination (all-correct disallowed), difficulty 1–5, and linked evidence — the same gate blocks human approval.
-- **Focus-area steering.** An interactive radar chart weights areas (Architecture, Testing, …); weights expand into a proportional question schedule.
+- **Focus-area steering.** An interactive radar chart weights areas (Architecture, Testing, …); weights allocate question topics, then a Focus × Template matrix selects evidence-sufficient question forms.
 - **MLOps telemetry.** An append-only event log captures generation config and human review/edit signals (derived metadata only — never raw code); a metrics endpoint aggregates approval rate, human-edit rate, and validator-block rate for comparing prompt/model versions.
 - **Auth & intake security.** Creator routes are protected by HMAC-signed `httponly` session cookies behind a password gate; intake validates GitHub URLs, runs shallow timed clones, guards against zip path traversal, and gates total project size.
 - **Deterministic mock mode.** With no API key, RepoProof produces evidence-grounded sample questions labeled `[MOCK]`, so the entire flow is demoable without spending tokens.

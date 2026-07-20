@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     source_type TEXT NOT NULL,          -- 'git' | 'upload'
     source TEXT NOT NULL,               -- URL or original filename
+    project_path TEXT NOT NULL DEFAULT '',
     snapshot_id TEXT NOT NULL,          -- commit SHA prefix or archive checksum
     stats_json TEXT NOT NULL DEFAULT '{}',
     chunks_json TEXT NOT NULL DEFAULT '[]',
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS events (
 # Applied idempotently on init() so existing SQLite files pick them up.
 _MIGRATIONS = [
     ("projects", "consent_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("projects", "project_path", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 
@@ -147,6 +149,11 @@ def update(table: str, row_id: int, values: dict) -> None:
 def delete(table: str, row_id: int) -> None:
     with connect() as con:
         con.execute(f"DELETE FROM {table} WHERE id=?", (row_id,))
+
+
+def delete_where(table: str, where: str, params: tuple = ()) -> None:
+    with connect() as con:
+        con.execute(f"DELETE FROM {table} WHERE {where}", params)
 
 
 def get(table: str, row_id: int) -> dict | None:

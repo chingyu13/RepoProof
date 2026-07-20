@@ -1,395 +1,289 @@
-"""Assessment-strategy catalog.
+"""Assessment catalog for focus-driven local question generation."""
+from __future__ import annotations
 
-A strategy configures HOW the AI verifies understanding of the submitted
-code — not WHAT topics it asks about (topics will eventually be extracted
-automatically from the assignment description and grading rubric).
-
-Each strategy carries:
-  - a fixed prompt directive (how to ask),
-  - a fixed distractor-generation method (how wrong options are built),
-  - a retrieval query (which evidence chunks suit this strategy),
-  - a set of templates (variants of the strategy; exactly one is default).
-
-Question `focus_areas` are tagged with the strategy name, so the existing
-per-focus scoring buckets automatically become the per-strategy
-"Student Understanding Profile" in reports (e.g. Explain 92% / Debugging 45%).
-
-Custom (creator-authored) templates are planned; the UI already reserves the
-slot ("Custom template — coming soon").
-"""
+import json
+import os
+from copy import deepcopy
+from pathlib import Path
 
 
-def _t(tid: str, name: str, directive: str, default: bool = False) -> dict:
-    return {"id": tid, "name": name, "directive": directive, "default": default}
+_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_PATH = _ROOT / "strategy_overrides.json"
+_OVERRIDE_PATH = Path(os.environ.get("REPOPROOF_STRATEGY_OVERRIDES", str(_DEFAULT_PATH)))
+
+BUILT_IN_STRATEGY_IDS = (
+    "explain",
+    "execution",
+    "prediction",
+    "debugging",
+    "modification",
+)
 
 
-STRATEGIES: list[dict] = [
-    {
-        "id": "explain", "name": "Explain", "default_weight": 5,
-        "goal": "Verify conceptual understanding.",
-        "example": "Why is a queue used here?",
-        "query": "purpose design decision why choose core function class approach",
-        "distractors": (
-            "Incorrect options must be plausible but wrong rationales: benefits this "
-            "construct does not provide in THIS code, reasons that would apply to a "
-            "different data structure/approach, or purposes contradicted by the evidence."),
-        "templates": [
-            _t("explain_design_decision", "Explain Design Decision",
-               "Ask WHY the code uses a particular structure, construct, or approach "
-               "(e.g. 'Why is a queue used here?'). Correct options state the actual "
-               "reason evident from the code.", default=True),
-            _t("explain_function_purpose", "Explain Function Purpose",
-               "Pick one concrete function from the evidence and ask what its purpose/"
-               "role in the program is."),
-            _t("explain_algorithm", "Explain Algorithm",
-               "Ask what algorithmic idea the code implements and why it fits this problem."),
-            _t("explain_data_structure", "Explain Data Structure",
-               "Ask why a specific data structure is used and what property of it the code relies on."),
+def _catalog_path() -> Path:
+    if _OVERRIDE_PATH.is_file():
+        return _OVERRIDE_PATH
+    raise FileNotFoundError(f"No assessment catalog found. Expected {_OVERRIDE_PATH}.")
+
+
+def _required(raw: dict, keys: tuple[str, ...], kind: str) -> None:
+    missing = [key for key in keys if key not in raw]
+    if missing:
+        raise ValueError(f"{kind} {raw.get('id')!r} missing keys: {missing}")
+
+
+def _clean_id(value: object, kind: str) -> str:
+    result = str(value or "").strip()
+    if not result:
+        raise ValueError(f"{kind} needs a non-empty id")
+    return result
+
+
+def _normalize_weights(raw: object, ids: tuple[str, ...], *, owner: str) -> dict[str, float]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{owner} template weights must be an object")
+    unknown = sorted(set(raw) - set(ids))
+    if unknown:
+        raise ValueError(f"{owner} references unknown templates: {unknown}")
+    weights = {}
+    for template_id in ids:
+        try:
+            value = float(raw.get(template_id, 0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{owner} has a non-numeric weight for {template_id!r}") from exc
+        if not 0 <= value <= 1:
+            raise ValueError(f"{owner} weight for {template_id!r} must be between 0 and 1")
+        weights[template_id] = value
+    return weights
+
+
+def _normalize_strategy(raw: dict) -> dict:
+    _required(raw, ("id", "name", "prefix"), "strategy")
+    return {
+        "id": _clean_id(raw["id"], "strategy"),
+        "name": str(raw["name"]).strip(),
+        "prefix": str(raw["prefix"]).strip(),
+    }
+
+
+def _normalize_evidence_type(raw: dict) -> dict:
+    _required(raw, ("id", "name", "description"), "evidence type")
+    return {
+        "id": _clean_id(raw["id"], "evidence type"),
+        "name": str(raw["name"]).strip(),
+        "description": str(raw["description"]).strip(),
+    }
+
+
+def _normalize_evidence_group(raw: dict, evidence_ids: tuple[str, ...],
+                              *, owner: str) -> dict:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{owner} evidence group must be an object")
+    evidence_types = [_clean_id(value, "evidence type") for value in raw.get("types", [])]
+    unknown = sorted(set(evidence_types) - set(evidence_ids))
+    if unknown:
+        raise ValueError(f"{owner} references unknown evidence types: {unknown}")
+    kinds = [_clean_id(value, "chunk kind") for value in raw.get("kinds", [])]
+    if not evidence_types and not kinds:
+        raise ValueError(f"{owner} evidence group needs types or kinds")
+    count = int(raw.get("count", 1))
+    if not 1 <= count <= 4:
+        raise ValueError(f"{owner} evidence count must be between 1 and 4")
+    return {
+        "types": list(dict.fromkeys(evidence_types)),
+        "kinds": list(dict.fromkeys(kinds)),
+        "count": count,
+        "query": str(raw.get("query", "")).strip(),
+        "label": str(raw.get("label", "")).strip() or owner,
+    }
+
+
+def _normalize_template(raw: dict, strategy_ids: tuple[str, ...],
+                        evidence_ids: tuple[str, ...]) -> dict:
+    _required(raw, ("id", "name", "strategy", "pattern", "query", "evidence"), "template")
+    strategy_id = _clean_id(raw["strategy"], "template strategy")
+    if strategy_id not in strategy_ids:
+        raise ValueError(f"template {raw['id']!r} references unknown strategy {strategy_id!r}")
+    evidence = raw["evidence"]
+    if not isinstance(evidence, dict):
+        raise ValueError(f"template {raw['id']!r} evidence must be an object")
+    required_groups = [
+        _normalize_evidence_group(group, evidence_ids, owner=f"template {raw['id']!r} required")
+        for group in evidence.get("required", [])
+    ]
+    if not required_groups:
+        raise ValueError(f"template {raw['id']!r} needs at least one required evidence group")
+    optional_groups = [
+        _normalize_evidence_group(group, evidence_ids, owner=f"template {raw['id']!r} optional")
+        for group in evidence.get("optional", [])
+    ]
+    max_chunks = int(evidence.get("max_chunks", 4))
+    evidence_chars = int(evidence.get("chars_per_chunk", 1800))
+    if not 1 <= max_chunks <= 6:
+        raise ValueError(f"template {raw['id']!r} max_chunks must be between 1 and 6")
+    if not 500 <= evidence_chars <= 5000:
+        raise ValueError(f"template {raw['id']!r} chars_per_chunk must be between 500 and 5000")
+    return {
+        "id": _clean_id(raw["id"], "template"),
+        "name": str(raw["name"]).strip(),
+        "strategy": strategy_id,
+        "pattern": str(raw["pattern"]).strip(),
+        "query": str(raw["query"]).strip(),
+        "evidence": {
+            "required": required_groups,
+            "optional": optional_groups,
+            "max_chunks": max_chunks,
+            "chars_per_chunk": evidence_chars,
+        },
+    }
+
+
+def _normalize_topic(raw: dict, evidence_ids: tuple[str, ...],
+                     template_ids: tuple[str, ...]) -> dict:
+    _required(raw, ("id", "name", "query", "evidence_types", "template_weights"), "topic")
+    requested = [_clean_id(value, "topic evidence type") for value in raw["evidence_types"]]
+    if not requested:
+        raise ValueError(f"topic {raw['id']!r} needs at least one evidence type")
+    unknown = sorted(set(requested) - set(evidence_ids))
+    if unknown:
+        raise ValueError(f"topic {raw['id']!r} references unknown evidence types: {unknown}")
+    return {
+        "id": _clean_id(raw["id"], "topic"),
+        "name": str(raw["name"]).strip(),
+        "query": str(raw["query"]).strip(),
+        "description": str(raw.get("description", "")).strip(),
+        "evidence_types": list(dict.fromkeys(requested)),
+        "template_weights": _normalize_weights(
+            raw["template_weights"], template_ids, owner=f"topic {raw['id']!r}"
+        ),
+    }
+
+
+def _unique(items: list[dict], kind: str) -> None:
+    ids = [item["id"] for item in items]
+    if len(ids) != len(set(ids)):
+        raise ValueError(f"duplicate {kind} ids in catalog")
+
+
+def load_catalog(path: Path | None = None) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+    catalog = path or _catalog_path()
+    data = json.loads(catalog.read_text(encoding="utf-8"))
+    raw_strategies = data.get("strategies")
+    raw_templates = data.get("templates")
+    raw_evidence_types = data.get("evidence_types")
+    raw_topics = data.get("topics")
+    if not isinstance(raw_strategies, list):
+        raise ValueError(f"{catalog} must contain a 'strategies' list")
+    if not isinstance(raw_templates, list) or not raw_templates:
+        raise ValueError(f"{catalog} must contain a non-empty 'templates' list")
+    if not isinstance(raw_evidence_types, list) or not raw_evidence_types:
+        raise ValueError(f"{catalog} must contain a non-empty 'evidence_types' list")
+    if not isinstance(raw_topics, list) or not raw_topics:
+        raise ValueError(f"{catalog} must contain a non-empty 'topics' list")
+
+    strategies = [_normalize_strategy(item) for item in raw_strategies]
+    _unique(strategies, "strategy")
+    strategy_ids = tuple(item["id"] for item in strategies)
+    if set(strategy_ids) != set(BUILT_IN_STRATEGY_IDS):
+        raise ValueError(
+            "catalog strategies must contain exactly: " + ", ".join(BUILT_IN_STRATEGY_IDS)
+        )
+    by_strategy_id = {item["id"]: item for item in strategies}
+    strategies = [by_strategy_id[strategy_id] for strategy_id in BUILT_IN_STRATEGY_IDS]
+
+    evidence_types = [_normalize_evidence_type(item) for item in raw_evidence_types]
+    _unique(evidence_types, "evidence type")
+    evidence_ids = tuple(item["id"] for item in evidence_types)
+
+    templates = [
+        _normalize_template(item, strategy_ids, evidence_ids) for item in raw_templates
+    ]
+    _unique(templates, "template")
+    template_ids = tuple(item["id"] for item in templates)
+
+    topics = [
+        _normalize_topic(item, evidence_ids, template_ids) for item in raw_topics
+    ]
+    _unique(topics, "topic")
+    return strategies, templates, evidence_types, topics
+
+
+STRATEGIES, TEMPLATES, EVIDENCE_TYPES, TOPICS = load_catalog()
+STRATEGY_BY_ID = {item["id"]: item for item in STRATEGIES}
+TEMPLATE_BY_ID = {item["id"]: item for item in TEMPLATES}
+EVIDENCE_TYPE_BY_ID = {item["id"]: item for item in EVIDENCE_TYPES}
+TOPIC_BY_ID = {item["id"]: item for item in TOPICS}
+
+
+def reload_strategies(path: Path | None = None) -> list[dict]:
+    global STRATEGIES, TEMPLATES, EVIDENCE_TYPES, TOPICS
+    global STRATEGY_BY_ID, TEMPLATE_BY_ID, EVIDENCE_TYPE_BY_ID, TOPIC_BY_ID
+    STRATEGIES, TEMPLATES, EVIDENCE_TYPES, TOPICS = load_catalog(path)
+    STRATEGY_BY_ID = {item["id"]: item for item in STRATEGIES}
+    TEMPLATE_BY_ID = {item["id"]: item for item in TEMPLATES}
+    EVIDENCE_TYPE_BY_ID = {item["id"]: item for item in EVIDENCE_TYPES}
+    TOPIC_BY_ID = {item["id"]: item for item in TOPICS}
+    return STRATEGIES
+
+
+def weighted_template_schedule(topic: dict, count: int,
+                               available_template_ids: set[str] | None = None) -> list[dict]:
+    candidates = [
+        template for template in TEMPLATES
+        if topic["template_weights"][template["id"]] > 0
+        and (available_template_ids is None or template["id"] in available_template_ids)
+    ]
+    if count <= 0 or not candidates:
+        return []
+
+    weights = [topic["template_weights"][template["id"]] for template in candidates]
+    total = sum(weights)
+    raw_allocations = [count * weight / total for weight in weights]
+    allocations = [int(value) for value in raw_allocations]
+    remaining = count - sum(allocations)
+    order = sorted(
+        range(len(candidates)),
+        key=lambda i: (-(raw_allocations[i] - allocations[i]), -weights[i], i),
+    )
+    for index in order[:remaining]:
+        allocations[index] += 1
+
+    ranked = sorted(range(len(candidates)), key=lambda i: (-weights[i], i))
+    schedule = []
+    while any(allocations):
+        for index in ranked:
+            if allocations[index]:
+                schedule.append(candidates[index])
+                allocations[index] -= 1
+    return schedule
+
+
+def public_catalog() -> dict:
+    return {
+        "strategies": [
+            {key: strategy[key] for key in ("id", "name")}
+            for strategy in STRATEGIES
         ],
-    },
-    {
-        "id": "debugging", "name": "Debugging", "default_weight": 1,
-        "goal": "Verify whether students can identify incorrect logic.",
-        "example": "Which change would break/fix this condition?",
-        "query": "condition if else boundary check validate error handle edge",
-        "distractors": (
-            "Base every option ONLY on the evidence. Correct options identify genuine "
-            "flaws, fragile assumptions, or unhandled cases actually visible in the code; "
-            "incorrect options accuse the code of flaws it verifiably does NOT have."),
         "templates": [
-            _t("find_the_bug", "Find the Bug",
-               "Ask which statements correctly identify a real flaw/limitation in the code.",
-               default=True),
-            _t("find_incorrect_condition", "Find Incorrect Condition",
-               "Focus on boundary/logic conditions: which condition is wrong or fragile, "
-               "or what input would make a given condition misbehave."),
-            _t("find_missing_statement", "Find Missing Statement",
-               "Ask what necessary handling/statement is absent (e.g. missing reset, "
-               "missing validation) given the code's intent."),
-            _t("find_incorrect_variable", "Find Incorrect Variable",
-               "Ask which variable use/update is wrong or would cause incorrect results."),
-            _t("find_incorrect_algorithm", "Find Incorrect Algorithm",
-               "Ask whether the implemented algorithm actually satisfies the stated intent, "
-               "and where it deviates."),
+            {key: template[key] for key in ("id", "name", "strategy")}
+            for template in TEMPLATES
         ],
-    },
-    {
-        "id": "execution", "name": "Execution", "default_weight": 4,
-        "goal": "Verify whether students can mentally execute the program.",
-        "example": "What is the value of x after the third iteration?",
-        "query": "loop iterate call main run compute update state variable",
-        "distractors": (
-            "Incorrect options must be values/orders produced by COMMON TRACING MISTAKES: "
-            "off-by-one iteration counts, wrong initial value, skipped condition, "
-            "reversed call order, or using the pre-update value."),
-        "templates": [
-            _t("trace_variables", "Trace Variables",
-               "Ask the taker to trace concrete variable values through an execution of "
-               "the code in the evidence.", default=True),
-            _t("trace_function_calls", "Trace Function Calls",
-               "Ask which functions are called, in what order, for a concrete run."),
-            _t("predict_output", "Predict Output",
-               "Ask what the code prints/returns for a concrete, evidence-grounded input."),
-            _t("trace_recursion", "Trace Recursion",
-               "Ask about the recursion: depth, base-case hit, or argument values at a given level."),
-            _t("trace_state_changes", "Trace State Changes",
-               "Ask how a data structure's contents change step by step during execution."),
+        "evidence_types": [
+            {key: evidence[key] for key in ("id", "name", "description")}
+            for evidence in EVIDENCE_TYPES
         ],
-    },
-    {
-        "id": "prediction", "name": "Prediction", "default_weight": 2,
-        "goal": "Verify reasoning about unseen situations.",
-        "example": "What happens if this input is empty?",
-        "query": "exception raise error return output result input handle",
-        "distractors": (
-            "Incorrect options must be plausible alternative outcomes: the wrong exception "
-            "type, a silently wrong value instead of an error, or behavior the code would "
-            "show only under a different condition."),
-        "templates": [
-            _t("predict_behaviour", "Predict Behaviour",
-               "Describe a concrete situation not explicitly tested in the code and ask "
-               "what the code would do.", default=True),
-            _t("predict_runtime", "Predict Runtime",
-               "Ask how runtime/behavior changes as input grows or conditions change."),
-            _t("predict_exception", "Predict Exception",
-               "Ask what error/exception (if any) a specific scenario triggers."),
-            _t("predict_side_effects", "Predict Side Effects",
-               "Ask what state/files/outputs are affected beyond the return value."),
+        "topics": [
+            {
+                "id": topic["id"],
+                "name": topic["name"],
+                "description": topic["description"],
+                "evidence_types": list(topic["evidence_types"]),
+                "template_weights": dict(topic["template_weights"]),
+            }
+            for topic in TOPICS
         ],
-    },
-    {
-        "id": "modification", "name": "Modification", "default_weight": 3,
-        "goal": "Verify adaptation ability.",
-        "example": "How would you support a new requirement?",
-        "query": "function parameter config extend add support feature change",
-        "distractors": (
-            "Incorrect options must be changes that LOOK reasonable but would break "
-            "existing behavior, miss a dependency visible in the evidence, or fail to "
-            "achieve the requirement."),
-        "templates": [
-            _t("support_new_requirement", "Support New Requirement",
-               "State a small new requirement and ask which changes would correctly "
-               "implement it in THIS codebase.", default=True),
-            _t("optimize_complexity", "Optimize Complexity",
-               "Ask which change would genuinely improve time/space complexity here."),
-            _t("refactor_code", "Refactor Code",
-               "Ask which refactoring preserves behavior while improving the code."),
-            _t("improve_robustness", "Improve Robustness",
-               "Ask which change would make the code handle failures/bad input better."),
-        ],
-    },
-    {
-        "id": "comparison", "name": "Comparison", "default_weight": 3,
-        "goal": "Compare alternatives.",
-        "example": "Why this implementation instead of an alternative?",
-        "query": "algorithm data structure implementation approach alternative choice",
-        "distractors": (
-            "Incorrect options must swap or misattribute trade-offs: advantages that "
-            "actually belong to the alternative, or costs the chosen approach does not have."),
-        "templates": [
-            _t("compare_implementations", "Compare Implementations",
-               "Compare the code's implementation with a plausible alternative and ask "
-               "which trade-off statements are true.", default=True),
-            _t("compare_algorithms", "Compare Algorithms",
-               "Compare the used algorithm to a named alternative on correctness/cost."),
-            _t("compare_data_structures", "Compare Data Structures",
-               "Compare the chosen data structure with an alternative for THIS usage."),
-            _t("choose_better_design", "Choose Better Design",
-               "Present design variants and ask which is better here — and why."),
-        ],
-    },
-    {
-        "id": "edge_cases", "name": "Edge Cases", "default_weight": 3,
-        "goal": "Test boundary condition understanding.",
-        "example": "What happens with an empty list?",
-        "query": "empty null missing input validate boundary limit zero none",
-        "distractors": (
-            "Incorrect options must be plausible but wrong boundary behaviors: claiming a "
-            "crash where the code actually handles it, or claiming graceful handling where "
-            "the evidence shows none."),
-        "templates": [
-            _t("missing_input", "Missing Input",
-               "Ask how the code behaves when an expected input/field is missing.", default=True),
-            _t("empty_input", "Empty Input",
-               "Ask what happens on empty collections/strings/files."),
-            _t("large_dataset", "Large Dataset",
-               "Ask what happens (memory/time/limits) with very large input."),
-            _t("invalid_state", "Invalid State",
-               "Ask how the code behaves when internal state is inconsistent/unexpected."),
-            _t("corner_case", "Corner Case",
-               "Ask about an unusual-but-possible combination of conditions in the code."),
-        ],
-    },
-    {
-        "id": "complexity", "name": "Complexity", "default_weight": 3,
-        "goal": "Test efficiency understanding.",
-        "example": "What is the time complexity of this function?",
-        "query": "loop nested sort search iterate algorithm complexity performance",
-        "distractors": (
-            "Incorrect options must be ADJACENT complexity classes or analyses that ignore "
-            "one loop/operation visible in the code (e.g. O(n) vs O(n log n) vs O(n²))."),
-        "templates": [
-            _t("time_complexity", "Time Complexity",
-               "Ask for the time complexity of a specific function in the evidence.", default=True),
-            _t("space_complexity", "Space Complexity",
-               "Ask for the additional space the code uses and why."),
-            _t("bottleneck_analysis", "Bottleneck Analysis",
-               "Ask which part dominates cost for large inputs."),
-            _t("scalability", "Scalability",
-               "Ask what breaks first as data/users grow, given the code."),
-        ],
-    },
-    {
-        "id": "design", "name": "Design", "default_weight": 3,
-        "goal": "Test architecture understanding.",
-        "example": "Why is this responsibility in this module?",
-        "query": "class module structure imports responsibility layer architecture",
-        "distractors": (
-            "Incorrect options must misattribute responsibilities (claiming module A does "
-            "what module B does) or assert couplings/patterns the evidence contradicts."),
-        "templates": [
-            _t("design_rationale", "Design Rationale",
-               "Ask why the code is organized the way it is (modules/layers/boundaries).",
-               default=True),
-            _t("responsibility", "Responsibility",
-               "Ask which module/class is responsible for a given concern."),
-            _t("coupling_cohesion", "Coupling & Cohesion",
-               "Ask which statements about dependencies between modules are true."),
-            _t("pattern_recognition", "Pattern Recognition",
-               "Ask which design pattern/idiom the code actually follows."),
-        ],
-    },
-    {
-        "id": "testing", "name": "Testing", "default_weight": 3,
-        "goal": "Test verification mindset.",
-        "example": "Which test best verifies this behavior?",
-        "query": "test assert validate check verify behavior case",
-        "distractors": (
-            "Incorrect options must be tests that LOOK relevant but do not actually "
-            "exercise the target logic, assert the wrong thing, or would pass even if "
-            "the code were broken."),
-        "templates": [
-            _t("best_test_case", "Best Test Case",
-               "Ask which test case would best verify a specific behavior in the evidence.",
-               default=True),
-            _t("missing_test", "Missing Test",
-               "Ask which important case is NOT covered by the visible tests/logic."),
-            _t("boundary_test", "Boundary Test",
-               "Ask which test would catch a boundary error in this code."),
-            _t("failure_scenario", "Failure Scenario",
-               "Ask which scenario would expose a failure mode of this code."),
-        ],
-    },
-]
+    }
 
 
-# ---------------------------------------------------------------------------
-# Small-model scaffolding. Local 7B models imitate concrete patterns far
-# better than they follow abstract directives, so every template gets a FIXED
-# stem pattern (fill-in-the-placeholders skeleton) and every strategy gets a
-# code-quoting policy. Without this, a local model tends to paste a code block
-# into every stem; GPT-4o naturally mixes conceptual/flow/architecture
-# questions — the scaffolding closes that gap.
-#   code_quote: "snippet" = quote the 3-7 lines the question hinges on;
-#               "minimal" = at most 1-3 lines (e.g. a signature) if needed;
-#               "none"    = conceptual — refer to functions/files by name only.
-# ---------------------------------------------------------------------------
-
-CODE_QUOTE = {
-    "explain": "minimal", "debugging": "snippet", "execution": "snippet",
-    "prediction": "minimal", "modification": "minimal", "comparison": "none",
-    "edge_cases": "minimal", "complexity": "snippet", "design": "none",
-    "testing": "minimal",
-}
-
-STEM_PATTERNS = {
-    # Explain — conceptual, name things instead of pasting them
-    "explain_design_decision": "Why does <function/module> in <file> use <construct/approach>?",
-    "explain_function_purpose": "What is the role of <function> (<file>) in this project?",
-    "explain_algorithm": "Which statements correctly describe the algorithmic idea implemented by <function> in <file>?",
-    "explain_data_structure": "Why is <data structure> used in <function> (<file>)?",
-    # Execution — quote the exact lines being traced
-    "trace_variables": "Consider this code from <file>:\n<3-7 line snippet>\nAfter <concrete step/iteration>, which statements about <variable> are correct?",
-    "trace_function_calls": "When <entry function> in <file> runs, which statements about the order of function calls are correct?",
-    "predict_output": "Consider this code from <file>:\n<3-7 line snippet>\nWhat does it return/print for <concrete input>?",
-    "trace_recursion": "Consider the recursive function <function> in <file>:\n<3-7 line snippet>\nWhich statements about its recursion for <input> are correct?",
-    "trace_state_changes": "Consider this code from <file>:\n<3-7 line snippet>\nHow does <data structure> change while it runs?",
-    # Debugging — quote the suspect lines
-    "find_the_bug": "Consider this code from <file>:\n<3-7 line snippet>\nWhich statements identify a real flaw or limitation?",
-    "find_incorrect_condition": "Consider this code from <file>:\n<3-7 line snippet>\nWhich statements about the condition(s) are correct?",
-    "find_missing_statement": "Consider this code from <file>:\n<3-7 line snippet>\nWhat necessary handling is missing?",
-    "find_incorrect_variable": "Consider this code from <file>:\n<3-7 line snippet>\nWhich statements about how <variable> is used/updated are correct?",
-    "find_incorrect_algorithm": "The function <function> in <file> is meant to <intent>:\n<3-7 line snippet>\nWhich statements about whether it achieves this are correct?",
-    # Prediction — situation-first, little or no code
-    "predict_behaviour": "What happens when <function> in <file> is called with <situation>?",
-    "predict_runtime": "How does the behavior/runtime of <function> (<file>) change as <input grows / condition changes>?",
-    "predict_exception": "What happens if <error scenario> while <function> (<file>) runs?",
-    "predict_side_effects": "Beyond its return value, what does <function> in <file> affect?",
-    # Modification — conceptual change reasoning
-    "support_new_requirement": "To make this project <new requirement>, which changes would work?",
-    "optimize_complexity": "Which change would genuinely reduce the cost of <function> (<file>)?",
-    "refactor_code": "Which refactoring of <function> (<file>) preserves behavior while improving the code?",
-    "improve_robustness": "Which change would make <function> (<file>) handle failures or bad input better?",
-    # Comparison — pure concept, no code
-    "compare_implementations": "This project implements <task> using <approach>. Compared with <alternative>, which statements are true?",
-    "compare_algorithms": "The project uses <algorithm> for <task>. Compared with <alternative algorithm>, which statements are true?",
-    "compare_data_structures": "The project stores <data> in <structure>. Compared with <alternative structure>, which statements are true?",
-    "choose_better_design": "For <goal in this project>, which statements about the design alternatives are correct?",
-    # Edge cases — scenario-first
-    "missing_input": "What happens when <expected input/field> is missing while <function> (<file>) runs?",
-    "empty_input": "What happens when <function> (<file>) receives an empty <collection/string>?",
-    "large_dataset": "What happens as the input to <function> (<file>) becomes very large?",
-    "invalid_state": "What happens if <state> is inconsistent when <function> (<file>) runs?",
-    "corner_case": "Which statements describe how <function> (<file>) behaves when <corner case>?",
-    # Complexity — quote the loop(s) that matter
-    "time_complexity": "Consider this code from <file>:\n<3-7 line snippet>\nWhat is its time complexity?",
-    "space_complexity": "Consider this code from <file>:\n<3-7 line snippet>\nHow much extra memory does it use, and why?",
-    "bottleneck_analysis": "Which part of <function/pipeline> in <file> dominates the cost for large inputs?",
-    "scalability": "As data grows, which statements about the scalability of <component> are correct?",
-    # Design — architecture in words
-    "design_rationale": "Why is this project organized with <module structure / separation>?",
-    "responsibility": "Which module or class is responsible for <concern> in this project?",
-    "coupling_cohesion": "Which statements about the dependencies between <module A> and <module B> are correct?",
-    "pattern_recognition": "Which design pattern or idiom does <component> in <file> follow?",
-    # Testing — verification mindset
-    "best_test_case": "Which test case would best verify <behavior> of <function> (<file>)?",
-    "missing_test": "Which important case is NOT covered for <function> (<file>)?",
-    "boundary_test": "Which test would catch a boundary error in <function> (<file>)?",
-    "failure_scenario": "Which scenario would expose a failure mode of <function> (<file>)?",
-}
-
-for _s in STRATEGIES:
-    _s["code_quote"] = CODE_QUOTE[_s["id"]]
-    for _tpl in _s["templates"]:
-        _tpl["pattern"] = STEM_PATTERNS.get(_tpl["id"], "")
-
-
-# ---------------------------------------------------------------------------
-# Creator-editable overrides — tweak any wording WITHOUT touching this file.
-# Put a `strategy_overrides.json` next to run.py (or point the
-# REPOPROOF_STRATEGY_OVERRIDES env var at a file):
-#
-# {
-#   "strategies": {
-#     "execution": {"code_quote": "minimal", "distractors": "..."}
-#   },
-#   "templates": {
-#     "trace_variables": {"pattern": "...", "directive": "...", "default": true}
-#   }
-# }
-#
-# Allowed strategy keys:  name, goal, example, query, distractors,
-#                         code_quote, default_weight
-# Allowed template keys:  name, directive, pattern, default
-# Applied at import time — restart the server after editing. Unknown ids/keys
-# are ignored silently, and a broken JSON file just means "no overrides".
-# See strategy_overrides.example.json for a starting point.
-# ---------------------------------------------------------------------------
-import json as _json
-import os as _os
-from pathlib import Path as _Path
-
-_OVERRIDE_PATH = _Path(_os.environ.get(
-    "REPOPROOF_STRATEGY_OVERRIDES",
-    str(_Path(__file__).resolve().parent.parent / "strategy_overrides.json")))
-
-_STRATEGY_KEYS = ("name", "goal", "example", "query", "distractors", "code_quote", "default_weight")
-_TEMPLATE_KEYS = ("name", "directive", "pattern", "default")
-
-
-def _apply_overrides() -> None:
-    if not _OVERRIDE_PATH.is_file():
-        return
-    try:
-        data = _json.loads(_OVERRIDE_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return
-    strat_over = data.get("strategies", {}) or {}
-    tmpl_over = data.get("templates", {}) or {}
-    for s in STRATEGIES:
-        for key, val in (strat_over.get(s["id"]) or {}).items():
-            if key in _STRATEGY_KEYS:
-                s[key] = val
-        for t in s["templates"]:
-            for key, val in (tmpl_over.get(t["id"]) or {}).items():
-                if key in _TEMPLATE_KEYS:
-                    t[key] = val
-
-
-_apply_overrides()
-
-STRATEGY_BY_ID = {s["id"]: s for s in STRATEGIES}
-
-
-def default_template(strategy: dict) -> dict:
-    return next((t for t in strategy["templates"] if t.get("default")), strategy["templates"][0])
-
-
-def public_catalog() -> list[dict]:
-    """Catalog for the UI (/api/meta): no prompt/distractor internals."""
-    return [{
-        "id": s["id"], "name": s["name"], "goal": s["goal"],
-        "example": s["example"], "default_weight": s["default_weight"],
-        "templates": [{"id": t["id"], "name": t["name"], "default": bool(t.get("default"))}
-                      for t in s["templates"]],
-    } for s in STRATEGIES]
+def strategy_snapshot() -> list[dict]:
+    return deepcopy(STRATEGIES)

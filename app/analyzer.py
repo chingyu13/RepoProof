@@ -456,6 +456,7 @@ def _analyze_notebook(rel: str, raw: str, out: dict) -> str | None:
             or nb.get("metadata", {}).get("language_info", {}).get("name")
             or "unknown")
     cells = []
+    python_notebook = str(lang).lower() in {"python", "python3", "ipython"}
     for i, cell in enumerate(nb.get("cells", [])):
         # Markdown is narrative rather than executable project evidence. It
         # can dominate a notebook upload, so only index non-empty code cells.
@@ -466,6 +467,19 @@ def _analyze_notebook(rel: str, raw: str, out: dict) -> str | None:
         src = _strip_comments(src, language=lang)
         if src.strip():
             cells.append({"index": i, "type": "code", "source": src.strip()[:2000]})
+            if python_notebook:
+                try:
+                    tree = ast.parse(src)
+                except SyntaxError:
+                    continue
+                visitor = _Visitor(src, rel)
+                visitor.visit(tree)
+                for item in visitor.functions + visitor.classes:
+                    item["cell_index"] = i
+                    item["start_line"] = i
+                    item["end_line"] = i
+                out["functions"].extend(visitor.functions)
+                out["classes"].extend(visitor.classes)
     out["notebooks"].append({"file": rel, "language": lang, "cells": cells[:200]})
     return f"Notebook ({lang})"
 
