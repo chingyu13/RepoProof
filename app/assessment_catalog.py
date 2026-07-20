@@ -1,15 +1,14 @@
-"""Assessment catalog for focus-driven local question generation."""
+"""Validated assessment catalog for focus-driven Local LLM generation."""
 from __future__ import annotations
 
 import json
 import os
-from copy import deepcopy
 from pathlib import Path
 
 
 _ROOT = Path(__file__).resolve().parent.parent
-_DEFAULT_PATH = _ROOT / "strategy_overrides.json"
-_OVERRIDE_PATH = Path(os.environ.get("REPOPROOF_STRATEGY_OVERRIDES", str(_DEFAULT_PATH)))
+_DEFAULT_PATH = _ROOT / "assessment_catalog.json"
+_CATALOG_PATH = Path(os.environ.get("REPOPROOF_ASSESSMENT_CATALOG", str(_DEFAULT_PATH)))
 
 BUILT_IN_STRATEGY_IDS = (
     "explain",
@@ -21,9 +20,9 @@ BUILT_IN_STRATEGY_IDS = (
 
 
 def _catalog_path() -> Path:
-    if _OVERRIDE_PATH.is_file():
-        return _OVERRIDE_PATH
-    raise FileNotFoundError(f"No assessment catalog found. Expected {_OVERRIDE_PATH}.")
+    if _CATALOG_PATH.is_file():
+        return _CATALOG_PATH
+    raise FileNotFoundError(f"No assessment catalog found. Expected {_CATALOG_PATH}.")
 
 
 def _required(raw: dict, keys: tuple[str, ...], kind: str) -> None:
@@ -215,17 +214,6 @@ EVIDENCE_TYPE_BY_ID = {item["id"]: item for item in EVIDENCE_TYPES}
 TOPIC_BY_ID = {item["id"]: item for item in TOPICS}
 
 
-def reload_strategies(path: Path | None = None) -> list[dict]:
-    global STRATEGIES, TEMPLATES, EVIDENCE_TYPES, TOPICS
-    global STRATEGY_BY_ID, TEMPLATE_BY_ID, EVIDENCE_TYPE_BY_ID, TOPIC_BY_ID
-    STRATEGIES, TEMPLATES, EVIDENCE_TYPES, TOPICS = load_catalog(path)
-    STRATEGY_BY_ID = {item["id"]: item for item in STRATEGIES}
-    TEMPLATE_BY_ID = {item["id"]: item for item in TEMPLATES}
-    EVIDENCE_TYPE_BY_ID = {item["id"]: item for item in EVIDENCE_TYPES}
-    TOPIC_BY_ID = {item["id"]: item for item in TOPICS}
-    return STRATEGIES
-
-
 def weighted_template_schedule(topic: dict, count: int,
                                available_template_ids: set[str] | None = None) -> list[dict]:
     candidates = [
@@ -258,32 +246,12 @@ def weighted_template_schedule(topic: dict, count: int,
     return schedule
 
 
-def public_catalog() -> dict:
-    return {
-        "strategies": [
-            {key: strategy[key] for key in ("id", "name")}
-            for strategy in STRATEGIES
-        ],
-        "templates": [
-            {key: template[key] for key in ("id", "name", "strategy")}
-            for template in TEMPLATES
-        ],
-        "evidence_types": [
-            {key: evidence[key] for key in ("id", "name", "description")}
-            for evidence in EVIDENCE_TYPES
-        ],
-        "topics": [
-            {
-                "id": topic["id"],
-                "name": topic["name"],
-                "description": topic["description"],
-                "evidence_types": list(topic["evidence_types"]),
-                "template_weights": dict(topic["template_weights"]),
-            }
-            for topic in TOPICS
-        ],
-    }
-
-
-def strategy_snapshot() -> list[dict]:
-    return deepcopy(STRATEGIES)
+def public_topics() -> list[dict]:
+    return [
+        {
+            "id": topic["id"],
+            "name": topic["name"],
+            "description": topic["description"],
+        }
+        for topic in TOPICS
+    ]

@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from . import config
 from .knowledge import EvidenceStore, data_engineering_expansion, evidence_types_for_chunk
-from .strategies import (
+from .assessment_catalog import (
     EVIDENCE_TYPE_BY_ID,
     STRATEGY_BY_ID,
     TEMPLATE_BY_ID,
@@ -16,28 +16,6 @@ from .strategies import (
     weighted_template_schedule,
 )
 from .validator import OPTION_KEYS, find_similar_question, validate_maq
-
-# Default blueprint (design doc §7): slots instantiated against each repo.
-DEFAULT_BLUEPRINT = [
-    {"slot": "comprehension", "focus": "Implementation / Code Logic",
-     "query": "core main function implementation logic",
-     "brief": "Pick one concrete function from the evidence and ask what it does / how it behaves."},
-    {"slot": "comprehension", "focus": "Implementation / Code Logic",
-     "query": "class method process handle compute parse",
-     "brief": "Pick a different function or class and ask about its behavior or purpose."},
-    {"slot": "flow", "focus": "Workflow / Data Flow",
-     "query": "entry point main call flow pipeline run",
-     "brief": "Ask about execution or data flow: what calls what, in which order."},
-    {"slot": "structure", "focus": "Architecture",
-     "query": "module package file structure imports",
-     "brief": "Ask about module/folder responsibilities and how modules depend on each other."},
-    {"slot": "storage", "focus": "Data modelling",
-     "query": "database file save load persist config json read write",
-     "brief": "Ask how data is stored, loaded, or exchanged (files, DB, network, config)."},
-    {"slot": "dependencies", "focus": "Programming-language knowledge",
-     "query": "dependencies libraries imports frameworks",
-     "brief": "Ask which libraries the project actually uses and what for."},
-]
 
 SYSTEM_PROMPT = """You are RepoProof, an assessment generator. You write ONE multi-answer question (MAQ) \
 about a specific software project, grounded ONLY in the structured static evidence provided. You are \
@@ -641,30 +619,24 @@ def _specific_evidence_errors(question: dict, slot: dict, chunk_by_id: dict[str,
 
 def _raw_focus_areas(cfg: dict) -> list[tuple[str, int, str]]:
     areas: list[tuple[str, int, str]] = []
-    for entry in (cfg.get("focus_areas") or []) + (cfg.get("areas") or []):
+    for entry in cfg.get("focus_areas") or []:
         if not isinstance(entry, dict):
             continue
         topic_id = str(entry.get("id") or "").strip()
-        requested_name = str(entry.get("name") or topic_id).strip()
         topic = TOPIC_BY_ID.get(topic_id)
         if topic is None:
-            topic = next(
-                (item for item in TOPIC_BY_ID.values() if item["name"].casefold() == requested_name.casefold()),
-                None,
-            )
-        name = topic["name"] if topic else requested_name
+            continue
         try:
             weight = max(0, min(5, int(entry.get("weight", 0))))
         except (TypeError, ValueError):
             continue
-        if name and weight:
-            description = topic["description"] if topic else ""
-            if topic:
-                guidance = RAW_TOPIC_GUIDANCE.get(topic["id"], "")
-                if guidance:
-                    description = f"{description} {guidance}".strip()
-            areas.append((name, weight, description))
-    return areas or [("Project understanding", 1, "Assess the overall purpose and behaviour of the project.")]
+        if weight:
+            description = topic["description"]
+            guidance = RAW_TOPIC_GUIDANCE.get(topic["id"], "")
+            if guidance:
+                description = f"{description} {guidance}".strip()
+            areas.append((topic["name"], weight, description))
+    return areas
 
 
 def _raw_source_chunks(raw_files: list[dict]) -> dict[str, dict]:
@@ -687,7 +659,7 @@ def _raw_source_chunks(raw_files: list[dict]) -> dict[str, dict]:
 
 def _raw_code_logic_plan(cfg: dict, count: int) -> dict[int, str]:
     selected: set[str] = set()
-    for entry in (cfg.get("focus_areas") or []) + (cfg.get("areas") or []):
+    for entry in cfg.get("focus_areas") or []:
         if not isinstance(entry, dict):
             continue
         try:
@@ -697,11 +669,7 @@ def _raw_code_logic_plan(cfg: dict, count: int) -> dict[int, str]:
         if weight <= 0:
             continue
         topic_id = str(entry.get("id") or "").strip()
-        name = str(entry.get("name") or "").strip().casefold()
-        topic = TOPIC_BY_ID.get(topic_id) or next(
-            (item for item in TOPIC_BY_ID.values() if item["name"].casefold() == name),
-            None,
-        )
+        topic = TOPIC_BY_ID.get(topic_id)
         if topic:
             selected.add(topic["id"])
     if selected != {"project_logic"}:
@@ -841,7 +809,6 @@ form that best tests the requested concept.
 
 ORIGINAL PROJECT FILES:
 {files}
-{code_logic_requirements}
 
 Before returning JSON, verify the requested question count and every assigned `question_type`.
 """
@@ -1062,21 +1029,9 @@ def _generate_raw_openai_questions(
     return questions, warnings
 
 
-def _find_topic(value: object) -> dict | None:
-    key = str(value or "").strip()
-    if key in TOPIC_BY_ID:
-        return TOPIC_BY_ID[key]
-    normalized = key.casefold()
-    return next(
-        (topic for topic in TOPIC_BY_ID.values() if topic["name"].casefold() == normalized),
-        None,
-    )
-
-
-def _selected_topics(cfg: dict) -> tuple[list[tuple[dict, int]], list[tuple[str, int]]]:
+def _selected_topics(cfg: dict) -> list[tuple[dict, int]]:
     topic_weights: dict[str, int] = {}
     topic_order: list[str] = []
-    legacy_areas: list[tuple[str, int]] = []
 
     def add(raw: object, weight: object) -> None:
         try:
@@ -1085,30 +1040,17 @@ def _selected_topics(cfg: dict) -> tuple[list[tuple[dict, int]], list[tuple[str,
             return
         if parsed_weight <= 0:
             return
-        topic = _find_topic(raw)
+        topic = TOPIC_BY_ID.get(str(raw or "").strip())
         if topic:
             if topic["id"] not in topic_weights:
                 topic_order.append(topic["id"])
                 topic_weights[topic["id"]] = 0
             topic_weights[topic["id"]] += parsed_weight
-        elif str(raw or "").strip():
-            legacy_areas.append((str(raw).strip(), parsed_weight))
 
     for entry in cfg.get("focus_areas") or []:
         if isinstance(entry, dict):
-            add(entry.get("id", entry.get("name")), entry.get("weight", 0))
-        else:
-            add(entry, 1)
-    if not topic_weights and cfg.get("topic"):
-        add(cfg.get("topic"), 1)
-    for entry in cfg.get("areas") or []:
-        if isinstance(entry, dict):
-            add(entry.get("id", entry.get("name")), entry.get("weight", 0))
-
-    return (
-        [(TOPIC_BY_ID[topic_id], topic_weights[topic_id]) for topic_id in topic_order],
-        legacy_areas,
-    )
+            add(entry.get("id"), entry.get("weight", 0))
+    return [(TOPIC_BY_ID[topic_id], topic_weights[topic_id]) for topic_id in topic_order]
 
 
 def _template_query(topic: dict, template: dict, extra_focus: str) -> str:
@@ -1285,30 +1227,20 @@ def _needs_supporting_code(template_id: str, evidence: list[dict], topic_id: str
 
 
 def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
-                   rng: random.Random) -> tuple[list[dict], list[str], bool]:
-    focus_topics, legacy_areas = _selected_topics(cfg)
+                   rng: random.Random) -> tuple[list[dict], list[str]]:
+    focus_topics = _selected_topics(cfg)
     if not focus_topics:
-        return [], [], False
+        return [], ["Select at least one valid Focus Area before generating."]
 
     extra_focus = str(cfg.get("focus") or "").strip()
-    override_id = str(cfg.get("template") or "").strip()
-    if override_id == "automatic":
-        override_id = ""
-    template_override = TEMPLATE_BY_ID.get(override_id)
     warnings = []
-    if override_id and not template_override:
-        warnings.append(f"Unknown template {override_id!r}; using the focus matrix.")
 
     availability: dict[str, dict] = {}
     for topic, _ in focus_topics:
-        candidate_templates = (
-            [template_override]
-            if template_override
-            else [
-                template for template in TEMPLATE_BY_ID.values()
-                if topic["template_weights"][template["id"]] > 0
-            ]
-        )
+        candidate_templates = [
+            template for template in TEMPLATE_BY_ID.values()
+            if topic["template_weights"][template["id"]] > 0
+        ]
         available_ids = set()
         missing_by_template = {}
         for template in candidate_templates:
@@ -1354,7 +1286,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
     ]
     topic_seq = _proportional_schedule(available_focus_topics, num)
     if not topic_seq:
-        return [], warnings, True
+        return [], warnings
 
     topic_counts: dict[str, int] = {}
     for topic in topic_seq:
@@ -1363,12 +1295,9 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
     schedules: dict[str, list[dict]] = {}
     for topic, _ in available_focus_topics:
         available_ids = availability[topic["id"]]["available_ids"]
-        if template_override and template_override["id"] in available_ids:
-            schedules[topic["id"]] = [template_override] * topic_counts[topic["id"]]
-        else:
-            schedules[topic["id"]] = weighted_template_schedule(
-                topic, topic_counts[topic["id"]], available_ids
-            )
+        schedules[topic["id"]] = weighted_template_schedule(
+            topic, topic_counts[topic["id"]], available_ids
+        )
 
     tasks = []
     topic_offsets: dict[str, int] = {}
@@ -1491,7 +1420,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
                 cfg, max(2, min(7, int(cfg.get("choice_count", 4)))), rng
             ),
         })
-    return tasks, warnings, True
+    return tasks, warnings
 
 
 def generate_questions(
@@ -1533,7 +1462,6 @@ def generate_questions(
     num = int(cfg.get("num_questions", 5))
     choice_count = max(2, min(7, int(cfg.get("choice_count", 4))))
     difficulty = max(1, min(5, int(cfg.get("difficulty", 3))))
-    extra_focus = (cfg.get("focus") or "").strip()
 
     mock = provider == "mock"
     generator_label = {"mock": "mock", "local": f"local:{config.LOCAL_LLM_MODEL}"}[provider]
@@ -1552,42 +1480,10 @@ def generate_questions(
         }
         cfg["_generation_metrics"] = metrics
     seed = int(cfg.get("seed", 42))
-    tasks, task_warnings, tag_catalog = _catalog_tasks(evidence_store, cfg, num, rng)
+    tasks, task_warnings = _catalog_tasks(evidence_store, cfg, num, rng)
     fallback_warnings.extend(task_warnings)
     _notify(progress, "retrieving_evidence", current=0, total=len(tasks) or num,
             message=f"Matched structured evidence for {len(tasks)} question slot(s).")
-
-    if not tag_catalog:
-        focus_topics, legacy_areas = _selected_topics(cfg)
-        weighted_areas = [name for name, weight in legacy_areas for _ in range(weight)]
-        for index in range(num):
-            slot = dict(DEFAULT_BLUEPRINT[index % len(DEFAULT_BLUEPRINT)])
-            focus_for_prompt = extra_focus
-            query = slot["query"] + (" " + extra_focus if extra_focus else "")
-            if weighted_areas:
-                area = weighted_areas[(index * len(weighted_areas)) // num % len(weighted_areas)]
-                slot["focus"] = area
-                query += " " + area
-                focus_for_prompt = ((extra_focus + "; ") if extra_focus else "") + (
-                    f"primary focus area: {area}"
-                )
-            evidence = evidence_store.retrieve(
-                query,
-                k=4,
-                expansion_terms=data_engineering_expansion(focus_for_prompt),
-            )
-            slot["default_evidence_ids"] = [chunk["id"] for chunk in evidence]
-            slot["requested_difficulty"] = difficulty
-            tasks.append({
-                "i": index,
-                "slot": slot,
-                "slot_variants": [slot],
-                "evidence_variants": [evidence],
-                "evidence_chars": 1400,
-                "focus_for_prompt": focus_for_prompt,
-                "alignment": {},
-                "correct_count": _pick_correct_count(cfg, choice_count, rng),
-            })
 
     def _run(task: dict, previous_questions: list[dict]):
         slot = task["slot"]
@@ -1610,8 +1506,7 @@ def generate_questions(
 
         def _accept(cand, warning=None, outcome: str = ""):
             cand["generator"] = generator_label
-            if tag_catalog:
-                cand["focus_areas"] = [slot["focus"]]
+            cand["focus_areas"] = [slot["focus"]]
             cand["alignment"] = task.get("alignment") or _question_alignment(
                 cand, cfg, task["i"]
             )
@@ -1700,7 +1595,7 @@ def generate_questions(
                     metrics["validation_failures"] += 1
             except GenerationError as exc:
                 last_err = str(exc)
-            except Exception as exc:  # API/JSON errors -> retry once, then warn
+            except Exception as exc:
                 last_err = f"{type(exc).__name__}: {exc}"
         if last_valid is not None:
             return _accept(

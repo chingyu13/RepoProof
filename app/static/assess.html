@@ -99,8 +99,7 @@ async function api(path, opts={}) {
 }
 function esc(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
-/* --- adaptive state: answers accumulate locally, order is what the server
-       uses to judge the previous answer and pick the next difficulty --- */
+/* Adaptive delivery submits each answer before requesting the next question. */
 let adaptive = false;
 const accResponses = {};
 const accOrder = [];
@@ -185,7 +184,7 @@ function showReport(s){
   const r = $('report');
   r.style.display = 'block';
   let html = `<h1>Result: ${s.correct}/${s.total} (${s.percent}%)</h1>`;
-  // Understanding Profile: per-strategy (or per-topic) bars, e.g. Explain 92% / Debugging 45%
+  // Understanding Profile groups results by Focus Area.
   html += '<h3>Understanding profile</h3>' + Object.entries(s.per_focus).map(([k,v])=>{
     const pct = v.total ? Math.round(100*v.correct/v.total) : 0;
     return `<div style="display:flex;align-items:center;gap:.6rem;margin:.25rem 0">

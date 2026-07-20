@@ -35,7 +35,7 @@ RepoProof is a **retrieval-augmented generation (RAG) pipeline** with a human-in
 ```text
 Project intake  (GitHub clone / .zip upload / folder)
         ↓   immutable snapshot: git SHA or archive checksum
-Static analysis  (Python AST + multi-language text analysis)
+Static analysis  (shared IR: Python AST + tree-sitter pilot + generic fallback)
         ↓
 Evidence-chunk construction  (file / line / cell / snapshot provenance)
         ↓
@@ -43,9 +43,11 @@ Assessment context  (prior knowledge + scope/rubric → aligned targets)
         ↓
 Focus × Template selection  →  template-specific BM25 evidence bundle
         ↓
-LLM generation  (strict-JSON, evidence-grounded)  OR  deterministic mock
+Provider branch:
+  Local/Mock → structured Evidence + Template pipeline
+  OpenAI     → temporary raw-project template-research baseline
         ↓
-Constraint validation  +  validate-and-retry
+Constraint validation  +  bounded repair/regeneration
         ↓
 Human review  (edit / drag-reorder / approve / reject)
         ↓
@@ -55,16 +57,14 @@ Publish → Take → Exact-match scoring  (per-focus-area breakdown)
 ### Key techniques
 
 - **RAG grounding.** Analysis is decomposed into evidence chunks; a **BM25** retriever (with a custom tokenizer that splits `snake_case`) selects the relevant chunks per question, and the prompt enforces a "cite only these evidence ids / never invent facts" contract.
-- **Static analysis.** Python gets a deep `ast` walk — functions, classes, imports, and an approximate **call graph**. Jupyter notebooks are parsed per cell. 30+ other file types get lightweight declaration extraction.
-- **Constrained generation + self-correction.** The model is called in **strict JSON mode** against a fixed schema; options are shuffled to remove positional bias; each candidate is validated, and on failure the generator **retries once with the validation errors fed back into the prompt**.
+- **Static analysis.** All parsers emit one shared IR. Python and notebooks use `ast`; Java, JavaScript, TypeScript, C, and C++ use tree-sitter; remaining supported languages use a generic declaration/text fallback.
+- **Constrained generation + self-correction.** Local questions use strict JSON, backend-owned Focus/difficulty/evidence, option shuffling, one targeted repair, then one alternate-evidence regeneration. Invalid questions are never silently published.
 - **Constraint validation.** Every MAQ must have 2–7 distinct options, one unambiguous correct combination (all-correct disallowed), difficulty 1–5, and linked evidence — the same gate blocks human approval.
 - **Focus-area steering.** An interactive radar chart weights areas (Architecture, Testing, …); weights allocate question topics, then a Focus × Template matrix selects evidence-sufficient question forms.
 - **Assessment alignment.** Lecture/prior-knowledge material and project scope, requirements, or rubrics can be entered or uploaded as PDF, DOCX, PPTX, or text. RepoProof extracts weighted targets, matches them to static evidence with the shared tokenizer/concept lexicon, and shows the selected target on each review question.
 - **MLOps telemetry.** An append-only event log captures generation config and human review/edit signals (derived metadata only — never raw code); a metrics endpoint aggregates approval rate, human-edit rate, and validator-block rate for comparing prompt/model versions.
 - **Auth & intake security.** Creator routes are protected by HMAC-signed `httponly` session cookies behind a password gate; intake validates GitHub URLs, runs shallow timed clones, guards against zip path traversal, and gates total project size.
 - **Deterministic mock mode.** With no API key, RepoProof produces evidence-grounded sample questions labeled `[MOCK]`, so the entire flow is demoable without spending tokens.
-
-> A deeper write-up of the architecture and techniques lives in [`overview_repoproof.md`](overview_repoproof.md).
 
 ### Tech stack
 
@@ -75,16 +75,18 @@ Python · FastAPI · Uvicorn · Pydantic · OpenAI API (JSON mode) · `rank_bm25
 ```text
 app/
 ├── ingest.py      # GitHub clone / .zip extraction, size & path-traversal guards
-├── analyzer.py    # Python AST + multi-language file analysis
+├── analyzer.py    # language parsers + shared static-analysis IR
 ├── knowledge.py   # evidence chunks + BM25 retrieval
 ├── alignment.py   # context extraction + assessment-target/evidence alignment
-├── generator.py   # LLM & mock MAQ generation (+ validate-and-retry)
+├── assessment_catalog.py # catalog validation + weighted template scheduling
+├── generator.py   # Local/mock and raw-OpenAI generation orchestration
 ├── validator.py   # MAQ schema & rule validation
 ├── scoring.py     # exact-match + per-focus-area scoring
 ├── db.py          # SQLite storage, migrations, telemetry events
-├── config.py      # env config, mock mode, consent copy/versioning
+├── config.py      # env config, provider selection, consent copy/versioning
 ├── main.py        # FastAPI routes, session auth, middleware
 └── static/        # index (landing/login), creator, demo, assess UIs
+assessment_catalog.json # authoritative Topics/Templates/Strategies/Evidence requirements
 ```
 
 ---
@@ -95,9 +97,9 @@ Python receives the deepest analysis (functions, classes, imports, approximate c
 
 ## Scope & limitations
 
-RepoProof is an early prototype, and its boundaries are deliberate seams for later upgrades: shared-password access (no per-user accounts or tenant isolation); public GitHub repos only; BM25-only retrieval (no embeddings/hybrid yet); SQLite rather than PostgreSQL; exact-match scoring (no partial credit yet); non-Python languages use lightweight parsing rather than full ASTs; and no automated test suite or container image yet.
+RepoProof is an early prototype, and its boundaries are deliberate seams for later upgrades: shared-password access (no per-user accounts or tenant isolation); public GitHub repos only; BM25-only retrieval (no embeddings/hybrid yet); SQLite rather than PostgreSQL; exact-match scoring (no partial credit yet); and generic rather than grammar-based parsing outside the current tree-sitter pilot languages.
 
-**Roadmap:** partial-credit scoring · Tree-sitter parsers · semantic/hybrid retrieval · private-repo support · per-user auth & organizations · PostgreSQL + pgvector · retention/deletion lifecycle · production packaging.
+**Roadmap:** partial-credit scoring · wider grammar-based parsing · semantic/hybrid retrieval · private-repo support · per-user auth & organizations · PostgreSQL + pgvector · retention/deletion lifecycle · production packaging.
 
 ## Responsible use
 

@@ -4,13 +4,14 @@ from unittest.mock import patch
 
 from app.generator import (
     _catalog_tasks,
+    _display_code,
     _normalize,
     _specific_evidence_errors,
     _template_bundle,
     generate_questions,
 )
 from app.knowledge import EvidenceStore
-from app.strategies import TEMPLATE_BY_ID, TOPIC_BY_ID, weighted_template_schedule
+from app.assessment_catalog import TEMPLATE_BY_ID, TOPIC_BY_ID, weighted_template_schedule
 from app.validator import find_similar_question, validate_maq
 
 
@@ -129,22 +130,25 @@ class LocalGenerationTests(unittest.TestCase):
         )
 
     def test_scenario_edge_injects_the_cited_condition_branch(self):
-        tasks, warnings, tagged = _catalog_tasks(
+        evidence, missing = _template_bundle(
             EvidenceStore(CHUNKS),
-            {
-                "choice_count": 4,
-                "correct_mode": "exact",
-                "correct_exact": 1,
-                "focus_areas": [{"id": "data_flow", "weight": 5}],
-                "template": "scenario_edge",
-                "focus": "stop services subscriber dashboard state",
-            },
-            1,
-            random.Random(42),
+            TOPIC_BY_ID["data_flow"],
+            TEMPLATE_BY_ID["scenario_edge"],
+            "stop services subscriber dashboard state",
         )
-        self.assertTrue(tagged)
-        self.assertFalse(warnings)
-        slot = tasks[0]["slot"]
+        self.assertFalse(missing)
+        code, language, evidence_id = _display_code(
+            evidence,
+            "scenario_edge",
+            "stop services subscriber dashboard state",
+        )
+        slot = {
+            "template_id": "scenario_edge",
+            "template_name": "Scenario / Edge Case",
+            "display_code": code,
+            "display_language": language,
+            "display_evidence_id": evidence_id,
+        }
         self.assertIn("if stop:", slot["display_code"])
         self.assertIn("dashboard_stop.set()", slot["display_code"])
         self.assertNotIn("def stop_services", slot["display_code"])
@@ -186,10 +190,9 @@ class LocalGenerationTests(unittest.TestCase):
                 {"id": "project_logic", "weight": 2},
             ],
         }
-        tasks, warnings, tagged = _catalog_tasks(
+        tasks, warnings = _catalog_tasks(
             EvidenceStore(CHUNKS), config, 6, random.Random(42)
         )
-        self.assertTrue(tagged)
         self.assertFalse(warnings)
         focuses = [task["slot"]["focus"] for task in tasks]
         self.assertEqual(focuses.count("Architecture"), 4)
@@ -326,7 +329,7 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertTrue(evidence)
         self.assertIn("relational architecture evidence", missing)
 
-        tasks, warnings, tagged = _catalog_tasks(
+        tasks, warnings = _catalog_tasks(
             EvidenceStore([trivial_module, CHUNKS[-1]]),
             {
                 "choice_count": 4,
@@ -337,7 +340,6 @@ class LocalGenerationTests(unittest.TestCase):
             1,
             random.Random(42),
         )
-        self.assertTrue(tagged)
         self.assertFalse(tasks)
         self.assertTrue(any("relational architecture evidence" in warning for warning in warnings))
 
@@ -349,7 +351,7 @@ class LocalGenerationTests(unittest.TestCase):
             "Static module inventory:\npipeline.py [Python]",
             ["module_graph"],
         )
-        tasks, warnings, tagged = _catalog_tasks(
+        tasks, warnings = _catalog_tasks(
             EvidenceStore([trivial_module, CHUNKS[-1]]),
             {
                 "choice_count": 4,
@@ -364,7 +366,6 @@ class LocalGenerationTests(unittest.TestCase):
             6,
             random.Random(42),
         )
-        self.assertTrue(tagged)
         self.assertEqual(len(tasks), 6, warnings)
         self.assertTrue(all(
             task["slot"]["focus"] == "Implementation / Code Logic"

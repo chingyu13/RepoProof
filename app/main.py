@@ -5,11 +5,12 @@ import json
 import secrets
 import threading
 from datetime import datetime
+from html import escape
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import config, db
 from .alignment import (
@@ -23,9 +24,9 @@ from .alignment import (
 from .analyzer import ANALYSIS_VERSION, analyze_project, prune_non_source
 from .generator import generate_questions
 from .ingest import IngestError, clone_github, delete_project_files, extract_upload, raw_project_files
-from .knowledge import available_evidence_types, build_chunks
+from .knowledge import build_chunks
 from .scoring import score_attempt
-from .strategies import public_catalog
+from .assessment_catalog import public_topics
 from .validator import normalize_answer, validate_maq
 
 app = FastAPI(title="RepoProof", version="0.1.0")
@@ -139,19 +140,16 @@ def logout():
 @app.get("/api/meta")
 def meta():
     local_up = config.local_llm_available()
-    assessment_catalog = public_catalog()
+    default_provider = config.default_provider(local_available=local_up)
     return {
-        "mock_mode": config.mock_mode(),
+        "mock_mode": default_provider == "mock",
         "model": config.OPENAI_MODEL,
         "providers": {
-            "default": config.default_provider(),
+            "default": default_provider,
             "openai": {"available": bool(config.openai_api_key()), "model": config.OPENAI_MODEL},
             "local": {"available": local_up, "model": config.LOCAL_LLM_MODEL, "url": config.LOCAL_LLM_URL},
         },
-        "strategies": assessment_catalog["strategies"],
-        "topics": assessment_catalog["topics"],
-        "templates": assessment_catalog["templates"],
-        "evidence_types": assessment_catalog["evidence_types"],
+        "topics": public_topics(),
         "max_project_mb": config.MAX_PROJECT_MB,
         "consent_text": config.CONSENT_TEXT,
         "data_sharing_text": config.DATA_SHARING_TEXT,
@@ -169,12 +167,11 @@ def _truthy(v: str) -> bool:
 @app.post("/api/projects")
 async def create_project(
     github_url: str = Form(""),
-    consent: str = Form(""),           # required acknowledgment (kept name for compat)
-    acknowledge: str = Form(""),       # required acknowledgment (preferred)
-    share_data: str = Form(""),        # optional de-identified data-sharing opt-in
+    acknowledge: str = Form(""),
+    share_data: str = Form(""),
     file: UploadFile | None = File(None),
 ):
-    acknowledged = _truthy(acknowledge) or _truthy(consent)
+    acknowledged = _truthy(acknowledge)
     if not acknowledged:
         raise HTTPException(400, "You must accept the required acknowledgment to submit a project.")
     share = _truthy(share_data)
@@ -251,7 +248,6 @@ def get_project(project_id: int):
     p = db.get("projects", project_id)
     if not p or _project_root(p) is None:
         raise HTTPException(404, "Project not found")
-    p["evidence_types"] = available_evidence_types(p["chunks"])
     p["chunk_count"] = len(p.pop("chunks"))
     return p
 
@@ -259,6 +255,8 @@ def get_project(project_id: int):
 # ---------- question generation & review ----------
 
 class GenerateConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     num_questions: int = 5
     choice_count: int = 4
     correct_mode: str = "exact"
@@ -267,12 +265,8 @@ class GenerateConfig(BaseModel):
     correct_max: int = 3
     difficulty: int = 3
     focus: str = ""
-    topic: str = ""
-    focus_areas: list[dict] = []
-    template: str = ""
-    areas: list[dict] = []
+    focus_areas: list[dict] = Field(default_factory=list)
     provider: str = ""
-    keep_approved: bool = False
 
 
 def _project_root(project: dict) -> Path | None:
@@ -340,8 +334,6 @@ def _store_generated_questions(
         for a in db.list_where("assessments", "project_id=?", (project_id,)):
             used.update(a["question_ids"])
         for old in db.list_where("questions", "project_id=?", (project_id,)):
-            if cfg.get("keep_approved") and old["status"] == "approved":
-                continue
             if old["id"] in used:
                 if old["status"] != "archived":
                     db.update("questions", old["id"], {"status": "archived"})
@@ -371,28 +363,26 @@ def _store_generated_questions(
     )
     targets = cfg.get("assessment_targets") or []
     metrics = cfg.get("_generation_metrics") or {}
+    mock_used = provider_used == "mock"
     db.log_event("generation_run", {
         "model": provider_used,
-        "mock_mode": config.mock_mode(),
+        "mock_mode": mock_used,
         "requested": cfg.get("num_questions", 5),
         "created": len(ids),
         "choice_count": cfg.get("choice_count", 4),
         "correct_mode": cfg.get("correct_mode", "exact"),
         "difficulty": cfg.get("difficulty", 3),
-        "topic": cfg.get("topic", ""),
         "focus_areas": [
             {"id": area.get("id"), "name": area.get("name"), "weight": area.get("weight")}
             for area in cfg.get("focus_areas", []) if area.get("id") or area.get("name")
         ],
         "template_selection": "focus_matrix",
-        "template_override": cfg.get("template") or None,
-        "areas": [area.get("name") for area in cfg.get("areas", []) if area.get("name")],
         "assessment_targets": len(targets),
         "aligned_targets": sum(target.get("coverage") != "unmatched" for target in targets),
         "warnings": len(warnings),
         "generation_metrics": metrics,
     }, project_id=project_id)
-    return {"created": ids, "warnings": warnings, "mock_mode": config.mock_mode(),
+    return {"created": ids, "warnings": warnings, "mock_mode": mock_used,
             "provider": provider_used, "replaced_drafts": replaced,
             "metrics": metrics}
 
@@ -407,21 +397,6 @@ def _raw_files_for_generation(project: dict, cfg: dict) -> list[dict] | None:
             "Raw GPT generation needs the original project files. Re-upload this older project first."
         )
     return raw_project_files(root, config.OPENAI_RAW_MAX_CHARS)
-
-
-@app.post("/api/projects/{project_id}/generate")
-def generate(project_id: int, cfg: GenerateConfig):
-    project = db.get("projects", project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
-    project, _ = _refresh_project_analysis(project)
-    values = cfg.model_dump()
-    try:
-        raw_files = _raw_files_for_generation(project, values)
-    except (IngestError, ValueError) as exc:
-        raise HTTPException(400, str(exc)) from exc
-    questions, warnings = generate_questions(project["chunks"], values, raw_files=raw_files)
-    return _store_generated_questions(project_id, values, questions, warnings)
 
 
 def _update_generation_run(run_id: str, **values) -> None:
@@ -569,6 +544,18 @@ async def start_generation(
         cfg = GenerateConfig(**json.loads(config_json)).model_dump()
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid question framework.") from exc
+    valid_topic_ids = {topic["id"] for topic in public_topics()}
+    selected_focus = []
+    for area in cfg["focus_areas"]:
+        try:
+            weight = int(area.get("weight", 0))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if area.get("id") in valid_topic_ids and weight > 0:
+            selected_focus.append({**area, "weight": min(5, weight)})
+    if not selected_focus:
+        raise HTTPException(400, "Select at least one Focus Area.")
+    cfg["focus_areas"] = selected_focus
 
     async def read_uploads(files: list[UploadFile] | None) -> list[tuple[str, bytes]]:
         result = []
@@ -631,11 +618,7 @@ def generation_run(run_id: str):
 
 @app.get("/api/projects/{project_id}/questions")
 def list_questions(project_id: int):
-    # Newest first: every generation batch APPENDS to this project's question
-    # pool, so ascending order buried fresh questions under old batches and
-    # made new settings look like they "did nothing". Archived questions
-    # (kept only because a published assessment references them) are hidden —
-    # they live in the Step-4 assessment history instead.
+    # Review shows the current batch first and hides assessment-only archives.
     return db.list_where("questions", "project_id=? AND status != 'archived'",
                          (project_id,), order="id DESC")
 
@@ -683,9 +666,7 @@ def edit_question(question_id: int, edit: QuestionEdit):
         "evidence": q["evidence"],
     }
     status = edit.status if edit.status is not None else q["status"]
-    # "Did a human change the model's output?" — compared field by field
-    # against the stored row. This flag feeds the human_edit_rate metric:
-    # a high rate means generation quality is too low to approve as-is.
+    # Track reviewer changes for generation-quality metrics.
     edited = any([
         merged["stem"] != q["stem"],
         merged["options"] != q["options"],
@@ -727,8 +708,8 @@ class PublishRequest(BaseModel):
     title: str
     question_ids: list[int]
     show_correct_count: bool = False
-    adaptive: bool = False             # adaptive ORDER: all questions still asked
-    framework: dict = {}               # step-2 settings snapshot, shown in assessment history
+    adaptive: bool = False
+    framework: dict = Field(default_factory=dict)
 
 
 @app.post("/api/projects/{project_id}/assessments")
@@ -737,8 +718,7 @@ def publish(project_id: int, req: PublishRequest):
         raise HTTPException(404, "Project not found")
     if not req.question_ids:
         raise HTTPException(400, "Select at least one question.")
-    # Positions as shown in the review list (newest first, archived hidden) so
-    # error messages say "Q4", matching what the creator sees on screen.
+    # Use the visible review order in validation messages.
     review = db.list_where("questions", "project_id=? AND status != 'archived'",
                            (project_id,), order="id DESC")
     pos = {q["id"]: i + 1 for i, q in enumerate(review)}
@@ -923,9 +903,11 @@ def print_view(assessment_id: int, key: int = 0):
     if not a:
         raise HTTPException(404, "Assessment not found")
     project = db.get("projects", a["project_id"])
-    # Escape dynamic assessment content before using this route in multi-tenant mode.
+    title = escape(a["title"])
+    project_name = escape(project["name"])
+    snapshot = escape(project["snapshot_id"])
     parts = [f"""<!doctype html><html><head><meta charset="utf-8">
-<title>{a['title']} — RepoProof</title>
+<title>{title} — RepoProof</title>
 <style>
  body{{font-family:Georgia,serif;max-width:800px;margin:2rem auto;line-height:1.5;color:#111}}
  .q{{margin:1.5rem 0;page-break-inside:avoid}} .q p{{white-space:pre-wrap}}
@@ -934,21 +916,30 @@ def print_view(assessment_id: int, key: int = 0):
  @media print{{.noprint{{display:none}}}}
 </style></head><body>
 <p class="noprint"><a href="javascript:window.print()">Print this page</a></p>
-<h1>{a['title']}</h1>
-<p class="meta">Project: {project['name']} — snapshot {project['snapshot_id']} — RepoProof offline assessment.
+<h1>{title}</h1>
+<p class="meta">Project: {project_name} — snapshot {snapshot} — RepoProof offline assessment.
 Select ALL correct options; a question counts only when your selection matches exactly.</p>"""]
     for i, qid in enumerate(a["question_ids"], 1):
         q = db.get("questions", qid)
-        parts.append(f'<div class="q"><p><strong>Q{i}.</strong> {q["stem"]} '
+        parts.append(f'<div class="q"><p><strong>Q{i}.</strong> {escape(q["stem"])} '
                      f'<span class="meta">(difficulty {q["difficulty"]})</span></p>')
         for opt in q["options"]:
-            parts.append(f'<p class="opt">☐ <strong>{opt["key"]}.</strong> {opt["text"]}</p>')
+            parts.append(
+                f'<p class="opt">☐ <strong>{escape(opt["key"])}.</strong> '
+                f'{escape(opt["text"])}</p>'
+            )
         if key:
-            ev = "; ".join(f'{e["title"]}' + (f' ({e["file"]} {e["lines"]})' if e.get("file") else "")
-                           for e in q["evidence"]) or "—"
-            parts.append(f'<div class="key"><p><strong>Answer:</strong> {", ".join(q["answer"])}</p>'
+            ev = "; ".join(
+                escape(e["title"])
+                + (
+                    f' ({escape(e["file"])} {escape(e["lines"])})'
+                    if e.get("file") else ""
+                )
+                for e in q["evidence"]
+            ) or "—"
+            parts.append(f'<div class="key"><p><strong>Answer:</strong> {escape(", ".join(q["answer"]))}</p>'
                          f'<p><strong>Evidence:</strong> {ev}</p>'
-                         f'<p>{q["explanation"]}</p></div>')
+                         f'<p>{escape(q["explanation"])}</p></div>')
         parts.append("</div>")
-    parts.append(f'<p class="meta noprint">Answer key: append ?key=1 to this URL.</p></body></html>')
+    parts.append('<p class="meta noprint">Answer key: append ?key=1 to this URL.</p></body></html>')
     return HTMLResponse("".join(parts))

@@ -8,7 +8,7 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from .knowledge import EvidenceStore, expand_concepts, retrieval_tokens
-from .strategies import TOPIC_BY_ID
+from .assessment_catalog import TOPIC_BY_ID
 
 MAX_FILE_BYTES = 12 * 1024 * 1024
 MAX_CONTEXT_CHARS = 120_000

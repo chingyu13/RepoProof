@@ -57,12 +57,6 @@ def default_provider(*, local_available: bool | None = None) -> str:
         return "local"
     return "mock"
 
-
-def mock_mode(*, local_available: bool | None = None) -> bool:
-    """Kept for backward compatibility: true when the default provider is mock."""
-    return default_provider(local_available=local_available) == "mock"
-
-
 # Consent copy (RepoProof UI / Step 1). Bump CONSENT_VERSION whenever the wording
 # changes so stored per-project consent records stay auditable.
 CONSENT_VERSION = "2026-07-12-v2"

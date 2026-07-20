@@ -731,7 +731,7 @@ async function openProject(id){
   const s = p.stats;
   const langs = Object.entries(s.files_by_language || {}).map(([k,v])=>`${v} ${k}`).join(', ')
                 || `${s.python_files} Python`;
-  $('projStats').textContent = `${s.source_files ?? s.python_files} source files (${langs}) · ${s.functions} Python functions · ${s.lines_of_code.toLocaleString()} LOC · ${p.chunk_count} evidence chunks` + (s.parse_errors?` · ${s.parse_errors} parse errors`:'');
+  $('projStats').textContent = `${s.source_files ?? s.python_files} source files (${langs}) · ${s.functions} functions · ${s.lines_of_code.toLocaleString()} LOC · ${p.chunk_count} evidence chunks` + (s.parse_errors?` · ${s.parse_errors} parse errors`:'');
   const qs = await loadQuestions();
   const as = await loadAssessments();
   goToStep(as.length ? 4 : (qs.length ? 3 : 2), {unlock:true});
@@ -871,8 +871,7 @@ $('generate').onclick = async ()=>{
       difficulty:+$('gDiff').value, focus:$('gFocus').value,
       focus_areas: areas.filter(area=>area.w > 0).map(area=>({
         id:area.id, name:(topicById(area.id)||{}).name || area.id, weight:area.w})),
-      provider: $('gProvider').value,
-      keep_approved: false
+      provider: $('gProvider').value
     };
     const form = new FormData();
     form.append('config_json', JSON.stringify(cfg));

@@ -415,30 +415,8 @@ def retrieval_tokens(text: str) -> list[str]:
     return _tokenize(text)
 
 
-_LEGACY_KIND_EVIDENCE_TYPES = {
-    "dependencies": ("dependency_graph",),
-    "structure": ("module_graph",),
-    "imports": ("dependency_graph",),
-    "import_graph": ("module_graph", "dependency_graph"),
-    "module_var": ("symbol_table",),
-    "class": ("symbol_table",),
-    "function": ("symbol_table", "data_flow_graph", "control_flow_graph"),
-    "notebook_cell": ("symbol_table", "data_flow_graph", "control_flow_graph"),
-    "source": ("symbol_table", "data_flow_graph", "control_flow_graph"),
-    "flow": ("call_graph", "data_flow_graph", "control_flow_graph"),
-    "callgraph": ("call_graph",),
-}
-
-
 def evidence_types_for_chunk(chunk: dict) -> tuple[str, ...]:
-    stored = chunk.get("evidence_types")
-    if stored:
-        return tuple(stored)
-    return _LEGACY_KIND_EVIDENCE_TYPES.get(chunk.get("kind"), ())
-
-
-def available_evidence_types(chunks: list[dict]) -> list[str]:
-    return sorted({evidence_type for chunk in chunks for evidence_type in evidence_types_for_chunk(chunk)})
+    return tuple(chunk.get("evidence_types") or ())
 
 
 class EvidenceStore:

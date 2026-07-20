@@ -1,5 +1,5 @@
 {
-  "_readme": "Local generation catalog. Focus weights select templates; each template declares its reasoning mode and evidence bundle.",
+  "_readme": "Authoritative local-generation catalog: Topics weight reusable Templates; Templates declare Strategy metadata and Evidence requirements.",
   "strategies": [
     {
       "id": "explain",
