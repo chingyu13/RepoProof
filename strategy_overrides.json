@@ -84,7 +84,7 @@
       "id": "purpose_responsibility",
       "name": "Purpose / Responsibility",
       "strategy": "explain",
-      "pattern": "Ask what a concrete component or pipeline stage does and identify the operation that supports that responsibility. Do not ask library trivia.",
+      "pattern": "Name a concrete component or pipeline stage in the stem, then test a specific input/output behavior, interaction, side effect, condition, or consequence that is not obvious from its identifier or docstring. Never ask the broad purpose of a descriptively named function, never ask the student to select the responsible function/class/module by name, and never use bare identifiers as the options. Do not ask library trivia.",
       "query": "purpose responsibility role operation function class component stage",
       "evidence": {
         "required": [
@@ -146,14 +146,14 @@
       "id": "design_behavior",
       "name": "Design Behavior",
       "strategy": "explain",
-      "pattern": "Ask which concrete statement correctly describes an evidenced boundary, dependency, separation, or runtime behavior. Wrong options must assert relationships contradicted by evidence. Never ask which design is best or infer undocumented advantages.",
+      "pattern": "Name relevant components in the stem, then ask about a non-obvious evidenced relationship between at least two components: a boundary, dependency, shared downstream path, separation, ordering, or cross-component consequence that cannot be guessed from an identifier or docstring. Never ask what happens when one named function is called. Every option must be a complete relational claim; never ask the broad purpose/behavior of a descriptively named function, never ask which function/class/module is responsible, and never offer bare identifiers as options. Wrong options must assert relationships contradicted by evidence. Never ask which design is best or infer undocumented advantages.",
       "query": "architecture design boundary dependency abstraction separation behavior relationship",
       "evidence": {
         "required": [
           {
             "label": "design structure",
-            "types": ["module_graph", "dependency_graph", "call_graph", "symbol_table", "api_discovery", "data_flow_graph", "control_flow_graph", "complexity_analysis", "sql_analysis"],
-            "kinds": ["module_graph", "import_graph", "imports", "flow", "class", "function", "notebook_cell", "source", "structure", "complexity", "sql_analysis"],
+            "types": ["module_graph", "dependency_graph", "call_graph", "api_discovery"],
+            "kinds": ["module_graph", "import_graph", "flow", "callgraph", "api_discovery"],
             "count": 1
           }
         ],

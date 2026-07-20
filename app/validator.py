@@ -21,6 +21,28 @@ _UNPROVEN_FALSE_REASON_RE = re.compile(
     r"\boutside\s+(?:the\s+)?(?:evidence|provided\s+context)\b",
     re.I,
 )
+_IDENTIFIER_LOOKUP_STEM_RE = re.compile(
+    r"\b(?:which|what)(?:\s+of\s+the\s+following)?\s+"
+    r"(?:function|method|class|module|file|component)\b",
+    re.I,
+)
+_BROAD_NAMED_BEHAVIOR_RE = re.compile(
+    r"\bwhich\b[^?]{0,80}\b(?:behavior|purpose|responsibility|role)\s+of\s+"
+    r"(?:the\s+)?`?[A-Za-z_][A-Za-z0-9_.]*`?\b|"
+    r"\bwhat\s+does\s+`?[A-Za-z_][A-Za-z0-9_.]*`?\s+"
+    r"(?:do|handle|manage|update|create|load|save)\b|"
+    r"\b(?:which\s+observable\s+behavior\s+occurs|what\s+happens)\s+when\s+"
+    r"`?[A-Za-z_][A-Za-z0-9_.]*`?\s+is\s+called\b",
+    re.I,
+)
+_BARE_IDENTIFIER_RE = re.compile(
+    r"^\s*`?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:\(\))?`?\s*$"
+)
+_GIVEAWAY_DISTRACTOR_RE = re.compile(
+    r"\b(?:always|never)\b|\bevery\s+time\b|\bregardless\s+of\b|"
+    r"\bunder\s+(?:all|any)\s+circumstances\b",
+    re.I,
+)
 _CODE_BLOCK_RE = re.compile(r"```(?:[a-zA-Z0-9_+.#-]+)?\s*\n.*?```", re.S)
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
 
@@ -83,6 +105,20 @@ def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
             )
         if any(_VAGUE_OPTION_RE.search(text) for text in texts):
             errors.append("Options must state a concrete, evidence-supported operation rather than a vague responsibility.")
+        identifier_lookup = _IDENTIFIER_LOOKUP_STEM_RE.search(stem)
+        bare_identifier_options = len(texts) >= 2 and all(
+            _BARE_IDENTIFIER_RE.fullmatch(text) for text in texts
+        )
+        if identifier_lookup or bare_identifier_options:
+            errors.append(
+                "Do not test identifier-name matching. Name the component in the stem and "
+                "make every option a complete behavior, interaction, ordering, or consequence."
+            )
+        if _BROAD_NAMED_BEHAVIOR_RE.search(stem):
+            errors.append(
+                "A named component's broad purpose can be guessed from its identifier. Ask about "
+                "a non-obvious condition, transformation, preserved state, dependency, or consequence."
+            )
         errors.extend(_stem_code_errors(stem, texts))
 
     answer = q.get("answer") or []
@@ -101,6 +137,13 @@ def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
         for option in options:
             key = option.get("key")
             reason = str(q["justifications"].get(key, "")).strip()
+            if key not in answer and _GIVEAWAY_DISTRACTOR_RE.search(
+                str(option.get("text", ""))
+            ):
+                errors.append(
+                    f"Option {key} uses giveaway absolute wording. Write a plausible "
+                    "evidence-contradicted distractor without always/never/every-time phrasing."
+                )
             if key not in answer and _UNPROVEN_FALSE_REASON_RE.search(reason):
                 errors.append(
                     f"Option {key} is treated as false only because it is unstated; "

@@ -480,6 +480,7 @@ def _analyze_notebook(rel: str, raw: str, out: dict) -> str | None:
                     item["end_line"] = i
                 out["functions"].extend(visitor.functions)
                 out["classes"].extend(visitor.classes)
+                out["calls"].extend(visitor.calls)
     out["notebooks"].append({"file": rel, "language": lang, "cells": cells[:200]})
     return f"Notebook ({lang})"
 

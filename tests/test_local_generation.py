@@ -120,6 +120,12 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertTrue(
             any("module_graph" in item["evidence_types"] for item in evidence)
         )
+        self.assertTrue(
+            any(
+                item["kind"] in {"module_graph", "flow", "callgraph", "import_graph"}
+                for item in evidence
+            )
+        )
 
     def test_scenario_edge_injects_the_cited_condition_branch(self):
         tasks, warnings, tagged = _catalog_tasks(
@@ -232,6 +238,107 @@ class LocalGenerationTests(unittest.TestCase):
         errors = validate_maq(question, 4, 1)
         self.assertTrue(any("factually correct statement" in error for error in errors))
         self.assertTrue(any("treated as false only because it is unstated" in error for error in errors))
+
+    def test_identifier_name_matching_question_is_rejected(self):
+        question = {
+            "stem": (
+                "Which function is responsible for updating the dropdown filters "
+                "based on facility records?"
+            ),
+            "options": [
+                {"key": "A", "text": "dropdown_update_map_and_table"},
+                {"key": "B", "text": "refresh_filter_dropdowns"},
+                {"key": "C", "text": "_sync_toggle"},
+                {"key": "D", "text": "_on_toggle"},
+            ],
+            "answer": ["B"],
+            "justifications": {
+                "A": "It updates the map and table.",
+                "B": "It rebuilds filter options from facility records.",
+                "C": "It synchronizes toggle styles.",
+                "D": "It handles toggle clicks.",
+            },
+            "difficulty": 3,
+            "evidence": [{"chunk_id": "c8"}],
+        }
+        errors = validate_maq(question, 4, 1)
+        self.assertTrue(any("identifier-name matching" in error for error in errors))
+
+    def test_giveaway_absolute_distractors_are_rejected(self):
+        question = {
+            "stem": "Which statement correctly describes how the dropdown options are refreshed?",
+            "options": [
+                {"key": "A", "text": "Existing selections are retained when still valid."},
+                {"key": "B", "text": "The options are always replaced on every call."},
+                {"key": "C", "text": "Fuel values are used to build region choices."},
+                {"key": "D", "text": "A missing previous value is copied into the new options."},
+            ],
+            "answer": ["A"],
+            "justifications": {
+                "A": "The previous value is reset only when absent from the new options.",
+                "B": "Unchanged option lists skip the update.",
+                "C": "Region choices use network_region values.",
+                "D": "An absent previous value is reset to All.",
+            },
+            "difficulty": 3,
+            "evidence": [{"chunk_id": "c8"}],
+        }
+        errors = validate_maq(question, 4, 1)
+        self.assertTrue(any("giveaway absolute wording" in error for error in errors))
+
+    def test_broad_named_function_behavior_question_is_rejected(self):
+        question = {
+            "stem": "Which observable behavior occurs when `refresh_filter_dropdowns` is called?",
+            "options": [
+                {"key": "A", "text": "It refreshes map markers."},
+                {"key": "B", "text": "It updates dropdown options from facility records."},
+                {"key": "C", "text": "It updates only region data."},
+                {"key": "D", "text": "It clears the dropdown options."},
+            ],
+            "answer": ["B"],
+            "justifications": {
+                "A": "The function does not update markers.",
+                "B": "It derives dropdown options from current records.",
+                "C": "It derives both region and fuel values.",
+                "D": "It includes derived values in each list.",
+            },
+            "difficulty": 3,
+            "evidence": [{"chunk_id": "c8"}],
+        }
+        errors = validate_maq(question, 4, 1)
+        self.assertTrue(any("broad purpose can be guessed" in error for error in errors))
+
+    def test_architecture_requires_relational_evidence(self):
+        trivial_module = chunk(
+            "c9",
+            "module_graph",
+            "Module graph summary",
+            "Static module inventory:\npipeline.py [Python]",
+            ["module_graph"],
+        )
+        evidence, missing = _template_bundle(
+            EvidenceStore([trivial_module]),
+            TOPIC_BY_ID["architecture"],
+            TEMPLATE_BY_ID["design_behavior"],
+            "",
+        )
+        self.assertTrue(evidence)
+        self.assertIn("relational architecture evidence", missing)
+
+        tasks, warnings, tagged = _catalog_tasks(
+            EvidenceStore([trivial_module, CHUNKS[-1]]),
+            {
+                "choice_count": 4,
+                "correct_mode": "exact",
+                "correct_exact": 1,
+                "focus_areas": [{"id": "architecture", "weight": 5}],
+            },
+            1,
+            random.Random(42),
+        )
+        self.assertTrue(tagged)
+        self.assertFalse(tasks)
+        self.assertTrue(any("relational architecture evidence" in warning for warning in warnings))
 
     def test_objective_design_behavior_question_passes_validation(self):
         question = {
