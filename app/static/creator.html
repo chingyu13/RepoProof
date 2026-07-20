@@ -43,6 +43,8 @@ header h1{font-size:1.15rem;margin:0;font-weight:600}
   display:flex;flex-direction:column;gap:.9rem;align-items:center;justify-content:center;z-index:5}
 [data-theme="dark"] .gen-overlay{background:rgba(22,22,24,.5)}
 .gen-overlay p{font-weight:500;margin:0;color:var(--ink)}
+.gen-panel{width:min(520px,88%);display:grid;justify-items:center;gap:.7rem;text-align:center}
+.gen-panel .small{line-height:1.45}
 .loader{width:44px;height:44px;border:4px solid rgba(98,98,98,.25);border-top-color:var(--accent);border-radius:50%;animation:spin .9s linear infinite}
 .card h2{margin:.1rem 0 .3rem;font-size:1.05rem;font-weight:600;color:var(--heading)}
 .sub{color:var(--muted);font-size:.85rem;margin:0 0 1rem}
@@ -50,6 +52,11 @@ label{display:block;font-size:.85rem;color:var(--muted);margin:.5rem 0 .2rem}
 input[type=text],input[type=number],select,textarea{width:100%;padding:.55rem .7rem;border:2px solid var(--input-border);border-radius:5px;font:inherit;background:var(--input-bg);color:var(--ink)}
 input::placeholder,textarea::placeholder{color:var(--placeholder)}
 textarea{min-height:60px}
+.context-fields{display:grid;gap:.65rem;margin:.5rem 0 1rem}
+.context-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem;align-items:stretch}
+.context-control textarea{min-height:76px;resize:vertical}
+.context-upload{min-width:96px}
+.context-files{min-height:1em;margin-top:.2rem}
 button{background:var(--accent);color:#fff;border:0;border-radius:5px;padding:.6rem 1rem;font:inherit;font-weight:500;letter-spacing:.03em;cursor:pointer}
 button:hover{background:var(--accent-hover)}
 button.secondary{background:var(--input-bg);color:var(--ink);border:2px solid var(--strong)}
@@ -97,6 +104,7 @@ button:disabled{opacity:.5;cursor:default}
 .q .approve.is-approved{background:var(--ok);color:#fff;border-color:#05913f}
 .q .approve.is-approved:hover{background:#05a34e}
 .evidence{font-size:.78rem;color:var(--muted);background:var(--bg);border-radius:10px;padding:.5rem .7rem;margin-top:.5rem}
+.alignment{font-size:.78rem;color:var(--muted);margin:.45rem 0}
 .small{font-size:.8rem;color:var(--muted)}
 a{color:var(--accent)}
 .hidden{display:none}
@@ -165,6 +173,7 @@ a{color:var(--accent)}
   .step .lbl{font-size:.67rem}
   .workflow{margin:1rem auto}
   .card{padding:1.1rem}
+  .context-control{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -261,13 +270,37 @@ a{color:var(--accent)}
 </button>
 <div class="card project-content hidden">
   <div class="gen-overlay hidden" id="genOverlay">
-    <div class="loader"></div>
-    <p>Generating questions…</p>
+    <div class="gen-panel">
+      <div class="loader"></div>
+      <p id="genStage">Generating questions…</p>
+      <div class="small" id="genProgress"></div>
+      <div class="small" id="genAlignment"></div>
+    </div>
   </div>
   <h2 id="projTitle"></h2>
   <p class="small" id="projStats"></p>
 
   <h2 style="margin-top:1.2rem">2 · Question Framework</h2>
+  <div class="context-fields">
+    <div>
+      <label>Assumed prior knowledge</label>
+      <div class="context-control">
+        <textarea id="assumedKnowledge"></textarea>
+        <button class="secondary context-upload" id="uploadPrior" type="button">Upload</button>
+        <input id="priorFiles" type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,.tsv,.json,.yaml,.yml" multiple hidden>
+      </div>
+      <div class="small context-files" id="priorFileNames"></div>
+    </div>
+    <div>
+      <label>Project scope definition</label>
+      <div class="context-control">
+        <textarea id="projectScope"></textarea>
+        <button class="secondary context-upload" id="uploadScope" type="button">Upload</button>
+        <input id="scopeFiles" type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,.tsv,.json,.yaml,.yml" multiple hidden>
+      </div>
+      <div class="small context-files" id="scopeFileNames"></div>
+    </div>
+  </div>
   <div class="row">
     <div><label># Questions</label><input type="number" id="gNum" value="5" min="1" max="20"></div>
     <div><label>Options per question</label><input type="number" id="gChoices" value="4" min="2" max="7"></div>
@@ -354,6 +387,8 @@ const $ = id => document.getElementById(id);
 let currentProject = null;
 let pendingFile = null;
 let maxProjectMB = 1024;
+let priorContextFiles = [];
+let scopeContextFiles = [];
 
 /* theme */
 const savedTheme = localStorage.getItem('rp-theme');
@@ -421,6 +456,17 @@ async function api(path, opts={}) {
   if (!r.ok) throw new Error(body.detail || JSON.stringify(body));
   return body;
 }
+
+function bindContextFiles(buttonId, inputId, namesId, target){
+  const input = $(inputId);
+  $(buttonId).onclick = ()=>input.click();
+  input.onchange = ()=>{
+    target.splice(0, target.length, ...input.files);
+    $(namesId).textContent = target.map(file=>file.name).join(' · ');
+  };
+}
+bindContextFiles('uploadPrior', 'priorFiles', 'priorFileNames', priorContextFiles);
+bindContextFiles('uploadScope', 'scopeFiles', 'scopeFileNames', scopeContextFiles);
 
 $('logout').onclick = async ()=>{
   await fetch('/api/logout', {method:'POST'});
@@ -669,6 +715,16 @@ async function loadProjects(){
 
 async function openProject(id){
   const p = await api('/api/projects/'+id);
+  if (currentProject !== null && currentProject !== id) {
+    $('assumedKnowledge').value = '';
+    $('projectScope').value = '';
+    priorContextFiles.splice(0);
+    scopeContextFiles.splice(0);
+    $('priorFiles').value = '';
+    $('scopeFiles').value = '';
+    $('priorFileNames').textContent = '';
+    $('scopeFileNames').textContent = '';
+  }
   currentProject = id;
   document.querySelectorAll('.project-content').forEach(el=>el.classList.remove('hidden'));
   $('projTitle').textContent = `${p.name} — snapshot ${p.snapshot_id}`;
@@ -767,9 +823,44 @@ $('addArea').onclick = ()=>{
   renderAreas();
 };
 
+const generationStages = {
+  queued:'Queued',
+  extracting_context:'Reading assessment context',
+  aligning_targets:'Aligning targets with project evidence',
+  planning_questions:'Planning questions',
+  retrieving_evidence:'Retrieving evidence bundles',
+  generating_questions:'Generating and validating questions',
+  repairing_questions:'Repairing questions',
+  finalizing:'Final checks',
+  complete:'Complete',
+};
+
+function showGenerationProgress(run){
+  const progress = run.progress || {};
+  $('genStage').textContent = generationStages[progress.stage] || 'Generating questions';
+  $('genProgress').textContent = progress.message || '';
+  const context = run.context || {};
+  $('genAlignment').textContent = context.targets
+    ? `${context.matched} of ${context.targets} assessment targets matched to project evidence.`
+    : '';
+}
+
+async function waitForGeneration(runId){
+  while (true) {
+    const run = await api(`/api/generation-runs/${runId}`);
+    showGenerationProgress(run);
+    if (run.status === 'complete') return run.result;
+    if (run.status === 'failed') throw new Error(run.error || 'Question generation failed.');
+    await new Promise(resolve=>setTimeout(resolve, 900));
+  }
+}
+
 $('generate').onclick = async ()=>{
   $('genErr').textContent=''; $('genStatus').textContent='Generating…';
   $('generate').disabled = true;
+  $('genStage').textContent = 'Preparing generation';
+  $('genProgress').textContent = 'Submitting the question framework.';
+  $('genAlignment').textContent = '';
   $('genOverlay').classList.remove('hidden');
   try {
     const cfg = {
@@ -782,11 +873,19 @@ $('generate').onclick = async ()=>{
       provider: $('gProvider').value,
       keep_approved: false
     };
-    const res = await api(`/api/projects/${currentProject}/generate`, {
-      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
+    const form = new FormData();
+    form.append('config_json', JSON.stringify(cfg));
+    form.append('assumed_knowledge', $('assumedKnowledge').value);
+    form.append('project_scope', $('projectScope').value);
+    priorContextFiles.forEach(file=>form.append('prior_files', file));
+    scopeContextFiles.forEach(file=>form.append('scope_files', file));
+    const started = await api(`/api/projects/${currentProject}/generation-runs`, {
+      method:'POST', body:form
+    });
+    const res = await waitForGeneration(started.id);
     $('genStatus').textContent = `Created ${res.created.length} question(s) via ${res.provider || (res.mock_mode ? 'mock' : 'LLM')}`
       + (res.replaced_drafts ? ` (replaced ${res.replaced_drafts} previous draft(s))` : '') + '.';
-    if (res.warnings.length) $('genErr').textContent = res.warnings.join('\n');
+    if ((res.warnings || []).length) $('genErr').textContent = res.warnings.join('\n');
     await loadQuestions();
     goToStep(3, {unlock:true});
   } catch(e){ $('genErr').textContent = e.message; $('genStatus').textContent=''; }
@@ -822,9 +921,13 @@ function renderQuestion(q, pos){
   const approved = q.status === 'approved';
   if (approved) selectedForPublish.add(q.id);   // approval = selected for the assessment
   const ev = (q.evidence||[]).map(e=>`${e.title}${e.file?` — ${e.file}${e.lines?' : '+e.lines:''}`:''}`).join('<br>') || 'No evidence linked';
+  const alignment = q.alignment?.label
+    ? `<div class="alignment">Assessment alignment: ${esc(q.alignment.label)}${q.alignment.source ? ` · ${esc(q.alignment.source)}` : ''}</div>`
+    : '';
   div.innerHTML = `
     <span class="status ${q.status}">${q.status}</span>
     <div class="small" style="margin:0 0 .4rem"><strong>Q${pos}</strong> · slot: ${q.slot} · by ${q.generator} · ref #${q.id}</div>
+    ${alignment}
     <textarea class="stem">${esc(q.stem)}</textarea>
     <div class="opts"></div>
     <div class="row" style="margin-top:.4rem">
@@ -940,6 +1043,12 @@ $('publish').onclick = async ()=>{
                               correct_min:+$('gMin').value, correct_max:+$('gMax').value,
                               difficulty:+$('gDiff').value, focus:$('gFocus').value,
                               provider:$('gProvider').value,
+                              assumed_knowledge:$('assumedKnowledge').value,
+                              project_scope:$('projectScope').value,
+                              context_files:[
+                                ...priorContextFiles.map(file=>file.name),
+                                ...scopeContextFiles.map(file=>file.name),
+                              ],
                               focus_areas: areas.filter(area=>area.w > 0).map(area=>({
                                 id:area.id, name:(topicById(area.id)||{}).name || area.id, weight:area.w})),
                             }})});
@@ -977,6 +1086,9 @@ function frameworkSummary(fw){
   return `${fw.num_questions} questions · ${fw.choice_count} options · ${cc} · difficulty ${fw.difficulty}`
     + ` · provider: ${fw.provider || 'default'}`
     + `\nFocus areas: ${areas}`
+    + (fw.assumed_knowledge ? `\nAssumed prior knowledge: ${fw.assumed_knowledge}` : '')
+    + (fw.project_scope ? `\nProject scope: ${fw.project_scope}` : '')
+    + ((fw.context_files || []).length ? `\nContext files: ${fw.context_files.join(', ')}` : '')
     + (fw.focus ? `\nInstructions: ${fw.focus}` : '');
 }
 

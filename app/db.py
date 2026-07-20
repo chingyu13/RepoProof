@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS questions (
     answer_json TEXT NOT NULL,          -- ["A","C"]
     justifications_json TEXT NOT NULL DEFAULT '{}',  -- {key: why correct/incorrect}
     evidence_json TEXT NOT NULL DEFAULT '[]',        -- [{chunk_id, title, file, lines}]
+    alignment_json TEXT NOT NULL DEFAULT '{}',
     difficulty INTEGER NOT NULL DEFAULT 1,
     focus_areas_json TEXT NOT NULL DEFAULT '[]',
     explanation TEXT NOT NULL DEFAULT '',
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS events (
 _MIGRATIONS = [
     ("projects", "consent_json", "TEXT NOT NULL DEFAULT '{}'"),
     ("projects", "project_path", "TEXT NOT NULL DEFAULT ''"),
+    ("questions", "alignment_json", "TEXT NOT NULL DEFAULT '{}'"),
 ]
 
 

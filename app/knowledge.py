@@ -5,7 +5,7 @@ from rank_bm25 import BM25Okapi
 
 MAX_CHUNKS = 800
 
-DATA_ENGINEERING_CONCEPTS = {
+CONCEPT_LEXICON = {
     "data_ingestion": {
         "triggers": ("data ingestion", "ingestion", "ingest", "extract load", "etl", "elt"),
         "aliases": ("ingest", "extract", "fetch", "download", "import", "read", "load", "source", "raw"),
@@ -26,16 +26,52 @@ DATA_ENGINEERING_CONCEPTS = {
         "triggers": ("orchestration", "workflow orchestration", "data pipeline", "airflow", "dag", "scheduling"),
         "aliases": ("pipeline", "dag", "airflow", "schedule", "task", "orchestrate", "run", "retry"),
     },
+    "architecture": {
+        "triggers": ("architecture", "component", "module", "layer", "separation of concerns"),
+        "aliases": ("module", "package", "component", "dependency", "import", "boundary", "layer", "call"),
+    },
+    "integration_api": {
+        "triggers": ("integration", "api", "endpoint", "external service", "message queue"),
+        "aliases": ("api", "endpoint", "request", "response", "client", "route", "publish", "subscribe", "mqtt"),
+    },
+    "workflow": {
+        "triggers": ("workflow", "data flow", "control flow", "pipeline", "process"),
+        "aliases": ("flow", "pipeline", "input", "output", "call", "stage", "process", "return"),
+    },
+    "testing": {
+        "triggers": ("testing", "test", "test case", "assertion", "expected behavior"),
+        "aliases": ("test", "assert", "fixture", "mock", "expected", "boundary", "failure"),
+    },
+    "security": {
+        "triggers": ("security", "authentication", "authorization", "access control", "privacy"),
+        "aliases": ("auth", "token", "permission", "validate", "sanitize", "secret", "session", "access"),
+    },
+    "database": {
+        "triggers": ("database", "data model", "data modelling", "schema", "persistence"),
+        "aliases": ("database", "table", "schema", "column", "key", "constraint", "query", "sql", "persist"),
+    },
+    "complexity": {
+        "triggers": ("complexity", "performance", "optimization", "efficiency", "big o"),
+        "aliases": ("complexity", "performance", "optimize", "loop", "branch", "time", "memory", "cache"),
+    },
+    "object_orientation": {
+        "triggers": ("oop", "object oriented", "object-oriented", "inheritance", "polymorphism"),
+        "aliases": ("class", "method", "object", "inherit", "interface", "encapsulation", "polymorphism"),
+    },
 }
 
 
-def data_engineering_expansion(text: str) -> list[str]:
+def expand_concepts(text: str, direction: str = "curriculum_to_code") -> list[str]:
     normalized = " ".join(_tokenize(text))
     terms: list[str] = []
-    for concept in DATA_ENGINEERING_CONCEPTS.values():
+    for concept in CONCEPT_LEXICON.values():
         if any(trigger in normalized for trigger in concept["triggers"]):
             terms.extend(concept["aliases"])
     return list(dict.fromkeys(terms))
+
+
+def data_engineering_expansion(text: str) -> list[str]:
+    return expand_concepts(text)
 
 
 def build_chunks(analysis: dict, snapshot_id: str) -> list[dict]:
@@ -375,6 +411,10 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
+def retrieval_tokens(text: str) -> list[str]:
+    return _tokenize(text)
+
+
 _LEGACY_KIND_EVIDENCE_TYPES = {
     "dependencies": ("dependency_graph",),
     "structure": ("module_graph",),
@@ -411,6 +451,22 @@ class EvidenceStore:
                  evidence_types: tuple[str, ...] = (),
                  expansion_terms: list[str] | tuple[str, ...] = (),
                  exclude_ids: set[str] | frozenset[str] = frozenset()) -> list[dict]:
+        return [
+            item["chunk"]
+            for item in self.retrieve_scored(
+                query,
+                k=k,
+                kinds=kinds,
+                evidence_types=evidence_types,
+                expansion_terms=expansion_terms,
+                exclude_ids=exclude_ids,
+            )
+        ]
+
+    def retrieve_scored(self, query: str, k: int = 6, kinds: tuple[str, ...] = (),
+                        evidence_types: tuple[str, ...] = (),
+                        expansion_terms: list[str] | tuple[str, ...] = (),
+                        exclude_ids: set[str] | frozenset[str] = frozenset()) -> list[dict]:
         scores = self.bm25.get_scores(_tokenize(query))
         if expansion_terms:
             scores = scores + 0.35 * self.bm25.get_scores(_tokenize(" ".join(expansion_terms)))
@@ -424,7 +480,7 @@ class EvidenceStore:
                 continue
             if evidence_types and not set(evidence_types_for_chunk(c)).intersection(evidence_types):
                 continue
-            out.append(c)
+            out.append({"chunk": c, "score": float(scores[i])})
             if len(out) >= k:
                 break
         return out

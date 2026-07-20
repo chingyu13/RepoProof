@@ -3,6 +3,7 @@ import ast
 import json
 import random
 import re
+from collections.abc import Callable
 
 from . import config
 from .knowledge import EvidenceStore, data_engineering_expansion, evidence_types_for_chunk
@@ -138,6 +139,91 @@ DISPLAY_CODE_TEMPLATE_IDS = frozenset({
     "debugging",
     "modification",
 })
+
+
+def _notify(progress: Callable[..., None] | None, stage: str, **details) -> None:
+    if progress:
+        progress(stage=stage, **details)
+
+
+def _alignment_summary(target: dict | None) -> dict:
+    if not target:
+        return {}
+    return {
+        key: target[key]
+        for key in ("id", "kind", "label", "source", "coverage", "topic_names")
+        if target.get(key)
+    }
+
+
+def _target_for_topic(cfg: dict, topic_id: str, occurrence: int) -> dict | None:
+    targets = cfg.get("assessment_targets") or []
+    scope = [target for target in targets if target.get("kind") == "project_scope"]
+    candidates = scope or [
+        target for target in targets if target.get("kind") == "prior_knowledge"
+    ]
+    evidenced = [
+        target for target in candidates
+        if target.get("coverage") != "unmatched" and target.get("evidence")
+    ]
+    candidates = evidenced
+    matched = [
+        target for target in candidates
+        if topic_id in (target.get("topic_ids") or [])
+    ]
+    candidates = matched or candidates
+    if not candidates:
+        return None
+    candidates = sorted(
+        candidates,
+        key=lambda target: (
+            target.get("coverage") == "unmatched",
+            -float(target.get("weight", 1)),
+            target.get("id", ""),
+        ),
+    )
+    weighted = [
+        target
+        for target in candidates
+        for _ in range(max(1, min(4, round(float(target.get("weight", 1))))))
+    ]
+    return weighted[occurrence % len(weighted)]
+
+
+def _question_alignment(question: dict, cfg: dict, index: int) -> dict:
+    targets = cfg.get("assessment_targets") or []
+    scope = [target for target in targets if target.get("kind") == "project_scope"]
+    candidates = scope or targets
+    if not candidates:
+        return {}
+    text = " ".join([
+        question.get("stem", ""),
+        " ".join(option.get("text", "") for option in question.get("options", [])),
+        " ".join(question.get("focus_areas", [])),
+    ]).casefold()
+    question_tokens = set(re.findall(r"[a-z_][a-z0-9_]+", text))
+    evidence_ids = {
+        item.get("chunk_id") for item in question.get("evidence", [])
+    }
+
+    def score(target: dict) -> tuple[float, float]:
+        target_tokens = set(re.findall(
+            r"[a-z_][a-z0-9_]+",
+            f"{target.get('description', '')} {' '.join(target.get('topic_names', []))}".casefold(),
+        ))
+        target_evidence = {
+            item.get("chunk_id") for item in target.get("evidence", [])
+        }
+        return (
+            len(question_tokens.intersection(target_tokens))
+            + 4 * len(evidence_ids.intersection(target_evidence)),
+            float(target.get("weight", 1)),
+        )
+
+    best = max(candidates, key=score)
+    if score(best)[0] == 0:
+        best = candidates[index % len(candidates)]
+    return _alignment_summary(best)
 
 
 def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
@@ -657,6 +743,7 @@ def _raw_openai_prompt(raw_files: list[dict], cfg: dict, choice_count: int,
     if cfg.get("focus"):
         framework.append(f"Additional instructor instruction: {str(cfg['focus']).strip()}")
     framework_text = "\n".join(framework)
+    context_text = _assessment_context_prompt(cfg)
     code_logic_plan = _raw_code_logic_plan(cfg, len(correct_counts))
     code_logic_requirements = ""
     if code_logic_plan:
@@ -693,6 +780,7 @@ FOCUS AREAS (relative coverage across the whole batch):
 
 QUESTION FRAMEWORK:
 {framework_text}
+{context_text}
 
 Use the weights to decide which concepts receive more coverage. Treat each description as a scope
 boundary: do not substitute a related focus area merely because a question mentions the same component.
@@ -707,6 +795,33 @@ ORIGINAL PROJECT FILES:
 
 Before returning JSON, verify the requested question count and every assigned `question_type`.
 """
+
+
+def _assessment_context_prompt(cfg: dict) -> str:
+    targets = cfg.get("assessment_targets") or []
+    prior = sorted(
+        (target for target in targets if target.get("kind") == "prior_knowledge"),
+        key=lambda target: -float(target.get("weight", 1)),
+    )[:8]
+    scope = sorted(
+        (target for target in targets if target.get("kind") == "project_scope"),
+        key=lambda target: -float(target.get("weight", 1)),
+    )[:14]
+    if not prior and not scope:
+        return ""
+
+    lines = ["", "ASSESSMENT CONTEXT:"]
+    if prior:
+        lines.append("Assumed prior knowledge (use as the baseline; do not test recall of these documents):")
+        lines.extend(f"- {target['description'][:500]}" for target in prior)
+    if scope:
+        lines.append("Project scope targets (assess these only where the project provides evidence):")
+        lines.extend(f"- {target['description'][:500]}" for target in scope)
+    lines.append(
+        "Align each question with a scope target when possible. Do not invent project behavior "
+        "to satisfy a target that lacks supporting source evidence."
+    )
+    return "\n".join(lines)
 
 
 def _raw_files_for_draft(raw_files: list[dict], draft: dict | None) -> list[dict]:
@@ -764,6 +879,7 @@ FRAMEWORK:
 - Exactly {correct_count} option(s) have `correct: true`.
 - Difficulty {difficulty} on a 1–5 scale.
 - {type_rules}
+{_assessment_context_prompt(cfg)}
 
 PREVIOUS DRAFT:
 {draft_text}
@@ -806,7 +922,11 @@ def _normalize_raw_question(raw: dict, index: int, cfg: dict, source_by_id: dict
     return question, []
 
 
-def _generate_raw_openai_questions(raw_files: list[dict], cfg: dict) -> tuple[list[dict], list[str]]:
+def _generate_raw_openai_questions(
+    raw_files: list[dict],
+    cfg: dict,
+    progress: Callable[..., None] | None = None,
+) -> tuple[list[dict], list[str]]:
     source_by_id = _raw_source_chunks(raw_files)
     if not source_by_id:
         return [], ["Raw GPT generation needs at least one readable source file."]
@@ -823,6 +943,8 @@ def _generate_raw_openai_questions(raw_files: list[dict], cfg: dict) -> tuple[li
     errors_by_index: dict[int, list[str]] = {index: [] for index in range(num)}
 
     try:
+        _notify(progress, "generating_questions", current=0, total=num,
+                message="Generating the question batch from the project.")
         response = _call_llm("openai", RAW_OPENAI_SYSTEM_PROMPT, prompt)
         raw_questions = response.get("questions")
         if not isinstance(raw_questions, list):
@@ -839,6 +961,7 @@ def _generate_raw_openai_questions(raw_files: list[dict], cfg: dict) -> tuple[li
             if errors:
                 errors_by_index[index].extend(errors)
             else:
+                question["alignment"] = _question_alignment(question, cfg, index)
                 accepted[index] = question
         for index in range(len(raw_questions), num):
             errors_by_index[index].append("Question was missing from the batch response.")
@@ -847,6 +970,8 @@ def _generate_raw_openai_questions(raw_files: list[dict], cfg: dict) -> tuple[li
 
     pending = [index for index in range(num) if index not in accepted]
     for index in pending:
+        _notify(progress, "repairing_questions", current=len(accepted), total=num,
+                message=f"Repairing question {index + 1}.")
         draft = drafts.get(index)
         repair_files = _raw_files_for_draft(raw_files, draft)
         for _ in range(2):
@@ -871,6 +996,7 @@ def _generate_raw_openai_questions(raw_files: list[dict], cfg: dict) -> tuple[li
                 code_logic_plan.get(index, ""),
             )
             if not errors:
+                question["alignment"] = _question_alignment(question, cfg, index)
                 accepted[index] = question
                 break
             errors_by_index[index].extend(errors)
@@ -1188,6 +1314,14 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
         if offset >= len(schedule):
             continue
         template = schedule[offset]
+        target = _target_for_topic(cfg, topic["id"], offset)
+        target_focus = (
+            f"assessment target: {target['description'][:700]}"
+            if target else ""
+        )
+        retrieval_focus = "; ".join(
+            part for part in (extra_focus, target_focus) if part
+        )
         pair = (topic["id"], template["id"])
         occurrence = pair_occurrences.get(pair, 0)
         pair_occurrences[pair] = occurrence + 1
@@ -1195,7 +1329,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
         missing = []
         for variant in (occurrence, occurrence + 1):
             evidence, missing = _template_bundle(
-                evidence_store, topic, template, extra_focus, variant
+                evidence_store, topic, template, retrieval_focus, variant
             )
             if evidence and not missing:
                 evidence_variants.append(evidence)
@@ -1213,13 +1347,22 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
             for evidence_type in evidence_types_for_chunk(chunk)
         })
         strategy = STRATEGY_BY_ID[template["strategy"]]
-        focus_for_prompt = ((extra_focus + "; ") if extra_focus else "") + (
-            f"focus area: {topic['name']} — {topic['description']}"
-        )
+        prior_summary = "; ".join(
+            target["label"]
+            for target in (cfg.get("assessment_targets") or [])
+            if target.get("kind") == "prior_knowledge"
+        )[:900]
+        focus_parts = [
+            extra_focus,
+            f"focus area: {topic['name']} — {topic['description']}",
+            target_focus,
+            f"assumed prior knowledge: {prior_summary}" if prior_summary else "",
+        ]
+        focus_for_prompt = "; ".join(part for part in focus_parts if part)
         slot = {
             "slot": f"{topic['id']}:{template['id']}",
             "focus": topic["name"],
-            "query": _template_query(topic, template, extra_focus),
+            "query": _template_query(topic, template, retrieval_focus),
             "brief": template["pattern"],
             "topic": topic["name"],
             "strategy": strategy["name"],
@@ -1232,6 +1375,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
                 for evidence_type in actual_types
                 if evidence_type in EVIDENCE_TYPE_BY_ID
             ],
+            "assessment_target": _alignment_summary(target),
         }
         slot_variants = []
         usable_evidence_variants = []
@@ -1241,7 +1385,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
                 code_display = _display_code(
                     evidence,
                     template["id"],
-                    _template_query(topic, template, extra_focus),
+                    _template_query(topic, template, retrieval_focus),
                 )
                 if code_display is None:
                     continue
@@ -1264,6 +1408,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
             "evidence_variants": usable_evidence_variants,
             "evidence_chars": template["evidence"]["chars_per_chunk"],
             "focus_for_prompt": focus_for_prompt,
+            "alignment": _alignment_summary(target),
             "correct_count": _pick_correct_count(
                 cfg, max(2, min(7, int(cfg.get("choice_count", 4)))), rng
             ),
@@ -1271,8 +1416,17 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
     return tasks, warnings, True
 
 
-def generate_questions(chunks: list[dict], cfg: dict, *, raw_files: list[dict] | None = None) -> tuple[list[dict], list[str]]:
+def generate_questions(
+    chunks: list[dict],
+    cfg: dict,
+    *,
+    raw_files: list[dict] | None = None,
+    progress: Callable[..., None] | None = None,
+) -> tuple[list[dict], list[str]]:
     """Generate cfg['num_questions'] MAQs. Returns (questions, warnings)."""
+    _notify(progress, "planning_questions", current=0,
+            total=int(cfg.get("num_questions", 5)),
+            message="Building the evidence-grounded question plan.")
     provider = (cfg.get("provider") or "").strip().lower() or config.default_provider()
     fallback_warnings = []
     if provider == "openai" and not config.openai_api_key():
@@ -1289,7 +1443,10 @@ def generate_questions(chunks: list[dict], cfg: dict, *, raw_files: list[dict] |
     if provider == "openai":
         if not raw_files:
             return [], ["Raw GPT generation needs the original project files."]
-        questions, warnings = _generate_raw_openai_questions(raw_files, cfg)
+        questions, warnings = _generate_raw_openai_questions(raw_files, cfg, progress)
+        _notify(progress, "finalizing", current=len(questions),
+                total=int(cfg.get("num_questions", 5)),
+                message="Checking question coverage and saving the batch.")
         return questions, fallback_warnings + warnings
 
     evidence_store = EvidenceStore(chunks)
@@ -1305,6 +1462,8 @@ def generate_questions(chunks: list[dict], cfg: dict, *, raw_files: list[dict] |
     seed = int(cfg.get("seed", 42))
     tasks, task_warnings, tag_catalog = _catalog_tasks(evidence_store, cfg, num, rng)
     fallback_warnings.extend(task_warnings)
+    _notify(progress, "retrieving_evidence", current=0, total=len(tasks) or num,
+            message=f"Matched structured evidence for {len(tasks)} question slot(s).")
 
     if not tag_catalog:
         focus_topics, legacy_areas = _selected_topics(cfg)
@@ -1332,6 +1491,7 @@ def generate_questions(chunks: list[dict], cfg: dict, *, raw_files: list[dict] |
                 "evidence_variants": [evidence],
                 "evidence_chars": 1400,
                 "focus_for_prompt": focus_for_prompt,
+                "alignment": {},
                 "correct_count": _pick_correct_count(cfg, choice_count, rng),
             })
 
@@ -1344,6 +1504,9 @@ def generate_questions(chunks: list[dict], cfg: dict, *, raw_files: list[dict] |
             cand["generator"] = generator_label
             if tag_catalog:
                 cand["focus_areas"] = [slot["focus"]]
+            cand["alignment"] = task.get("alignment") or _question_alignment(
+                cand, cfg, task["i"]
+            )
             return task["i"], cand, warning
 
         last_err = None
@@ -1419,6 +1582,13 @@ def generate_questions(chunks: list[dict], cfg: dict, *, raw_files: list[dict] |
 
     questions, warnings = [], list(fallback_warnings)
     for task in tasks:
+        alignment = task.get("alignment") or {}
+        target_label = alignment.get("label")
+        message = f"Generating question {len(questions) + 1} of {len(tasks)}."
+        if target_label:
+            message += f" Target: {target_label}"
+        _notify(progress, "generating_questions", current=len(questions),
+                total=len(tasks), message=message)
         i, q, err = _run(task, questions)
         if q is not None:
             questions.append(q)
@@ -1429,6 +1599,8 @@ def generate_questions(chunks: list[dict], cfg: dict, *, raw_files: list[dict] |
                 f"Question {i + 1} ({task['slot']['slot']}) rejected after repair and fresh regeneration: {err}"
             )
 
+    _notify(progress, "finalizing", current=len(questions), total=num,
+            message="Checking question coverage and saving the batch.")
     return questions, warnings
 
 

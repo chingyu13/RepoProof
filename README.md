@@ -39,6 +39,8 @@ Static analysis  (Python AST + multi-language text analysis)
         ↓
 Evidence-chunk construction  (file / line / cell / snapshot provenance)
         ↓
+Assessment context  (prior knowledge + scope/rubric → aligned targets)
+        ↓
 Focus × Template selection  →  template-specific BM25 evidence bundle
         ↓
 LLM generation  (strict-JSON, evidence-grounded)  OR  deterministic mock
@@ -57,6 +59,7 @@ Publish → Take → Exact-match scoring  (per-focus-area breakdown)
 - **Constrained generation + self-correction.** The model is called in **strict JSON mode** against a fixed schema; options are shuffled to remove positional bias; each candidate is validated, and on failure the generator **retries once with the validation errors fed back into the prompt**.
 - **Constraint validation.** Every MAQ must have 2–7 distinct options, one unambiguous correct combination (all-correct disallowed), difficulty 1–5, and linked evidence — the same gate blocks human approval.
 - **Focus-area steering.** An interactive radar chart weights areas (Architecture, Testing, …); weights allocate question topics, then a Focus × Template matrix selects evidence-sufficient question forms.
+- **Assessment alignment.** Lecture/prior-knowledge material and project scope, requirements, or rubrics can be entered or uploaded as PDF, DOCX, PPTX, or text. RepoProof extracts weighted targets, matches them to static evidence with the shared tokenizer/concept lexicon, and shows the selected target on each review question.
 - **MLOps telemetry.** An append-only event log captures generation config and human review/edit signals (derived metadata only — never raw code); a metrics endpoint aggregates approval rate, human-edit rate, and validator-block rate for comparing prompt/model versions.
 - **Auth & intake security.** Creator routes are protected by HMAC-signed `httponly` session cookies behind a password gate; intake validates GitHub URLs, runs shallow timed clones, guards against zip path traversal, and gates total project size.
 - **Deterministic mock mode.** With no API key, RepoProof produces evidence-grounded sample questions labeled `[MOCK]`, so the entire flow is demoable without spending tokens.
@@ -74,6 +77,7 @@ app/
 ├── ingest.py      # GitHub clone / .zip extraction, size & path-traversal guards
 ├── analyzer.py    # Python AST + multi-language file analysis
 ├── knowledge.py   # evidence chunks + BM25 retrieval
+├── alignment.py   # context extraction + assessment-target/evidence alignment
 ├── generator.py   # LLM & mock MAQ generation (+ validate-and-retry)
 ├── validator.py   # MAQ schema & rule validation
 ├── scoring.py     # exact-match + per-focus-area scoring

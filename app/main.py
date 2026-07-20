@@ -1,15 +1,25 @@
 """FastAPI application: creator API, taker API, print view, static UI."""
 import hashlib
 import hmac
+import json
 import secrets
+import threading
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from . import config, db
+from .alignment import (
+    MAX_FILE_BYTES,
+    ContextDocumentError,
+    align_assessment_targets,
+    build_assessment_targets,
+    context_summary,
+    extract_document_text,
+)
 from .analyzer import analyze_project, prune_non_source
 from .generator import generate_questions
 from .ingest import IngestError, clone_github, delete_project_files, extract_upload, raw_project_files
@@ -24,6 +34,8 @@ db.init()
 STATIC_DIR = Path(__file__).parent / "static"
 COOKIE_NAME = "repoproof_creator"
 _SESSION_SECRET = config.SESSION_SECRET or secrets.token_urlsafe(32)
+_GENERATION_RUNS: dict[str, dict] = {}
+_GENERATION_LOCK = threading.Lock()
 
 
 def _session_token() -> str:
@@ -49,6 +61,7 @@ def _requires_creator_auth(path: str) -> bool:
         "/api/projects",
         "/api/questions",
         "/api/assessments",
+        "/api/generation-runs",
         "/print/",
         "/docs",
         "/redoc",
@@ -293,41 +306,21 @@ def delete_project(project_id: int):
     return {"ok": True}
 
 
-@app.post("/api/projects/{project_id}/generate")
-def generate(project_id: int, cfg: GenerateConfig):
-    p = db.get("projects", project_id)
-    if not p:
-        raise HTTPException(404, "Project not found")
-    raw_files = None
-    provider = (cfg.provider or config.default_provider()).lower()
-    if provider == "openai":
-        root = _project_root(p)
-        if root is None:
-            raise HTTPException(
-                409,
-                "Raw GPT generation needs the original project files. Re-upload this older project first.",
-            )
-        try:
-            raw_files = raw_project_files(root, config.OPENAI_RAW_MAX_CHARS)
-        except IngestError as exc:
-            raise HTTPException(400, str(exc)) from exc
-    questions, warnings = generate_questions(p["chunks"], cfg.model_dump(), raw_files=raw_files)
-    # A fresh generation REPLACES the previous pool so the review list shows
-    # exactly the batch just requested. By default everything goes; with
-    # keep_approved, approved questions survive. Questions referenced by a
-    # published assessment are ALWAYS kept (assessment integrity).
+def _store_generated_questions(
+    project_id: int,
+    cfg: dict,
+    questions: list[dict],
+    warnings: list[str],
+) -> dict:
     replaced = 0
     used: set[int] = set()
     if questions:
         for a in db.list_where("assessments", "project_id=?", (project_id,)):
             used.update(a["question_ids"])
         for old in db.list_where("questions", "project_id=?", (project_id,)):
-            if cfg.keep_approved and old["status"] == "approved":
+            if cfg.get("keep_approved") and old["status"] == "approved":
                 continue
             if old["id"] in used:
-                # referenced by a published assessment: the row must survive so old
-                # take-links keep working, but ARCHIVE it so it leaves the review
-                # pool — it stays visible in the Step-4 assessment history instead.
                 if old["status"] != "archived":
                     db.update("questions", old["id"], {"status": "archived"})
                     replaced += 1
@@ -344,33 +337,254 @@ def generate(project_id: int, cfg: GenerateConfig):
             "answer_json": q["answer"],
             "justifications_json": q["justifications"],
             "evidence_json": q["evidence"],
+            "alignment_json": q.get("alignment", {}),
             "difficulty": q["difficulty"],
             "focus_areas_json": q["focus_areas"],
             "explanation": q["explanation"],
             "generator": q["generator"],
         })
         ids.append(qid)
-    provider_used = questions[0]["generator"] if questions else (cfg.provider or config.default_provider())
+    provider_used = questions[0]["generator"] if questions else (
+        cfg.get("provider") or config.default_provider()
+    )
+    targets = cfg.get("assessment_targets") or []
     db.log_event("generation_run", {
         "model": provider_used,
         "mock_mode": config.mock_mode(),
-        "requested": cfg.num_questions,
+        "requested": cfg.get("num_questions", 5),
         "created": len(ids),
-        "choice_count": cfg.choice_count,
-        "correct_mode": cfg.correct_mode,
-        "difficulty": cfg.difficulty,
-        "topic": cfg.topic,
+        "choice_count": cfg.get("choice_count", 4),
+        "correct_mode": cfg.get("correct_mode", "exact"),
+        "difficulty": cfg.get("difficulty", 3),
+        "topic": cfg.get("topic", ""),
         "focus_areas": [
             {"id": area.get("id"), "name": area.get("name"), "weight": area.get("weight")}
-            for area in cfg.focus_areas if area.get("id") or area.get("name")
+            for area in cfg.get("focus_areas", []) if area.get("id") or area.get("name")
         ],
         "template_selection": "focus_matrix",
-        "template_override": cfg.template or None,
-        "areas": [a.get("name") for a in cfg.areas if a.get("name")],
+        "template_override": cfg.get("template") or None,
+        "areas": [area.get("name") for area in cfg.get("areas", []) if area.get("name")],
+        "assessment_targets": len(targets),
+        "aligned_targets": sum(target.get("coverage") != "unmatched" for target in targets),
         "warnings": len(warnings),
     }, project_id=project_id)
     return {"created": ids, "warnings": warnings, "mock_mode": config.mock_mode(),
             "provider": provider_used, "replaced_drafts": replaced}
+
+
+def _raw_files_for_generation(project: dict, cfg: dict) -> list[dict] | None:
+    provider = (cfg.get("provider") or config.default_provider()).lower()
+    if provider != "openai":
+        return None
+    root = _project_root(project)
+    if root is None:
+        raise ValueError(
+            "Raw GPT generation needs the original project files. Re-upload this older project first."
+        )
+    return raw_project_files(root, config.OPENAI_RAW_MAX_CHARS)
+
+
+@app.post("/api/projects/{project_id}/generate")
+def generate(project_id: int, cfg: GenerateConfig):
+    project = db.get("projects", project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    values = cfg.model_dump()
+    try:
+        raw_files = _raw_files_for_generation(project, values)
+    except (IngestError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    questions, warnings = generate_questions(project["chunks"], values, raw_files=raw_files)
+    return _store_generated_questions(project_id, values, questions, warnings)
+
+
+def _update_generation_run(run_id: str, **values) -> None:
+    with _GENERATION_LOCK:
+        run = _GENERATION_RUNS.get(run_id)
+        if run:
+            run.update(values)
+            run["updated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+
+def _generation_progress(run_id: str, **progress) -> None:
+    _update_generation_run(run_id, progress=progress)
+
+
+def _run_generation(
+    run_id: str,
+    project_id: int,
+    cfg: dict,
+    assumed_knowledge: str,
+    project_scope: str,
+    prior_files: list[tuple[str, bytes]],
+    scope_files: list[tuple[str, bytes]],
+) -> None:
+    try:
+        project = db.get("projects", project_id)
+        if not project:
+            raise ValueError("Project no longer exists.")
+        _update_generation_run(run_id, status="running")
+        _generation_progress(
+            run_id,
+            stage="extracting_context",
+            current=0,
+            total=len(prior_files) + len(scope_files),
+            message="Reading assessment context.",
+        )
+
+        def documents(items: list[tuple[str, bytes]]) -> list[dict]:
+            result = []
+            for name, data in items:
+                text = extract_document_text(name, data)
+                if not text:
+                    raise ContextDocumentError(f"No readable text was found in {name}.")
+                result.append({"name": name, "text": text})
+            return result
+
+        prior_documents = documents(prior_files)
+        scope_documents = documents(scope_files)
+        targets = build_assessment_targets(
+            assumed_knowledge,
+            project_scope,
+            prior_documents,
+            scope_documents,
+        )
+        _generation_progress(
+            run_id,
+            stage="aligning_targets",
+            current=0,
+            total=len(targets),
+            message="Matching assessment targets to project evidence.",
+        )
+        aligned_targets = align_assessment_targets(
+            project["chunks"],
+            targets,
+            cfg.get("focus_areas") or [],
+        )
+        cfg["assessment_targets"] = aligned_targets
+        cfg["assumed_knowledge_summary"] = context_summary(
+            aligned_targets, "prior_knowledge"
+        )
+        context_result = {
+            "targets": len(aligned_targets),
+            "matched": sum(
+                target.get("coverage") != "unmatched" for target in aligned_targets
+            ),
+            "prior_knowledge": sum(
+                target.get("kind") == "prior_knowledge" for target in aligned_targets
+            ),
+            "project_scope": sum(
+                target.get("kind") == "project_scope" for target in aligned_targets
+            ),
+            "files": [name for name, _ in prior_files + scope_files],
+        }
+        _update_generation_run(run_id, context=context_result)
+        raw_files = _raw_files_for_generation(project, cfg)
+        questions, warnings = generate_questions(
+            project["chunks"],
+            cfg,
+            raw_files=raw_files,
+            progress=lambda **progress: _generation_progress(run_id, **progress),
+        )
+        if not db.get("projects", project_id):
+            raise ValueError("Project no longer exists.")
+        result = _store_generated_questions(project_id, cfg, questions, warnings)
+        result["context"] = context_result
+        _update_generation_run(
+            run_id,
+            status="complete",
+            result=result,
+            progress={
+                "stage": "complete",
+                "current": len(questions),
+                "total": cfg.get("num_questions", 5),
+                "message": f"Created {len(questions)} question(s).",
+            },
+        )
+    except (ContextDocumentError, IngestError, ValueError) as exc:
+        _update_generation_run(run_id, status="failed", error=str(exc))
+    except Exception as exc:
+        _update_generation_run(
+            run_id,
+            status="failed",
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+@app.post("/api/projects/{project_id}/generation-runs")
+async def start_generation(
+    project_id: int,
+    background_tasks: BackgroundTasks,
+    config_json: str = Form(...),
+    assumed_knowledge: str = Form(""),
+    project_scope: str = Form(""),
+    prior_files: list[UploadFile] | None = File(None),
+    scope_files: list[UploadFile] | None = File(None),
+):
+    if not db.get("projects", project_id):
+        raise HTTPException(404, "Project not found")
+    try:
+        cfg = GenerateConfig(**json.loads(config_json)).model_dump()
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid question framework.") from exc
+
+    async def read_uploads(files: list[UploadFile] | None) -> list[tuple[str, bytes]]:
+        result = []
+        for upload in files or []:
+            name = upload.filename or "context.txt"
+            data = await upload.read(MAX_FILE_BYTES + 1)
+            if len(data) > MAX_FILE_BYTES:
+                raise HTTPException(400, f"{name} exceeds the 12 MB context-file limit.")
+            result.append((name, data))
+        return result
+
+    prior_payloads = await read_uploads(prior_files)
+    scope_payloads = await read_uploads(scope_files)
+    run_id = secrets.token_urlsafe(12)
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    with _GENERATION_LOCK:
+        completed = [
+            key for key, value in _GENERATION_RUNS.items()
+            if value.get("status") in {"complete", "failed"}
+        ]
+        while len(_GENERATION_RUNS) >= 100 and completed:
+            _GENERATION_RUNS.pop(completed.pop(0), None)
+        _GENERATION_RUNS[run_id] = {
+            "id": run_id,
+            "project_id": project_id,
+            "status": "queued",
+            "progress": {
+                "stage": "queued",
+                "current": 0,
+                "total": cfg["num_questions"],
+                "message": "Generation queued.",
+            },
+            "context": {},
+            "result": None,
+            "error": "",
+            "created_at": now,
+            "updated_at": now,
+        }
+    background_tasks.add_task(
+        _run_generation,
+        run_id,
+        project_id,
+        cfg,
+        assumed_knowledge,
+        project_scope,
+        prior_payloads,
+        scope_payloads,
+    )
+    return {"id": run_id, "status": "queued"}
+
+
+@app.get("/api/generation-runs/{run_id}")
+def generation_run(run_id: str):
+    with _GENERATION_LOCK:
+        run = _GENERATION_RUNS.get(run_id)
+        if not run:
+            raise HTTPException(404, "Generation run not found")
+        return dict(run)
 
 
 @app.get("/api/projects/{project_id}/questions")
