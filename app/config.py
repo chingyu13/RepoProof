@@ -20,6 +20,7 @@ SESSION_SECRET = os.environ.get("REPOPROOF_SESSION_SECRET", "").strip()
 #   LM Studio -> http://127.0.0.1:1234/v1
 LOCAL_LLM_URL = os.environ.get("REPOPROOF_LOCAL_LLM_URL", "http://127.0.0.1:11434/v1").rstrip("/")
 LOCAL_LLM_MODEL = os.environ.get("REPOPROOF_LOCAL_LLM_MODEL", "qwen2.5-coder:7b")
+LOCAL_LLM_MAX_TOKENS = int(os.environ.get("REPOPROOF_LOCAL_LLM_MAX_TOKENS", "700"))
 # optional forced default: 'openai' | 'local' | 'mock'
 _FORCED_PROVIDER = os.environ.get("REPOPROOF_LLM_PROVIDER", "").strip().lower()
 

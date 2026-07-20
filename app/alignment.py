@@ -199,6 +199,22 @@ def _target_weight(text: str, kind: str) -> float:
     return round(base + min(max(marks) / 3, 3.85), 2)
 
 
+def _is_assessable_target(text: str) -> bool:
+    compact = " ".join(text.split()).strip()
+    visible = re.sub(r"^[#>*\s-]+", "", compact).strip()
+    plain = re.sub(r"[*_`]", "", visible)
+    if not visible or compact.lstrip().startswith("#"):
+        return False
+    if re.fullmatch(
+        r"total(?:\s+(?:marks?|points?))?\s*:?\s*"
+        r"\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)?\s*(?:marks?|points?)?",
+        plain,
+        re.I,
+    ):
+        return False
+    return bool(re.search(r"[A-Za-z\u3400-\u9fff]", visible))
+
+
 def build_assessment_targets(
     assumed_knowledge: str,
     project_scope: str,
@@ -226,6 +242,8 @@ def build_assessment_targets(
     for kind, source, text in sources:
         blocks = _rubric_blocks(text) or _text_blocks(text)
         for block in blocks:
+            if not _is_assessable_target(block):
+                continue
             normalized = " ".join(block.casefold().split())
             if normalized in seen:
                 continue

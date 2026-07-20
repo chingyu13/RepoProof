@@ -43,6 +43,7 @@ NOTEBOOK_MAX_BYTES = int(float(os.environ.get("REPOPROOF_MAX_NOTEBOOK_MB", "25")
 MAX_SNIPPET_CHARS = 1500
 MAX_TEXT_CHARS = 6000
 README_CAP = 12_000
+ANALYSIS_VERSION = 2
 
 LANG_BY_EXT = {
     ".py": "Python", ".ipynb": "Jupyter Notebook",
@@ -909,6 +910,7 @@ def analyze_project(root: Path) -> dict:
     _resolve_import_graph(out)
 
     out["stats"] = {
+        "analysis_version": ANALYSIS_VERSION,
         "source_files": len(out["files"]),
         "files_by_language": dict(sorted(by_language.items(), key=lambda kv: -kv[1])),
         "python_files": by_language.get("Python", 0),

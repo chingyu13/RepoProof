@@ -3,6 +3,7 @@ import ast
 import json
 import random
 import re
+import time
 from collections.abc import Callable
 
 from . import config
@@ -139,6 +140,12 @@ DISPLAY_CODE_TEMPLATE_IDS = frozenset({
     "debugging",
     "modification",
 })
+CONCEPTUAL_TEMPLATE_IDS = frozenset({
+    "purpose_responsibility",
+    "workflow",
+    "design_behavior",
+    "schema_integrity",
+})
 
 
 def _notify(progress: Callable[..., None] | None, stage: str, **details) -> None:
@@ -230,7 +237,16 @@ def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
                      correct_count: int, difficulty: int, extra_focus: str,
                      evidence_chars: int = 1_400,
                      avoid_questions: list[dict] | None = None) -> str:
-    ev_text = "\n\n".join(f"[{c['id']}] {c['title']}\n{c['text'][:evidence_chars]}" for c in evidence)
+    def evidence_text(chunk: dict) -> str:
+        text = chunk["text"]
+        if chunk["id"] == slot.get("display_evidence_id"):
+            if "\nCode:\n" in text:
+                text = text.split("\nCode:\n", 1)[0] + "\nCode is shown separately below."
+            elif slot.get("display_code") and slot["display_code"] in text:
+                text = text.replace(slot["display_code"], "Code is shown separately below.")
+        return f"[{chunk['id']}] {chunk['title']}\n{text[:evidence_chars]}"
+
+    ev_text = "\n\n".join(evidence_text(chunk) for chunk in evidence)
     focus_line = f"\nAssessment creator focus/instructions: {extra_focus}" if extra_focus else ""
     diversity_line = ""
     if avoid_questions:
@@ -260,6 +276,21 @@ Question template: {slot['template_pattern']}"""
                 "\nArchitecture rule: test an evidenced relationship between at least two "
                 "components, such as a dependency, shared downstream path, boundary, or "
                 "cross-component consequence. Never ask what one named function does."
+            )
+        if (
+            slot.get("template_id") in CONCEPTUAL_TEMPLATE_IDS
+            and not slot.get("display_code")
+        ):
+            catalog_lines += (
+                "\nConceptual-question rule: do not ask about one variable, one conditional "
+                "branch, one return value, or one isolated function call. Do not include code. "
+                "Combine at least two project stages, components, data representations, or "
+                "evidence facts, and make every option a system-level factual claim."
+            )
+        if slot.get("template_id") == "workflow":
+            catalog_lines += (
+                "\nWorkflow rule: test an ordered path across multiple stages, including the "
+                "resulting output or side effect; do not reduce the question to one condition."
             )
         if slot.get("evidence_type_names"):
             catalog_lines += "\nStructured evidence supplied: " + ", ".join(slot["evidence_type_names"])
@@ -378,7 +409,7 @@ def _call_llm(provider: str, system: str, user: str, *, temperature: float | Non
         timeout=timeout,
     )
     if provider == "local":
-        kwargs["max_tokens"] = 1_200
+        kwargs["max_tokens"] = config.LOCAL_LLM_MAX_TOKENS
     else:
         kwargs["max_tokens"] = 16_000
     try:
@@ -553,6 +584,12 @@ def _code_grounding_errors(question: dict, slot: dict,
 
 def _specific_evidence_errors(question: dict, slot: dict, chunk_by_id: dict[str, dict]) -> list[str]:
     template_id = slot.get("template_id")
+    if (
+        template_id in CONCEPTUAL_TEMPLATE_IDS
+        and not slot.get("display_code")
+        and re.search(r"```(?:[a-zA-Z0-9_+.#-]+)?\s*\n.*?```", question["stem"], re.S)
+    ):
+        return [f"{slot['template_name']} is a conceptual template and must not become a code-reading question."]
     if template_id in DISPLAY_CODE_TEMPLATE_IDS:
         if not re.search(r"```(?:[a-zA-Z0-9_+.#-]+)?\s*\n.*?```", question["stem"], re.S):
             return [f"{slot['template_name']} needs a self-contained fenced code excerpt."]
@@ -586,6 +623,19 @@ def _specific_evidence_errors(question: dict, slot: dict, chunk_by_id: dict[str,
     )
     if not has_operation:
         return ["Responsibility and workflow questions need evidence of a concrete operation, not only file structure."]
+    if template_id == "workflow":
+        if not any(
+            chunk and chunk["kind"] in {"flow", "callgraph", "import_graph", "api_discovery"}
+            for chunk in cited
+        ):
+            return ["Workflow questions need a multi-stage flow or relationship evidence chunk."]
+        if re.search(
+            r"\b(?:what happens|which observable behavior occurs)\s+(?:if|when)\b|"
+            r"\b(?:if|when)\s+`?[A-Za-z_][A-Za-z0-9_.]*(?:\(\))?`?\s+(?:is|equals?|==|!=)",
+            question["stem"],
+            re.I,
+        ):
+            return ["Workflow questions must test a multi-stage path, not one implementation condition."]
     return []
 
 
@@ -1178,7 +1228,7 @@ def _display_code(evidence: list[dict], template_id: str = "",
         snippets.append(code)
         for snippet in dict.fromkeys(snippets):
             line_count = len(snippet.splitlines())
-            if snippet and line_count <= 50:
+            if snippet and line_count <= 12:
                 candidates.append((chunk, snippet, line_count))
     if not candidates:
         return None
@@ -1221,10 +1271,10 @@ def _display_code(evidence: list[dict], template_id: str = "",
     return code, language, chunk["id"]
 
 
-def _needs_supporting_code(template_id: str, evidence: list[dict]) -> bool:
+def _needs_supporting_code(template_id: str, evidence: list[dict], topic_id: str = "") -> bool:
     if template_id in DISPLAY_CODE_TEMPLATE_IDS:
         return True
-    if template_id != "purpose_responsibility":
+    if template_id != "purpose_responsibility" or topic_id != "project_logic":
         return False
     for chunk in evidence:
         if chunk["kind"] in {"flow", "callgraph", "import_graph"}:
@@ -1237,8 +1287,7 @@ def _needs_supporting_code(template_id: str, evidence: list[dict]) -> bool:
 def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
                    rng: random.Random) -> tuple[list[dict], list[str], bool]:
     focus_topics, legacy_areas = _selected_topics(cfg)
-    topic_seq = _proportional_schedule(focus_topics, num) if focus_topics else []
-    if not topic_seq:
+    if not focus_topics:
         return [], [], False
 
     extra_focus = str(cfg.get("focus") or "").strip()
@@ -1250,11 +1299,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
     if override_id and not template_override:
         warnings.append(f"Unknown template {override_id!r}; using the focus matrix.")
 
-    topic_counts: dict[str, int] = {}
-    for topic in topic_seq:
-        topic_counts[topic["id"]] = topic_counts.get(topic["id"], 0) + 1
-
-    schedules: dict[str, list[dict]] = {}
+    availability: dict[str, dict] = {}
     for topic, _ in focus_topics:
         candidate_templates = (
             [template_override]
@@ -1274,13 +1319,11 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
                 available_ids.add(template["id"])
             else:
                 missing_by_template[template["id"]] = missing
-        if template_override and template_override["id"] in available_ids:
-            schedules[topic["id"]] = [template_override] * topic_counts[topic["id"]]
-        else:
-            schedules[topic["id"]] = weighted_template_schedule(
-                topic, topic_counts[topic["id"]], available_ids
-            )
-        if not schedules[topic["id"]]:
+        availability[topic["id"]] = {
+            "available_ids": available_ids,
+            "missing_by_template": missing_by_template,
+        }
+        if not available_ids:
             if (
                 topic["id"] == "architecture"
                 and missing_by_template
@@ -1302,6 +1345,29 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
                 f"No evidence-sufficient template for {topic['name']}"
                 + (f" ({details})" if details else "")
                 + "."
+            )
+
+    available_focus_topics = [
+        (topic, weight)
+        for topic, weight in focus_topics
+        if availability[topic["id"]]["available_ids"]
+    ]
+    topic_seq = _proportional_schedule(available_focus_topics, num)
+    if not topic_seq:
+        return [], warnings, True
+
+    topic_counts: dict[str, int] = {}
+    for topic in topic_seq:
+        topic_counts[topic["id"]] = topic_counts.get(topic["id"], 0) + 1
+
+    schedules: dict[str, list[dict]] = {}
+    for topic, _ in available_focus_topics:
+        available_ids = availability[topic["id"]]["available_ids"]
+        if template_override and template_override["id"] in available_ids:
+            schedules[topic["id"]] = [template_override] * topic_counts[topic["id"]]
+        else:
+            schedules[topic["id"]] = weighted_template_schedule(
+                topic, topic_counts[topic["id"]], available_ids
             )
 
     tasks = []
@@ -1327,7 +1393,15 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
         pair_occurrences[pair] = occurrence + 1
         evidence_variants = []
         missing = []
-        for variant in (occurrence, occurrence + 1):
+        needs_code = (
+            template["id"] in DISPLAY_CODE_TEMPLATE_IDS
+            or (
+                template["id"] == "purpose_responsibility"
+                and topic["id"] == "project_logic"
+            )
+        )
+        variant_count = 5 if needs_code else 2
+        for variant in range(occurrence, occurrence + variant_count):
             evidence, missing = _template_bundle(
                 evidence_store, topic, template, retrieval_focus, variant
             )
@@ -1381,7 +1455,11 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
         usable_evidence_variants = []
         for evidence in evidence_variants:
             variant_slot = dict(slot)
-            if _needs_supporting_code(template["id"], evidence):
+            variant_slot["default_evidence_ids"] = [chunk["id"] for chunk in evidence]
+            variant_slot["requested_difficulty"] = max(
+                1, min(5, int(cfg.get("difficulty", 3)))
+            )
+            if _needs_supporting_code(template["id"], evidence, topic["id"]):
                 code_display = _display_code(
                     evidence,
                     template["id"],
@@ -1459,6 +1537,20 @@ def generate_questions(
 
     mock = provider == "mock"
     generator_label = {"mock": "mock", "local": f"local:{config.LOCAL_LLM_MODEL}"}[provider]
+    metrics = None
+    if provider == "local":
+        metrics = {
+            "llm_calls": 0,
+            "llm_seconds": 0.0,
+            "repair_calls": 0,
+            "validation_failures": 0,
+            "duplicate_retries": 0,
+            "accepted_first_pass": 0,
+            "accepted_after_repair": 0,
+            "accepted_after_regeneration": 0,
+            "rejected": 0,
+        }
+        cfg["_generation_metrics"] = metrics
     seed = int(cfg.get("seed", 42))
     tasks, task_warnings, tag_catalog = _catalog_tasks(evidence_store, cfg, num, rng)
     fallback_warnings.extend(task_warnings)
@@ -1484,6 +1576,8 @@ def generate_questions(
                 k=4,
                 expansion_terms=data_engineering_expansion(focus_for_prompt),
             )
+            slot["default_evidence_ids"] = [chunk["id"] for chunk in evidence]
+            slot["requested_difficulty"] = difficulty
             tasks.append({
                 "i": index,
                 "slot": slot,
@@ -1500,13 +1594,29 @@ def generate_questions(
         correct_count = task["correct_count"]
         trng = random.Random(seed * 1000 + task["i"])
 
-        def _accept(cand, warning=None):
+        def _tracked_call(user_prompt: str, *, temperature: float | None = None,
+                          repair: bool = False) -> dict:
+            started = time.perf_counter()
+            try:
+                return _call_llm(
+                    provider, SYSTEM_PROMPT, user_prompt, temperature=temperature
+                )
+            finally:
+                if metrics is not None:
+                    metrics["llm_calls"] += 1
+                    metrics["llm_seconds"] += time.perf_counter() - started
+                    if repair:
+                        metrics["repair_calls"] += 1
+
+        def _accept(cand, warning=None, outcome: str = ""):
             cand["generator"] = generator_label
             if tag_catalog:
                 cand["focus_areas"] = [slot["focus"]]
             cand["alignment"] = task.get("alignment") or _question_alignment(
                 cand, cfg, task["i"]
             )
+            if metrics is not None and outcome:
+                metrics[outcome] += 1
             return task["i"], cand, warning
 
         last_err = None
@@ -1534,29 +1644,39 @@ def generate_questions(
                             "\n\nGenerate a substantively different replacement using the supplied "
                             f"evidence. Previous issue: {last_err}"
                         )
-                    raw = _call_llm(provider, SYSTEM_PROMPT, prompt)
+                    raw = _tracked_call(prompt)
                 q = _normalize(raw, slot, chunk_by_id, trng)
                 errs = validate_maq(q, choice_count, correct_count)
                 errs.extend(_specific_evidence_errors(q, slot, chunk_by_id))
                 if not errs:
                     duplicate = find_similar_question(q, previous_questions)
                     if not duplicate:
-                        return _accept(q)
+                        outcome = (
+                            "accepted_first_pass"
+                            if fresh_attempt == 0
+                            else "accepted_after_regeneration"
+                        )
+                        return _accept(q, outcome=outcome)
                     last_valid = q
                     last_err = (
                         f"Too similar to existing Q{duplicate[0] + 1} "
                         f"(similarity {duplicate[1]:.2f})"
                     )
+                    if metrics is not None:
+                        metrics["duplicate_retries"] += 1
                     continue
                 last_err = "; ".join(errs)
+                if metrics is not None:
+                    metrics["validation_failures"] += 1
                 if mock:
                     continue
+                if fresh_attempt > 0:
+                    continue
 
-                repair_raw = _call_llm(
-                    provider,
-                    SYSTEM_PROMPT,
+                repair_raw = _tracked_call(
                     _repair_prompt(raw, evidence, choice_count, correct_count, last_err),
                     temperature=0.0,
+                    repair=True,
                 )
                 repaired = _normalize(repair_raw, slot, chunk_by_id, trng)
                 repair_errs = validate_maq(repaired, choice_count, correct_count)
@@ -1564,20 +1684,32 @@ def generate_questions(
                 if not repair_errs:
                     duplicate = find_similar_question(repaired, previous_questions)
                     if not duplicate:
-                        return _accept(repaired)
+                        return _accept(
+                            repaired, outcome="accepted_after_repair"
+                        )
                     last_valid = repaired
                     last_err = (
                         f"Too similar to existing Q{duplicate[0] + 1} "
                         f"(similarity {duplicate[1]:.2f})"
                     )
+                    if metrics is not None:
+                        metrics["duplicate_retries"] += 1
                     continue
                 last_err = "; ".join(repair_errs)
+                if metrics is not None:
+                    metrics["validation_failures"] += 1
             except GenerationError as exc:
                 last_err = str(exc)
             except Exception as exc:  # API/JSON errors -> retry once, then warn
                 last_err = f"{type(exc).__name__}: {exc}"
         if last_valid is not None:
-            return _accept(last_valid, f"Question {task['i'] + 1} remained similar after regeneration.")
+            return _accept(
+                last_valid,
+                f"Question {task['i'] + 1} remained similar after regeneration.",
+                "accepted_after_regeneration",
+            )
+        if metrics is not None:
+            metrics["rejected"] += 1
         return task["i"], None, last_err
 
     questions, warnings = [], list(fallback_warnings)
@@ -1601,28 +1733,39 @@ def generate_questions(
 
     _notify(progress, "finalizing", current=len(questions), total=num,
             message="Checking question coverage and saving the batch.")
+    if metrics is not None:
+        metrics["llm_seconds"] = round(metrics["llm_seconds"], 2)
     return questions, warnings
 
 
 def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | None = None) -> dict:
-    opts_raw = list(raw.get("options", [])[:7])
+    indexed_options = list(enumerate(raw.get("options", [])[:7]))
     # LLMs put correct options first (position bias) — shuffle so the answer
     # key is uniformly distributed across A..G.
     if rng is not None:
-        rng.shuffle(opts_raw)
+        rng.shuffle(indexed_options)
     options = []
     answer = []
-    for j, opt in enumerate(opts_raw):
+    key_map = {}
+    for j, (original_index, opt) in enumerate(indexed_options):
         key = OPTION_KEYS[j]
+        original_key = str(opt.get("key") or OPTION_KEYS[original_index]).upper()
+        key_map[original_key] = key
         options.append({"key": key, "text": str(opt.get("text", "")).strip()})
         if opt.get("correct"):
             answer.append(key)
     justifications = {
         OPTION_KEYS[j]: str(opt.get("justification", "")).strip()
-        for j, opt in enumerate(opts_raw)
+        for j, (_, opt) in enumerate(indexed_options)
     }
     evidence = []
-    evidence_ids = list(raw.get("evidence_ids", []))
+    evidence_ids = [
+        cid for cid in raw.get("evidence_ids", [])
+        if cid in chunk_by_id
+    ]
+    for cid in slot.get("default_evidence_ids", []):
+        if cid not in evidence_ids:
+            evidence_ids.append(cid)
     display_evidence_id = slot.get("display_evidence_id")
     if display_evidence_id and display_evidence_id not in evidence_ids:
         evidence_ids.append(display_evidence_id)
@@ -1634,7 +1777,7 @@ def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | No
                 "lines": f"{c['start_line']}-{c['end_line']}" if c["start_line"] else "",
                 "snapshot": c["snapshot"],
             })
-    diff = raw.get("difficulty", 1)
+    diff = slot.get("requested_difficulty", raw.get("difficulty", 1))
     stem = str(raw.get("stem", "")).strip()
     stem = re.sub(
         r"\s*,?\s*\b(?:notebook\s+)?cell\s+#?\d+\b",
@@ -1651,6 +1794,17 @@ def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | No
             f"\n```{slot['display_language']}\n"
             f"{slot['display_code']}\n```"
         )
+    explanation = str(raw.get("explanation", "")).strip()
+    explanation = re.sub(
+        r"\b(option|choice|answer)(\s+)([A-G])\b",
+        lambda match: (
+            match.group(1)
+            + match.group(2)
+            + key_map.get(match.group(3).upper(), match.group(3).upper())
+        ),
+        explanation,
+        flags=re.I,
+    )
     return {
         "slot": slot["slot"],
         "stem": stem,
@@ -1660,5 +1814,5 @@ def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | No
         "evidence": evidence,
         "difficulty": int(diff) if isinstance(diff, (int, float, str)) and str(diff).isdigit() else 1,
         "focus_areas": [str(f) for f in raw.get("focus_areas", [slot["focus"]])][:4] or [slot["focus"]],
-        "explanation": str(raw.get("explanation", "")).strip(),
+        "explanation": explanation,
     }

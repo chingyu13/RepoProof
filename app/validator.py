@@ -45,6 +45,16 @@ _GIVEAWAY_DISTRACTOR_RE = re.compile(
 )
 _CODE_BLOCK_RE = re.compile(r"```(?:[a-zA-Z0-9_+.#-]+)?\s*\n.*?```", re.S)
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
+_HIDDEN_IMPLEMENTATION_CONDITION_RE = re.compile(
+    r"\b(?:if|when)\s+`?[A-Za-z_][A-Za-z0-9_.]*(?:\(\))?`?\s+"
+    r"(?:is\b|equals?\b|==|!=)",
+    re.I,
+)
+_EXPLANATION_ANSWER_RE = re.compile(
+    r"\b(?:option|choice|answer)\s+([A-G])\s+"
+    r"(?:is|would be|remains)\s+(?:the\s+)?correct\b",
+    re.I,
+)
 
 
 def _stem_code_errors(stem: str, options: list[str]) -> list[str]:
@@ -119,6 +129,14 @@ def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
                 "A named component's broad purpose can be guessed from its identifier. Ask about "
                 "a non-obvious condition, transformation, preserved state, dependency, or consequence."
             )
+        if (
+            _HIDDEN_IMPLEMENTATION_CONDITION_RE.search(stem)
+            and not _CODE_BLOCK_RE.search(stem)
+        ):
+            errors.append(
+                "A question about an implementation variable or condition must show the "
+                "code needed to derive the answer."
+            )
         errors.extend(_stem_code_errors(stem, texts))
 
     answer = q.get("answer") or []
@@ -149,6 +167,14 @@ def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
                     f"Option {key} is treated as false only because it is unstated; "
                     "an incorrect option must contradict the evidence."
                 )
+    if semantic_checks:
+        explanation_letters = set(
+            _EXPLANATION_ANSWER_RE.findall(str(q.get("explanation") or ""))
+        )
+        if explanation_letters.difference(answer):
+            errors.append(
+                "The explanation identifies a different correct option from the answer key."
+            )
 
     difficulty = q.get("difficulty")
     if not isinstance(difficulty, int) or not (1 <= difficulty <= 5):

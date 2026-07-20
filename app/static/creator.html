@@ -825,6 +825,7 @@ $('addArea').onclick = ()=>{
 
 const generationStages = {
   queued:'Queued',
+  refreshing_project_evidence:'Refreshing project evidence',
   extracting_context:'Reading assessment context',
   aligning_targets:'Aligning targets with project evidence',
   planning_questions:'Planning questions',
@@ -884,6 +885,7 @@ $('generate').onclick = async ()=>{
     });
     const res = await waitForGeneration(started.id);
     $('genStatus').textContent = `Created ${res.created.length} question(s) via ${res.provider || (res.mock_mode ? 'mock' : 'LLM')}`
+      + (res.metrics?.llm_calls ? ` · ${res.metrics.llm_calls} model call(s), ${res.metrics.llm_seconds}s` : '')
       + (res.replaced_drafts ? ` (replaced ${res.replaced_drafts} previous draft(s))` : '') + '.';
     if ((res.warnings || []).length) $('genErr').textContent = res.warnings.join('\n');
     await loadQuestions();

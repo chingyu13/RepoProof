@@ -20,7 +20,7 @@ from .alignment import (
     context_summary,
     extract_document_text,
 )
-from .analyzer import analyze_project, prune_non_source
+from .analyzer import ANALYSIS_VERSION, analyze_project, prune_non_source
 from .generator import generate_questions
 from .ingest import IngestError, clone_github, delete_project_files, extract_upload, raw_project_files
 from .knowledge import available_evidence_types, build_chunks
@@ -285,6 +285,28 @@ def _project_root(project: dict) -> Path | None:
     return None
 
 
+def _refresh_project_analysis(project: dict) -> tuple[dict, bool]:
+    if int(project.get("stats", {}).get("analysis_version", 0)) >= ANALYSIS_VERSION:
+        return project, False
+    root = _project_root(project)
+    if root is None:
+        return project, False
+    analysis = analyze_project(root)
+    chunks = build_chunks(analysis, project["snapshot_id"])
+    db.update("projects", project["id"], {
+        "stats_json": analysis["stats"],
+        "chunks_json": chunks,
+    })
+    db.log_event("project_reanalyzed", {
+        "analysis_version": ANALYSIS_VERSION,
+        "source_files": analysis["stats"]["source_files"],
+        "functions": analysis["stats"]["functions"],
+        "classes": analysis["stats"]["classes"],
+        "chunks": len(chunks),
+    }, project_id=project["id"])
+    return db.get("projects", project["id"]), True
+
+
 @app.delete("/api/projects/{project_id}")
 def delete_project(project_id: int):
     project = db.get("projects", project_id)
@@ -348,6 +370,7 @@ def _store_generated_questions(
         cfg.get("provider") or config.default_provider()
     )
     targets = cfg.get("assessment_targets") or []
+    metrics = cfg.get("_generation_metrics") or {}
     db.log_event("generation_run", {
         "model": provider_used,
         "mock_mode": config.mock_mode(),
@@ -367,9 +390,11 @@ def _store_generated_questions(
         "assessment_targets": len(targets),
         "aligned_targets": sum(target.get("coverage") != "unmatched" for target in targets),
         "warnings": len(warnings),
+        "generation_metrics": metrics,
     }, project_id=project_id)
     return {"created": ids, "warnings": warnings, "mock_mode": config.mock_mode(),
-            "provider": provider_used, "replaced_drafts": replaced}
+            "provider": provider_used, "replaced_drafts": replaced,
+            "metrics": metrics}
 
 
 def _raw_files_for_generation(project: dict, cfg: dict) -> list[dict] | None:
@@ -389,6 +414,7 @@ def generate(project_id: int, cfg: GenerateConfig):
     project = db.get("projects", project_id)
     if not project:
         raise HTTPException(404, "Project not found")
+    project, _ = _refresh_project_analysis(project)
     values = cfg.model_dump()
     try:
         raw_files = _raw_files_for_generation(project, values)
@@ -424,6 +450,22 @@ def _run_generation(
         if not project:
             raise ValueError("Project no longer exists.")
         _update_generation_run(run_id, status="running")
+        _generation_progress(
+            run_id,
+            stage="refreshing_project_evidence",
+            current=0,
+            total=1,
+            message="Checking project evidence.",
+        )
+        project, refreshed = _refresh_project_analysis(project)
+        if refreshed:
+            _generation_progress(
+                run_id,
+                stage="refreshing_project_evidence",
+                current=1,
+                total=1,
+                message="Project evidence was updated to the current analyzer.",
+            )
         _generation_progress(
             run_id,
             stage="extracting_context",

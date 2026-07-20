@@ -81,6 +81,22 @@ Most files are integrated.
         self.assertIn("invalid rows", targets[0]["description"])
         self.assertGreater(targets[0]["weight"], 2)
 
+    def test_markdown_heading_and_total_are_not_assessment_targets(self):
+        targets = build_assessment_targets(
+            "",
+            "",
+            scope_documents=[{
+                "name": "rubric.md",
+                "text": (
+                    "# Assignment 2 Tasks\n\n"
+                    "- Explain the batch validation workflow. 10 points.\n\n"
+                    "**Total:** 25 points"
+                ),
+            }],
+        )
+        self.assertEqual(len(targets), 1)
+        self.assertIn("validation workflow", targets[0]["description"])
+
     def test_targets_align_to_project_evidence(self):
         targets = build_assessment_targets(
             "",

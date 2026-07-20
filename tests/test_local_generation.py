@@ -1,5 +1,6 @@
 import random
 import unittest
+from unittest.mock import patch
 
 from app.generator import (
     _catalog_tasks,
@@ -340,6 +341,37 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertFalse(tasks)
         self.assertTrue(any("relational architecture evidence" in warning for warning in warnings))
 
+    def test_unavailable_focus_slots_are_reallocated(self):
+        trivial_module = chunk(
+            "c9",
+            "module_graph",
+            "Module graph summary",
+            "Static module inventory:\npipeline.py [Python]",
+            ["module_graph"],
+        )
+        tasks, warnings, tagged = _catalog_tasks(
+            EvidenceStore([trivial_module, CHUNKS[-1]]),
+            {
+                "choice_count": 4,
+                "correct_mode": "exact",
+                "correct_exact": 1,
+                "difficulty": 3,
+                "focus_areas": [
+                    {"id": "architecture", "weight": 4},
+                    {"id": "project_logic", "weight": 2},
+                ],
+            },
+            6,
+            random.Random(42),
+        )
+        self.assertTrue(tagged)
+        self.assertEqual(len(tasks), 6, warnings)
+        self.assertTrue(all(
+            task["slot"]["focus"] == "Implementation / Code Logic"
+            for task in tasks
+        ))
+        self.assertTrue(any("relational architecture evidence" in warning for warning in warnings))
+
     def test_objective_design_behavior_question_passes_validation(self):
         question = {
             "stem": "Which statement correctly describes the dependency between the project phases?",
@@ -416,6 +448,152 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertNotIn("cell 8", question["stem"])
         self.assertIn("```python\ndef fetch_records", question["stem"])
         self.assertEqual(question["evidence"][0]["chunk_id"], "c1")
+
+    def test_normalize_uses_backend_difficulty_and_evidence_bundle(self):
+        slot = {
+            "slot": "data_flow:workflow",
+            "focus": "Workflow / Data Flow",
+            "requested_difficulty": 4,
+            "default_evidence_ids": ["c3", "c0"],
+        }
+        raw = {
+            "stem": "Which statement correctly describes the path from retrieval to storage?",
+            "options": [
+                {"text": "Retrieval precedes cleaning and storage.", "correct": True},
+                {"text": "Storage precedes retrieval.", "correct": False},
+            ],
+            "difficulty": 1,
+            "evidence_ids": ["missing"],
+        }
+        question = _normalize(
+            raw, slot, {item["id"]: item for item in CHUNKS}, random.Random(1)
+        )
+        self.assertEqual(question["difficulty"], 4)
+        self.assertEqual(
+            {item["chunk_id"] for item in question["evidence"]},
+            {"c3", "c0"},
+        )
+
+    def test_normalize_remaps_explanation_option_after_shuffle(self):
+        raw = {
+            "stem": "Which statement correctly describes the workflow?",
+            "options": [
+                {"key": "A", "text": "Records are cleaned before storage.", "correct": True},
+                {"key": "B", "text": "Storage happens before retrieval.", "correct": False},
+                {"key": "C", "text": "Retrieval is skipped.", "correct": False},
+                {"key": "D", "text": "Cleaning happens after storage.", "correct": False},
+            ],
+            "difficulty": 3,
+            "evidence_ids": ["c3"],
+            "explanation": "Option A is the correct answer because cleaning precedes storage.",
+        }
+        question = _normalize(
+            raw,
+            {"slot": "data_flow:workflow", "focus": "Workflow / Data Flow"},
+            {item["id"]: item for item in CHUNKS},
+            random.Random(2),
+        )
+        self.assertNotEqual(question["answer"], ["A"])
+        self.assertIn(f"Option {question['answer'][0]}", question["explanation"])
+        self.assertFalse(any(
+            "different correct option" in error
+            for error in validate_maq(question, 4, 1)
+        ))
+
+    def test_hidden_condition_and_explanation_key_mismatch_are_rejected(self):
+        question = {
+            "stem": "If `stop` is True, which statement correctly describes the result?",
+            "options": [
+                {"key": "A", "text": "The subscriber disconnects."},
+                {"key": "B", "text": "The subscriber remains connected."},
+            ],
+            "answer": ["A"],
+            "justifications": {
+                "A": "The stop branch disconnects the subscriber.",
+                "B": "The stop branch calls disconnect.",
+            },
+            "difficulty": 3,
+            "evidence": [{"chunk_id": "c8"}],
+            "explanation": "Option B is the correct answer because the connection remains active.",
+        }
+        errors = validate_maq(question, 2, 1)
+        self.assertTrue(any("must show the code" in error for error in errors))
+        self.assertTrue(any("different correct option" in error for error in errors))
+
+    def test_workflow_template_rejects_single_condition_question(self):
+        question = {
+            "stem": "What happens if `stop` is True?",
+            "evidence": [{"chunk_id": "c3"}],
+        }
+        errors = _specific_evidence_errors(
+            question,
+            {"template_id": "workflow", "template_name": "Workflow"},
+            {item["id"]: item for item in CHUNKS},
+        )
+        self.assertTrue(any("multi-stage path" in error for error in errors))
+
+    def test_local_validation_failure_is_repaired_and_measured(self):
+        def draft(correct_count):
+            return {
+                "stem": (
+                    "Which statement correctly describes the relationship between "
+                    "`pipeline.py` and `storage.py`?"
+                ),
+                "options": [
+                    {
+                        "key": "A",
+                        "text": "The pipeline passes processed records to storage.",
+                        "correct": True,
+                        "justification": "The module and flow evidence show this path.",
+                    },
+                    {
+                        "key": "B",
+                        "text": "Storage starts retrieval before the pipeline runs.",
+                        "correct": correct_count == 2,
+                        "justification": "The flow places retrieval before storage.",
+                    },
+                    {
+                        "key": "C",
+                        "text": "The two modules have no data relationship.",
+                        "correct": False,
+                        "justification": "The module graph contains their relationship.",
+                    },
+                    {
+                        "key": "D",
+                        "text": "Storage sends records back to retrieval.",
+                        "correct": False,
+                        "justification": "The recorded flow moves in the other direction.",
+                    },
+                ],
+                "difficulty": 1,
+                "evidence_ids": ["c0", "c3"],
+                "explanation": "Option A is the correct answer.",
+            }
+
+        cfg = {
+            "provider": "local",
+            "num_questions": 1,
+            "choice_count": 4,
+            "correct_mode": "exact",
+            "correct_exact": 1,
+            "difficulty": 4,
+            "focus_areas": [{"id": "architecture", "weight": 5}],
+        }
+        with (
+            patch("app.generator.config.local_llm_available", return_value=True),
+            patch(
+                "app.generator._call_llm",
+                side_effect=[draft(2), draft(1)],
+            ) as call,
+        ):
+            questions, warnings = generate_questions(CHUNKS, cfg)
+
+        self.assertEqual(len(questions), 1, warnings)
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(questions[0]["difficulty"], 4)
+        self.assertEqual(cfg["_generation_metrics"]["validation_failures"], 1)
+        self.assertEqual(cfg["_generation_metrics"]["repair_calls"], 1)
+        self.assertEqual(cfg["_generation_metrics"]["accepted_after_repair"], 1)
 
     def test_mock_code_logic_keeps_requested_question_count(self):
         questions, warnings = generate_questions(

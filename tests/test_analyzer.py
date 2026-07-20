@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.analyzer import analyze_project
+from app.analyzer import ANALYSIS_VERSION, analyze_project
 from app.knowledge import build_chunks
 
 
@@ -41,6 +41,7 @@ class NotebookAnalyzerTests(unittest.TestCase):
         chunks = build_chunks(analysis, "test123")
         self.assertTrue(any(chunk["kind"] == "callgraph" for chunk in chunks))
         self.assertTrue(any(chunk["kind"] == "flow" for chunk in chunks))
+        self.assertEqual(analysis["stats"]["analysis_version"], ANALYSIS_VERSION)
 
 
 if __name__ == "__main__":

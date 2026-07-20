@@ -119,7 +119,7 @@
           {
             "label": "execution or data path",
             "types": ["call_graph", "data_flow_graph"],
-            "kinds": ["flow", "callgraph", "function", "notebook_cell", "source"],
+            "kinds": ["flow", "callgraph"],
             "count": 1,
             "query": "entry run pipeline call flow read transform publish save"
           }
@@ -375,15 +375,15 @@
       "evidence_types": ["module_graph", "dependency_graph", "call_graph", "symbol_table", "data_flow_graph"],
       "template_weights": {
         "purpose_responsibility": 0.9,
-        "workflow": 0.8,
+        "workflow": 0.95,
         "design_behavior": 1.0,
-        "scenario_edge": 0.5,
-        "code_explain": 0.1,
+        "scenario_edge": 0.1,
+        "code_explain": 0,
         "code_trace": 0,
         "debugging": 0,
-        "modification": 0.5,
+        "modification": 0.2,
         "schema_integrity": 0.2,
-        "testing_behavior": 0.3
+        "testing_behavior": 0.2
       }
     },
     {
@@ -393,16 +393,16 @@
       "query": "integration api endpoint request response client payload mqtt publish subscribe external service retry",
       "evidence_types": ["api_discovery", "dependency_graph", "data_flow_graph", "control_flow_graph"],
       "template_weights": {
-        "purpose_responsibility": 0.6,
-        "workflow": 0.9,
-        "design_behavior": 0.7,
-        "scenario_edge": 1.0,
-        "code_explain": 0.3,
-        "code_trace": 0.4,
-        "debugging": 0.8,
-        "modification": 0.7,
-        "schema_integrity": 0.4,
-        "testing_behavior": 0.7
+        "purpose_responsibility": 0.7,
+        "workflow": 1.0,
+        "design_behavior": 0.9,
+        "scenario_edge": 0.55,
+        "code_explain": 0.15,
+        "code_trace": 0.2,
+        "debugging": 0.4,
+        "modification": 0.45,
+        "schema_integrity": 0.35,
+        "testing_behavior": 0.55
       }
     },
     {
@@ -412,16 +412,16 @@
       "query": "workflow data flow pipeline input output transform validate load save process stage",
       "evidence_types": ["data_flow_graph", "call_graph", "symbol_table", "module_graph"],
       "template_weights": {
-        "purpose_responsibility": 0.6,
+        "purpose_responsibility": 0.75,
         "workflow": 1.0,
-        "design_behavior": 0.6,
-        "scenario_edge": 0.8,
-        "code_explain": 0.5,
-        "code_trace": 0.8,
-        "debugging": 0.5,
-        "modification": 0.6,
-        "schema_integrity": 0.5,
-        "testing_behavior": 0.6
+        "design_behavior": 0.8,
+        "scenario_edge": 0.4,
+        "code_explain": 0.15,
+        "code_trace": 0.35,
+        "debugging": 0.25,
+        "modification": 0.4,
+        "schema_integrity": 0.45,
+        "testing_behavior": 0.45
       }
     },
     {
@@ -450,16 +450,16 @@
       "query": "database schema table query sql transaction persist model record relationship constraint",
       "evidence_types": ["sql_analysis", "data_flow_graph", "dependency_graph", "symbol_table"],
       "template_weights": {
-        "purpose_responsibility": 0.6,
-        "workflow": 0.7,
-        "design_behavior": 0.8,
-        "scenario_edge": 0.8,
-        "code_explain": 0.2,
-        "code_trace": 0.4,
-        "debugging": 0.6,
-        "modification": 0.6,
+        "purpose_responsibility": 0.7,
+        "workflow": 0.8,
+        "design_behavior": 0.9,
+        "scenario_edge": 0.35,
+        "code_explain": 0.1,
+        "code_trace": 0.2,
+        "debugging": 0.35,
+        "modification": 0.45,
         "schema_integrity": 1.0,
-        "testing_behavior": 0.7
+        "testing_behavior": 0.5
       }
     },
     {
