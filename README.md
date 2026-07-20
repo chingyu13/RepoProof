@@ -43,6 +43,8 @@ Assessment context  (prior knowledge + scope/rubric → aligned targets)
         ↓
 Focus × Template selection  →  template-specific BM25 evidence bundle
         ↓
+Typed-slot planning  →  backend-fixed stem + optional exact code
+        ↓
 Provider branch:
   Local/Mock → structured Evidence + Template pipeline
   OpenAI     → temporary raw-project template-research baseline
@@ -58,9 +60,9 @@ Publish → Take → Exact-match scoring  (per-focus-area breakdown)
 
 - **RAG grounding.** Analysis is decomposed into evidence chunks; a **BM25** retriever (with a custom tokenizer that splits `snake_case`) selects the relevant chunks per question, and the prompt enforces a "cite only these evidence ids / never invent facts" contract.
 - **Static analysis.** All parsers emit one shared IR. Python and notebooks use `ast`; Java, JavaScript, TypeScript, C, and C++ use tree-sitter; remaining supported languages use a generic declaration/text fallback.
-- **Constrained generation + self-correction.** Local questions use strict JSON, backend-owned Focus/difficulty/evidence, option shuffling, one targeted repair, then one alternate-evidence regeneration. Invalid questions are never silently published.
+- **Constrained generation + self-correction.** The backend resolves typed slots and fixes the Local question stem and code before inference; the Local LLM returns options and an explanation. One targeted repair and one alternate-plan regeneration are available for invalid options.
 - **Constraint validation.** Every MAQ must have 2–7 distinct options, one unambiguous correct combination (all-correct disallowed), difficulty 1–5, and linked evidence — the same gate blocks human approval.
-- **Focus-area steering.** An interactive radar chart weights areas (Architecture, Testing, …); weights allocate question topics, then a Focus × Template matrix selects evidence-sufficient question forms.
+- **Focus-area steering.** An interactive radar chart weights areas (Architecture, Testing, …); weights allocate question topics, then a Focus × Template matrix selects one of seven evidence-sufficient reasoning forms. Typed subjects let one Template cover packages, APIs, components, functions, data stores, and state without scenario-specific prompt copies.
 - **Assessment alignment.** Lecture/prior-knowledge material and project scope, requirements, or rubrics can be entered or uploaded as PDF, DOCX, PPTX, or text. RepoProof extracts weighted targets, matches them to static evidence with the shared tokenizer/concept lexicon, and shows the selected target on each review question.
 - **MLOps telemetry.** An append-only event log captures generation config and human review/edit signals (derived metadata only — never raw code); a metrics endpoint aggregates approval rate, human-edit rate, and validator-block rate for comparing prompt/model versions.
 - **Auth & intake security.** Creator routes are protected by HMAC-signed `httponly` session cookies behind a password gate; intake validates GitHub URLs, runs shallow timed clones, guards against zip path traversal, and gates total project size.
@@ -79,6 +81,7 @@ app/
 ├── knowledge.py   # evidence chunks + BM25 retrieval
 ├── alignment.py   # context extraction + assessment-target/evidence alignment
 ├── assessment_catalog.py # catalog validation + weighted template scheduling
+├── question_planner.py # evidence bundles + typed slots + fixed Local stems
 ├── generator.py   # Local/mock and raw-OpenAI generation orchestration
 ├── validator.py   # MAQ schema & rule validation
 ├── scoring.py     # exact-match + per-focus-area scoring
@@ -86,7 +89,7 @@ app/
 ├── config.py      # env config, provider selection, consent copy/versioning
 ├── main.py        # FastAPI routes, session auth, middleware
 └── static/        # index (landing/login), creator, demo, assess UIs
-assessment_catalog.json # authoritative Topics/Templates/Strategies/Evidence requirements
+assessment_catalog.json # authoritative Topics/Templates/typed slots/Evidence requirements
 ```
 
 ---

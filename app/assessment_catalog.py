@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import string
 from pathlib import Path
 
 
@@ -17,6 +18,25 @@ BUILT_IN_STRATEGY_IDS = (
     "debugging",
     "modification",
 )
+SLOT_SOURCES = frozenset({
+    "target_or_topic",
+    "evidence_entity",
+    "relation_source",
+    "relation_target",
+    "code_condition",
+    "code_mutation",
+    "target_or_requirement",
+})
+ENTITY_TYPES = frozenset({
+    "imported_library",
+    "api_method",
+    "component",
+    "function",
+    "class",
+    "data_store",
+    "state",
+})
+CODE_MODES = frozenset({"none", "required", "insertion"})
 
 
 def _catalog_path() -> Path:
@@ -97,12 +117,79 @@ def _normalize_evidence_group(raw: dict, evidence_ids: tuple[str, ...],
     }
 
 
+def _normalize_slot(raw: object, *, owner: str) -> dict:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{owner} must be an object")
+    source = _clean_id(raw.get("source"), "slot source")
+    if source not in SLOT_SOURCES:
+        raise ValueError(f"{owner} has unknown source {source!r}")
+    entity_types = [
+        _clean_id(value, "entity type") for value in raw.get("types", [])
+    ]
+    unknown = sorted(set(entity_types) - ENTITY_TYPES)
+    if unknown:
+        raise ValueError(f"{owner} references unknown entity types: {unknown}")
+    if source in {"evidence_entity", "relation_source", "relation_target"} and not entity_types:
+        raise ValueError(f"{owner} needs at least one entity type")
+    return {
+        "source": source,
+        "types": list(dict.fromkeys(entity_types)),
+        "related_to": str(raw.get("related_to", "")).strip(),
+    }
+
+
 def _normalize_template(raw: dict, strategy_ids: tuple[str, ...],
                         evidence_ids: tuple[str, ...]) -> dict:
-    _required(raw, ("id", "name", "strategy", "pattern", "query", "evidence"), "template")
+    _required(
+        raw,
+        (
+            "id", "name", "strategy", "stem_frames", "option_task",
+            "slots", "code_mode", "query", "evidence",
+        ),
+        "template",
+    )
     strategy_id = _clean_id(raw["strategy"], "template strategy")
     if strategy_id not in strategy_ids:
         raise ValueError(f"template {raw['id']!r} references unknown strategy {strategy_id!r}")
+    frames = [
+        str(frame).strip()
+        for frame in raw["stem_frames"]
+        if str(frame).strip()
+    ] if isinstance(raw["stem_frames"], list) else []
+    if not frames:
+        raise ValueError(f"template {raw['id']!r} needs at least one stem frame")
+    raw_slots = raw["slots"]
+    if not isinstance(raw_slots, dict) or not raw_slots:
+        raise ValueError(f"template {raw['id']!r} needs typed slots")
+    slots = {
+        _clean_id(name, "slot name"): _normalize_slot(
+            value, owner=f"template {raw['id']!r} slot {name!r}"
+        )
+        for name, value in raw_slots.items()
+    }
+    for name, slot in slots.items():
+        related_to = slot["related_to"]
+        if related_to and related_to not in slots:
+            raise ValueError(
+                f"template {raw['id']!r} slot {name!r} relates to unknown slot "
+                f"{related_to!r}"
+            )
+    for frame in frames:
+        fields = {
+            field_name
+            for _, field_name, _, _ in string.Formatter().parse(frame)
+            if field_name
+        }
+        unknown_fields = sorted(fields - set(slots))
+        if unknown_fields:
+            raise ValueError(
+                f"template {raw['id']!r} frame references unknown slots: {unknown_fields}"
+            )
+    code_mode = str(raw["code_mode"]).strip()
+    if code_mode not in CODE_MODES:
+        raise ValueError(
+            f"template {raw['id']!r} code_mode must be one of {sorted(CODE_MODES)}"
+        )
     evidence = raw["evidence"]
     if not isinstance(evidence, dict):
         raise ValueError(f"template {raw['id']!r} evidence must be an object")
@@ -126,7 +213,10 @@ def _normalize_template(raw: dict, strategy_ids: tuple[str, ...],
         "id": _clean_id(raw["id"], "template"),
         "name": str(raw["name"]).strip(),
         "strategy": strategy_id,
-        "pattern": str(raw["pattern"]).strip(),
+        "stem_frames": frames,
+        "option_task": str(raw["option_task"]).strip(),
+        "slots": slots,
+        "code_mode": code_mode,
         "query": str(raw["query"]).strip(),
         "evidence": {
             "required": required_groups,

@@ -1,5 +1,4 @@
 """Evidence-grounded MAQ generation for raw OpenAI, Local LLM, and mock modes."""
-import ast
 import json
 import random
 import re
@@ -7,9 +6,12 @@ import time
 from collections.abc import Callable
 
 from . import config
-from .knowledge import EvidenceStore, data_engineering_expansion, evidence_types_for_chunk
+from .knowledge import EvidenceStore
+from .question_planner import (
+    render_question_plan,
+    template_bundle,
+)
 from .assessment_catalog import (
-    EVIDENCE_TYPE_BY_ID,
     STRATEGY_BY_ID,
     TEMPLATE_BY_ID,
     TOPIC_BY_ID,
@@ -17,52 +19,21 @@ from .assessment_catalog import (
 )
 from .validator import OPTION_KEYS, find_similar_question, validate_maq
 
-SYSTEM_PROMPT = """You are RepoProof, an assessment generator. You write ONE multi-answer question (MAQ) \
-about a specific software project, grounded ONLY in the structured static evidence provided. You are \
-not given the raw project and must not infer facts outside this evidence. Incorrect options must be \
-plausible but verifiably wrong given the evidence. An option is not wrong merely because the evidence \
-does not mention it; each false option must conflict with a concrete project fact or shown behavior. \
-Never ask for the "best", "better", "most appropriate", or preferred design, and do not ask why a \
-design was chosen. Ask which concrete statement is factually correct. Never ask the taker to identify \
-a function, method, class, module, file, or component from its name. Identifiers may anchor the stem, \
-but every option must describe behavior, data movement, interaction, ordering, or a consequence rather \
-than being a bare identifier. Do not ask for a named component's broad purpose when that purpose can \
-be guessed from the identifier or docstring. Ask about a non-obvious condition, transformation, \
-preserved state, dependency, or consequence shown by the evidence.
+SYSTEM_PROMPT = """You write answer options for ONE fixed, evidence-grounded RepoProof question.
+The backend has already selected the topic, assessment context, subject, stem, code, and evidence.
+Do not rewrite the stem and do not invent project facts. A true option must follow from the supplied
+evidence; a false option must conflict with a concrete fact, not merely be absent. Options must test
+behavior, interaction, ordering, state, output, or consequences rather than identifier recognition.
 
-THE TAKER SEES ONLY THE STEM AND OPTIONS — never the evidence. Evidence titles, chunk ids, and \
-notebook cell numbers (e.g. "cell 40") are meaningless to them. File paths are fine; cell/chunk \
-numbers are not. NOT EVERY QUESTION NEEDS CODE: conceptual architecture and behavior questions \
-should refer to functions, modules, and files BY NAME. When the question hinges on specific code, \
-keep the quote as short as the question allows — the taker's exam time is limited. A small \
-function (<= ~7 lines) may be shown whole; for longer code keep only the lines that matter and \
-replace irrelevant ones with a line containing just "..." like:
-    def process(items):
-        ...
-        total += item.value
-        return total
-Never make the taker read code the question does not need. Do not test facts that are only in the \
-unshown source. When the prompt supplies DISPLAYED CODE, the backend appends that exact fenced block \
-to the stem, so do not repeat code in the JSON stem. Base every option on that displayed block and \
-include the complete minimal path needed for every option: conditions, side effects, exceptions, and return values. For example, do \
-not quote only a print statement if any option asks what the function returns. Never use the phrase \
-"The relevant code states" followed by an isolated line. Do not ask students to recall code outside \
-the stem. For a debugging question, identify one concrete, evidence-supported fault and correction; \
-do not claim the original project is broken unless the evidence proves it. For a code-modification \
-question, state the required outcome, show the insertion context, and make each candidate snippet \
-short and syntactically plausible in that context. Do not use vague claims such as "core functionality", "main functionality", or \
-"appropriate ownership". A file name or file structure proves only that the file exists; it does \
-not prove a component's responsibility. Responsibility answers must name a concrete operation and \
-the function, class, module, or workflow evidence that performs it.
-
-Return STRICT JSON with exactly these fields:
+Return strict JSON only:
 {
-  "stem": "self-contained question text (include the quoted code it refers to)",
-  "options": [{"key": "A", "text": "...", "correct": true, "justification": "ONE short sentence (<15 words)"}],
-  "difficulty": 1,
-  "focus_areas": ["..."],
-  "evidence_ids": ["c1", "c2"],
-  "explanation": "1-2 sentences shown to the taker after submission"
+  "correct_options": [
+    {"text": "...", "justification": "one short evidence-based sentence"}
+  ],
+  "incorrect_options": [
+    {"text": "...", "justification": "one short evidence-based contradiction"}
+  ],
+  "explanation": "one or two concise sentences"
 }"""
 
 RAW_OPENAI_SYSTEM_PROMPT = """You are an assessment designer. Generate a complete batch of multi-answer
@@ -110,21 +81,6 @@ RAW_TOPIC_GUIDANCE = {
         "belongs for a stated requirement. Show enough surrounding code to justify the answer."
     ),
 }
-
-DISPLAY_CODE_TEMPLATE_IDS = frozenset({
-    "scenario_edge",
-    "code_explain",
-    "code_trace",
-    "debugging",
-    "modification",
-})
-CONCEPTUAL_TEMPLATE_IDS = frozenset({
-    "purpose_responsibility",
-    "workflow",
-    "design_behavior",
-    "schema_integrity",
-})
-
 
 def _notify(progress: Callable[..., None] | None, stage: str, **details) -> None:
     if progress:
@@ -213,8 +169,7 @@ def _question_alignment(question: dict, cfg: dict, index: int) -> dict:
 
 def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
                      correct_count: int, difficulty: int, extra_focus: str,
-                     evidence_chars: int = 1_400,
-                     avoid_questions: list[dict] | None = None) -> str:
+                     evidence_chars: int = 1_400) -> str:
     def evidence_text(chunk: dict) -> str:
         text = chunk["text"]
         if chunk["id"] == slot.get("display_evidence_id"):
@@ -225,136 +180,67 @@ def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
         return f"[{chunk['id']}] {chunk['title']}\n{text[:evidence_chars]}"
 
     ev_text = "\n\n".join(evidence_text(chunk) for chunk in evidence)
-    focus_line = f"\nAssessment creator focus/instructions: {extra_focus}" if extra_focus else ""
-    diversity_line = ""
-    if avoid_questions:
-        summaries = []
-        for question in avoid_questions[-6:]:
-            stem = re.sub(r"```.*?```", "[code]", question["stem"], flags=re.S)
-            summaries.append("- " + " ".join(stem.split())[:240])
-        diversity_line = (
-            "\nAvoid duplicating these existing questions. Test a different concrete operation, "
-            "scenario, or reasoning step; do not merely paraphrase:\n" + "\n".join(summaries)
-        )
-    displayed_code = ""
+    focus_line = (
+        f"\nCreator instruction: {extra_focus[:300]}"
+        if extra_focus else ""
+    )
+    code_text = ""
     if slot.get("display_code"):
-        displayed_code = (
-            "\nThe backend will append this exact code block to the student-visible stem. "
-            "Write only the question prose in `stem`; do not copy, shorten, or rewrite the code.\n"
-            f"DISPLAYED CODE:\n```{slot['display_language']}\n{slot['display_code']}\n```"
+        code_text = (
+            f"\n\nCODE SHOWN TO THE STUDENT:\n```{slot['display_language']}\n"
+            f"{slot['display_code']}\n```"
         )
-    catalog_lines = ""
-    if slot.get("topic"):
-        catalog_lines = f"""
-Assessment topic (WHAT to assess): {slot['topic']}
-Reasoning strategy (HOW to assess): {slot['strategy_prefix']}
-Question template: {slot['template_pattern']}"""
-        if slot["topic"] == "Architecture":
-            catalog_lines += (
-                "\nArchitecture rule: test an evidenced relationship between at least two "
-                "components, such as a dependency, shared downstream path, boundary, or "
-                "cross-component consequence. Never ask what one named function does."
-            )
-        if (
-            slot.get("template_id") in CONCEPTUAL_TEMPLATE_IDS
-            and not slot.get("display_code")
-        ):
-            catalog_lines += (
-                "\nConceptual-question rule: do not ask about one variable, one conditional "
-                "branch, one return value, or one isolated function call. Do not include code. "
-                "Combine at least two project stages, components, data representations, or "
-                "evidence facts, and make every option a system-level factual claim."
-            )
-        if slot.get("template_id") == "workflow":
-            catalog_lines += (
-                "\nWorkflow rule: test an ordered path across multiple stages, including the "
-                "resulting output or side effect; do not reduce the question to one condition."
-            )
-        if slot.get("evidence_type_names"):
-            catalog_lines += "\nStructured evidence supplied: " + ", ".join(slot["evidence_type_names"])
-    return f"""Question slot: {slot['slot']} — {slot['brief']}{catalog_lines}
-Target difficulty: {difficulty} (1=recall ... 5=evaluate)
-Options: exactly {choice_count}, keyed {list(OPTION_KEYS[:choice_count])}.
-Correct options: exactly {correct_count} (the rest must be incorrect).{focus_line}{diversity_line}{displayed_code}
+    return f"""FIXED STEM:
+{slot['rendered_stem']}{code_text}
 
-OUTPUT CHECKLIST — apply this immediately before responding:
-1. Return exactly {choice_count} distinct options.
-2. Count the boolean values in `correct`: exactly {correct_count} options must be `true`.
-3. Every `true` option must be supported by the evidence; every `false` option must contradict it.
-   Reject a candidate yourself if a false option could still be generally true or is merely unstated.
-4. Wrong options must be believable; avoid giveaway wording such as "always", "never", or "forced"
-   unless the evidence itself establishes that absolute claim.
-5. Cite only the evidence ids shown below. Return JSON only, without Markdown.
-6. The stem is SELF-CONTAINED: quote code only when the question needs it; never mention
-   cell numbers, chunk ids, evidence titles, or phrases like "according to the evidence".
-7. Every option in a code question must be answerable from DISPLAYED CODE alone. Put only the
-   question prose in `stem`; the backend appends the fenced block.
-8. Use concrete, verifiable wording. Never justify an answer with "core functionality" or a
-   similarly generic claim. Do not infer a responsibility from a file name alone.
-9. Do not invent or rename functions. For a debugging question about a proposed faulty change,
-   describe the proposed change in prose and make the answer compare it with DISPLAYED CODE.
-10. Do not use "best", "better", "most appropriate", "preferable", or "why". Ask which concrete
-    statement is correct. Every incorrect justification must identify a contradiction, never only
-    say that something is not mentioned or not explicitly stated.
-11. A scenario about a condition, state change, or side effect must be answerable from DISPLAYED
-    CODE. Do not test the student's memory of unshown project code. State the executed calls,
-    assignments, return, or output exactly; never summarize a visible side effect as "no action",
-    "nothing happens", or "does nothing". Use a neutral stem such as "which observable behavior
-    occurs?"; do not presuppose that a print, update, error, or return happens.
-12. Never ask "which/what function, method, class, module, file, or component" and never make the
-    options a list of bare identifiers. Name a component in the stem if needed, then test its
-    input/output behavior, interactions, ordering, state changes, or a concrete consequence.
-13. Do not ask broadly for the "behavior", "purpose", "responsibility", or "role" of a named
-    identifier when its name or docstring reveals the answer. Test a non-obvious branch, condition,
-    transformation, preserved value, dependency, or downstream consequence instead.
+OPTION TASK:
+{slot['option_task']}
 
-EVIDENCE (cite ids you used in evidence_ids):
+REASONING:
+{slot['strategy_prefix']}
+
+FRAMEWORK:
+- difficulty {difficulty}/5;
+- return exactly {correct_count} item(s) in `correct_options`;
+- return exactly {choice_count - correct_count} item(s) in `incorrect_options`;
+- all {choice_count} option texts must be distinct;
+- every correct option follows from the evidence;
+- every incorrect option contradicts the evidence and remains plausible;
+- avoid best/better/why, bare identifiers, giveaway absolutes, and generic claims.{focus_line}
+
+EVIDENCE:
 {ev_text}
 
-Write the MAQ now as strict JSON."""
+Return only the required JSON."""
 
 
-def _repair_prompt(raw: dict, evidence: list[dict], choice_count: int,
+def _repair_prompt(raw: dict, slot: dict, evidence: list[dict], choice_count: int,
                    correct_count: int, errors: str) -> str:
-    """Ask the model to repair an invalid draft without repeating full retrieval.
-
-    The normal question prompt can be several thousand tokens. For common
-    local-model failures such as a wrong number of correct options, send the
-    candidate plus only the evidence it cited. This is quicker and gives the
-    model a focused correction task instead of discarding the whole question.
-    """
-    cited = set(raw.get("evidence_ids") or [])
-    repair_evidence = [c for c in evidence if c["id"] in cited]
-    if "concrete operation" in errors:
-        repair_evidence = evidence[:3]
-    if not repair_evidence:
-        repair_evidence = evidence[:2]
-    ev_text = "\n\n".join(f"[{c['id']}] {c['title']}\n{c['text'][:900]}" for c in repair_evidence)
+    repair_evidence = evidence[:2]
+    ev_text = "\n\n".join(
+        f"[{chunk['id']}] {chunk['title']}\n{chunk['text'][:800]}"
+        for chunk in repair_evidence
+    )
     draft = json.dumps(raw, ensure_ascii=False)
-    return f"""Repair this RepoProof MAQ draft. The validator reported:
+    return f"""Repair the options for this fixed RepoProof question.
+
+FIXED STEM:
+{slot['rendered_stem']}
+
+VALIDATOR:
 {errors}
 
-Use only the evidence below. Preserve the question's intent, but rewrite
-options, `correct` flags, justifications, or evidence_ids when necessary.
-Return the complete JSON object and nothing else.
+Return exactly {correct_count} item(s) in `correct_options` and exactly
+{choice_count - correct_count} item(s) in `incorrect_options`.
+Correct options must follow from the evidence; incorrect options must contradict it.
 
-Hard requirements:
-- exactly {choice_count} distinct options with keys {list(OPTION_KEYS[:choice_count])};
-- exactly {correct_count} options have `correct: true` — count them before responding;
-- true options must be supported and false options contradicted by the evidence;
-- never use "best", "better", "most appropriate", "preferable", or "why";
-- a false option cannot be justified only as unstated, unsupported, or not explicitly mentioned;
-- include at least one valid evidence id.
-- if code is shown, use a fenced block and include every control-flow line needed by the options;
-  do not ask about a return value, exception, or side effect that is absent from the block.
-- displayed project code must be copied from a cited evidence chunk. Do not invent or rename a
-  function. A proposed debugging fault must be labelled and alter only the necessary line.
-
-INVALID DRAFT:
+DRAFT:
 {draft}
 
 EVIDENCE:
-{ev_text}"""
+{ev_text}
+
+Return only the complete JSON object with options and explanation."""
 
 
 def _extract_json(text: str) -> dict:
@@ -545,36 +431,34 @@ def _code_grounding_errors(question: dict, slot: dict,
             (match_ratio(lines, source) for source in source_lines),
             default=0.0,
         )
-        if best == 1.0:
-            continue
-        proposed_debug = (
-            slot.get("template_id") == "debugging"
-            and re.search(r"\b(proposed|modified|changed|new version)\b", question["stem"], re.I)
-            and best >= 0.6
-        )
-        if not proposed_debug:
+        if best != 1.0:
             return [
-                "Displayed code must be copied from a cited evidence chunk; "
-                "only a clearly labelled proposed debugging change may alter one line."
+                "Displayed code must be copied from a cited evidence chunk."
             ]
     return []
 
 
 def _specific_evidence_errors(question: dict, slot: dict, chunk_by_id: dict[str, dict]) -> list[str]:
     template_id = slot.get("template_id")
-    if (
-        template_id in CONCEPTUAL_TEMPLATE_IDS
-        and not slot.get("display_code")
-        and re.search(r"```(?:[a-zA-Z0-9_+.#-]+)?\s*\n.*?```", question["stem"], re.S)
-    ):
-        return [f"{slot['template_name']} is a conceptual template and must not become a code-reading question."]
-    if template_id in DISPLAY_CODE_TEMPLATE_IDS:
-        if not re.search(r"```(?:[a-zA-Z0-9_+.#-]+)?\s*\n.*?```", question["stem"], re.S):
+    code_mode = slot.get("code_mode", "none")
+    has_code = bool(re.search(
+        r"```(?:[a-zA-Z0-9_+.#-]+)?\s*\n.*?```",
+        question["stem"],
+        re.S,
+    ))
+    if code_mode == "none" and has_code:
+        return [
+            f"{slot['template_name']} does not use displayed code."
+        ]
+    if code_mode in {"required", "insertion"}:
+        if not has_code:
             return [f"{slot['template_name']} needs a self-contained fenced code excerpt."]
         grounding_errors = _code_grounding_errors(question, slot, chunk_by_id)
         if grounding_errors:
             return grounding_errors
-        if template_id == "scenario_edge":
+        if code_mode == "insertion" and "INSERT HERE" not in question["stem"]:
+            return ["Requirement Change needs a visible INSERT HERE marker."]
+        if template_id == "condition_outcome":
             correct_text = " ".join(
                 option.get("text", "")
                 for option in question.get("options", [])
@@ -586,10 +470,10 @@ def _specific_evidence_errors(question: dict, slot: dict, chunk_by_id: dict[str,
                 re.I,
             ):
                 return [
-                    "A Scenario / Edge Case correct option must name the exact observable "
+                    "A Condition / Outcome correct option must name the exact observable "
                     "calls, state changes, return, or output instead of saying nothing happens."
                 ]
-    if template_id not in {"purpose_responsibility", "workflow"}:
+    if template_id not in {"contextual_use", "interaction_flow"}:
         return []
     cited = [chunk_by_id.get(item.get("chunk_id")) for item in question["evidence"]]
     has_operation = any(
@@ -600,20 +484,27 @@ def _specific_evidence_errors(question: dict, slot: dict, chunk_by_id: dict[str,
         for chunk in cited
     )
     if not has_operation:
-        return ["Responsibility and workflow questions need evidence of a concrete operation, not only file structure."]
-    if template_id == "workflow":
+        return [
+            "Contextual Use and Interaction / Flow need evidence of a concrete "
+            "operation, not only file structure."
+        ]
+    if template_id == "interaction_flow":
         if not any(
             chunk and chunk["kind"] in {"flow", "callgraph", "import_graph", "api_discovery"}
             for chunk in cited
         ):
-            return ["Workflow questions need a multi-stage flow or relationship evidence chunk."]
+            return [
+                "Interaction / Flow needs a multi-stage flow or relationship evidence chunk."
+            ]
         if re.search(
             r"\b(?:what happens|which observable behavior occurs)\s+(?:if|when)\b|"
             r"\b(?:if|when)\s+`?[A-Za-z_][A-Za-z0-9_.]*(?:\(\))?`?\s+(?:is|equals?|==|!=)",
             question["stem"],
             re.I,
         ):
-            return ["Workflow questions must test a multi-stage path, not one implementation condition."]
+            return [
+                "Interaction / Flow must test a multi-stage path, not one implementation condition."
+            ]
     return []
 
 
@@ -1053,179 +944,6 @@ def _selected_topics(cfg: dict) -> list[tuple[dict, int]]:
     return [(TOPIC_BY_ID[topic_id], topic_weights[topic_id]) for topic_id in topic_order]
 
 
-def _template_query(topic: dict, template: dict, extra_focus: str) -> str:
-    return " ".join(
-        part for part in (topic["query"], template["query"], extra_focus) if part
-    )
-
-
-def _is_relational_architecture_chunk(chunk: dict) -> bool:
-    return (
-        chunk["kind"] in {"flow", "callgraph", "import_graph", "api_discovery"}
-        or (chunk["kind"] == "module_graph" and "->" in chunk["text"])
-    )
-
-
-def _has_relational_architecture_evidence(evidence: list[dict]) -> bool:
-    return any(_is_relational_architecture_chunk(chunk) for chunk in evidence)
-
-
-def _template_bundle(evidence_store: EvidenceStore, topic: dict, template: dict,
-                     extra_focus: str, variant: int = 0) -> tuple[list[dict], list[str]]:
-    query = _template_query(topic, template, extra_focus)
-    expansion = data_engineering_expansion(
-        " ".join(part for part in (topic["name"], topic["query"], extra_focus) if part)
-    )
-    topic_types = set(topic["evidence_types"])
-
-    def narrow(group: dict) -> dict:
-        shared = [evidence_type for evidence_type in group["types"] if evidence_type in topic_types]
-        return {**group, "types": shared or group["types"]}
-
-    evidence_spec = {
-        **template["evidence"],
-        "required": [narrow(group) for group in template["evidence"]["required"]],
-        "optional": [narrow(group) for group in template["evidence"]["optional"]],
-    }
-    evidence, missing = evidence_store.retrieve_bundle(
-        query,
-        evidence_spec,
-        fallback_evidence_types=tuple(topic["evidence_types"]),
-        expansion_terms=expansion,
-        variant=variant,
-    )
-    if topic["id"] == "architecture" and not missing:
-        if not _has_relational_architecture_evidence(evidence):
-            relationship_query = " ".join((
-                query,
-                "call flow dependency API module relationship interaction sequence",
-            ))
-            relational = evidence_store.retrieve(
-                relationship_query,
-                k=evidence_spec["max_chunks"] * 2,
-                kinds=("flow", "callgraph", "import_graph", "api_discovery", "module_graph"),
-                evidence_types=("call_graph", "dependency_graph", "api_discovery", "module_graph"),
-                expansion_terms=expansion,
-            )
-            relational = [
-                chunk for chunk in relational
-                if _is_relational_architecture_chunk(chunk)
-            ]
-            if relational:
-                combined = []
-                seen = set()
-                for chunk in relational + evidence:
-                    if chunk["id"] in seen:
-                        continue
-                    seen.add(chunk["id"])
-                    combined.append(chunk)
-                evidence = combined[:evidence_spec["max_chunks"]]
-            else:
-                missing.append("relational architecture evidence")
-        if not missing:
-            evidence.sort(key=lambda chunk: not _is_relational_architecture_chunk(chunk))
-    return evidence, missing
-
-
-def _display_code(evidence: list[dict], template_id: str = "",
-                  query: str = "") -> tuple[str, str, str] | None:
-    candidates = []
-    for chunk in evidence:
-        if chunk["kind"] not in {"function", "notebook_cell", "source"}:
-            continue
-        text = chunk["text"]
-        if "\nCode:\n" in text:
-            code = text.split("\nCode:\n", 1)[1]
-        elif chunk["kind"] == "notebook_cell" and "\n" in text:
-            code = text.split("\n", 1)[1]
-        else:
-            match = re.search(r"\nContent \(lines [^)]+\):\n(.*)", text, re.S)
-            code = match.group(1) if match else text
-        code = code.strip()
-        suffix = chunk["file"].rsplit(".", 1)[-1].lower() if "." in chunk["file"] else ""
-        snippets = []
-        if suffix in {"py", "ipynb"}:
-            lines = code.splitlines()
-            tree = None
-            parsed_source = ""
-            for end in range(len(lines), 0, -1):
-                parsed_source = "\n".join(lines[:end])
-                try:
-                    tree = ast.parse(parsed_source)
-                    break
-                except SyntaxError:
-                    continue
-            if tree:
-                if template_id == "scenario_edge":
-                    for node in ast.walk(tree):
-                        if isinstance(node, (ast.If, ast.Try, ast.Match)):
-                            snippet = ast.get_source_segment(parsed_source, node)
-                            if snippet:
-                                snippets.append(snippet)
-                for node in ast.walk(tree):
-                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        snippet = ast.get_source_segment(parsed_source, node)
-                        if snippet:
-                            snippets.append(snippet)
-        snippets.append(code)
-        for snippet in dict.fromkeys(snippets):
-            line_count = len(snippet.splitlines())
-            if snippet and line_count <= 12:
-                candidates.append((chunk, snippet, line_count))
-    if not candidates:
-        return None
-
-    def tokens(value: str) -> set[str]:
-        result = set()
-        for token in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", value.casefold()):
-            result.add(token)
-            result.update(part for part in token.split("_") if len(part) >= 3)
-        return result
-
-    query_tokens = tokens(query)
-    if query_tokens:
-        ranked = sorted(
-            enumerate(candidates),
-            key=lambda item: (
-                -int(
-                    template_id == "scenario_edge"
-                    and re.match(r"^(?:if\b|try:|match\b)", item[1][1].lstrip())
-                    is not None
-                ),
-                -len(tokens(item[1][1]).intersection(query_tokens)),
-                item[1][2],
-                item[0],
-            ),
-        )
-        chunk, code, _ = ranked[0][1]
-    else:
-        chunk, code, _ = candidates[0]
-    suffix = chunk["file"].rsplit(".", 1)[-1].lower() if "." in chunk["file"] else ""
-    language = {
-        "py": "python",
-        "ipynb": "python",
-        "js": "javascript",
-        "ts": "typescript",
-        "cpp": "cpp",
-        "cc": "cpp",
-        "cs": "csharp",
-    }.get(suffix, suffix or "text")
-    return code, language, chunk["id"]
-
-
-def _needs_supporting_code(template_id: str, evidence: list[dict], topic_id: str = "") -> bool:
-    if template_id in DISPLAY_CODE_TEMPLATE_IDS:
-        return True
-    if template_id != "purpose_responsibility" or topic_id != "project_logic":
-        return False
-    for chunk in evidence:
-        if chunk["kind"] in {"flow", "callgraph", "import_graph"}:
-            return False
-        if chunk["kind"] == "module_graph" and "->" in chunk["text"]:
-            return False
-    return True
-
-
 def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
                    rng: random.Random) -> tuple[list[dict], list[str]]:
     focus_topics = _selected_topics(cfg)
@@ -1235,26 +953,40 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
     extra_focus = str(cfg.get("focus") or "").strip()
     warnings = []
 
-    availability: dict[str, dict] = {}
+    availability: dict[str, list[str]] = {}
     for topic, _ in focus_topics:
-        candidate_templates = [
+        templates = [
             template for template in TEMPLATE_BY_ID.values()
             if topic["template_weights"][template["id"]] > 0
         ]
-        available_ids = set()
-        missing_by_template = {}
-        for template in candidate_templates:
-            evidence, missing = _template_bundle(
-                evidence_store, topic, template, extra_focus
-            )
-            if evidence and not missing:
-                available_ids.add(template["id"])
-            else:
-                missing_by_template[template["id"]] = missing
-        availability[topic["id"]] = {
-            "available_ids": available_ids,
-            "missing_by_template": missing_by_template,
-        }
+        target = _target_for_topic(cfg, topic["id"], 0)
+        target_text = (
+            str(target.get("description", ""))[:500] if target else ""
+        )
+        retrieval_focus = "; ".join(
+            part for part in (extra_focus, target_text) if part
+        )
+        available_ids = []
+        missing_by_template: dict[str, list[str]] = {}
+        for template in templates:
+            problems = []
+            for variant in range(3):
+                evidence, missing = template_bundle(
+                    evidence_store, topic, template, retrieval_focus, variant
+                )
+                if missing:
+                    problems = missing
+                    continue
+                plan, problem = render_question_plan(
+                    template, topic, target, evidence, variant
+                )
+                if plan:
+                    available_ids.append(template["id"])
+                    break
+                problems = [problem]
+            if template["id"] not in available_ids:
+                missing_by_template[template["id"]] = problems
+        availability[topic["id"]] = available_ids
         if not available_ids:
             if (
                 topic["id"] == "architecture"
@@ -1282,7 +1014,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
     available_focus_topics = [
         (topic, weight)
         for topic, weight in focus_topics
-        if availability[topic["id"]]["available_ids"]
+        if availability[topic["id"]]
     ]
     topic_seq = _proportional_schedule(available_focus_topics, num)
     if not topic_seq:
@@ -1294,12 +1026,12 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
 
     schedules: dict[str, list[dict]] = {}
     for topic, _ in available_focus_topics:
-        available_ids = availability[topic["id"]]["available_ids"]
         schedules[topic["id"]] = weighted_template_schedule(
-            topic, topic_counts[topic["id"]], available_ids
+            topic, topic_counts[topic["id"]], set(availability[topic["id"]])
         )
 
     tasks = []
+    used_plan_keys: set[str] = set()
     topic_offsets: dict[str, int] = {}
     pair_occurrences: dict[tuple[str, str], int] = {}
     for index, topic in enumerate(topic_seq):
@@ -1308,113 +1040,110 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
         topic_offsets[topic["id"]] = offset + 1
         if offset >= len(schedule):
             continue
-        template = schedule[offset]
         target = _target_for_topic(cfg, topic["id"], offset)
-        target_focus = (
-            f"assessment target: {target['description'][:700]}"
-            if target else ""
+        target_text = (
+            str(target.get("description", ""))[:500] if target else ""
         )
         retrieval_focus = "; ".join(
-            part for part in (extra_focus, target_focus) if part
+            part for part in (extra_focus, target_text) if part
         )
-        pair = (topic["id"], template["id"])
-        occurrence = pair_occurrences.get(pair, 0)
-        pair_occurrences[pair] = occurrence + 1
-        evidence_variants = []
-        missing = []
-        needs_code = (
-            template["id"] in DISPLAY_CODE_TEMPLATE_IDS
-            or (
-                template["id"] == "purpose_responsibility"
-                and topic["id"] == "project_logic"
-            )
+        preferred = schedule[offset]
+        alternatives = sorted(
+            (
+                TEMPLATE_BY_ID[template_id]
+                for template_id in availability[topic["id"]]
+                if template_id != preferred["id"]
+            ),
+            key=lambda template: (
+                -topic["template_weights"][template["id"]],
+                template["id"],
+            ),
         )
-        variant_count = 5 if needs_code else 2
-        for variant in range(occurrence, occurrence + variant_count):
-            evidence, missing = _template_bundle(
-                evidence_store, topic, template, retrieval_focus, variant
+        chosen = None
+        for template in [preferred, *alternatives]:
+            pair = (topic["id"], template["id"])
+            start = pair_occurrences.get(pair, 0)
+            candidates = []
+            for variant in range(start, start + 8):
+                evidence, missing = template_bundle(
+                    evidence_store, topic, template, retrieval_focus, variant
+                )
+                if missing:
+                    continue
+                for frame_variant in range(len(template["stem_frames"])):
+                    plan, problem = render_question_plan(
+                        template,
+                        topic,
+                        target,
+                        evidence,
+                        variant,
+                        frame_variant,
+                    )
+                    if plan:
+                        candidates.append((plan, evidence))
+            unique = next(
+                (
+                    candidate for candidate in candidates
+                    if candidate[0]["plan_key"] not in used_plan_keys
+                ),
+                None,
             )
-            if evidence and not missing:
-                evidence_variants.append(evidence)
-        if not evidence_variants:
+            if unique:
+                chosen = (template, start, unique, candidates)
+                break
+        if chosen is None:
             warnings.append(
-                f"Skipped {topic['name']} / {template['name']}: "
-                + (", ".join(missing) or "no matching evidence")
-                + "."
+                f"Skipped {topic['name']}: no distinct typed-slot plan was available."
             )
             continue
-
-        actual_types = sorted({
-            evidence_type
-            for chunk in evidence_variants[0]
-            for evidence_type in evidence_types_for_chunk(chunk)
-        })
+        template, start, (plan, evidence), candidates = chosen
+        pair_occurrences[(topic["id"], template["id"])] = start + 1
+        used_plan_keys.add(plan["plan_key"])
         strategy = STRATEGY_BY_ID[template["strategy"]]
-        prior_summary = "; ".join(
-            target["label"]
-            for target in (cfg.get("assessment_targets") or [])
-            if target.get("kind") == "prior_knowledge"
-        )[:900]
-        focus_parts = [
-            extra_focus,
-            f"focus area: {topic['name']} — {topic['description']}",
-            target_focus,
-            f"assumed prior knowledge: {prior_summary}" if prior_summary else "",
-        ]
-        focus_for_prompt = "; ".join(part for part in focus_parts if part)
-        slot = {
-            "slot": f"{topic['id']}:{template['id']}",
-            "focus": topic["name"],
-            "query": _template_query(topic, template, retrieval_focus),
-            "brief": template["pattern"],
-            "topic": topic["name"],
-            "strategy": strategy["name"],
-            "strategy_prefix": strategy["prefix"],
-            "template_id": template["id"],
-            "template_name": template["name"],
-            "template_pattern": template["pattern"],
-            "evidence_type_names": [
-                EVIDENCE_TYPE_BY_ID[evidence_type]["name"]
-                for evidence_type in actual_types
-                if evidence_type in EVIDENCE_TYPE_BY_ID
-            ],
-            "assessment_target": _alignment_summary(target),
-        }
+
         slot_variants = []
         usable_evidence_variants = []
-        for evidence in evidence_variants:
-            variant_slot = dict(slot)
-            variant_slot["default_evidence_ids"] = [chunk["id"] for chunk in evidence]
-            variant_slot["requested_difficulty"] = max(
-                1, min(5, int(cfg.get("difficulty", 3)))
+        for variant_plan, variant_evidence in candidates:
+            if variant_plan["plan_key"] in {
+                slot["plan_key"] for slot in slot_variants
+            }:
+                continue
+            slot_variants.append({
+                "slot": f"{topic['id']}:{template['id']}",
+                "focus": topic["name"],
+                "strategy_prefix": strategy["prefix"],
+                "template_id": template["id"],
+                "template_name": template["name"],
+                "option_task": template["option_task"],
+                "default_evidence_ids": [
+                    chunk["id"] for chunk in variant_evidence
+                ],
+                "requested_difficulty": max(
+                    1, min(5, int(cfg.get("difficulty", 3)))
+                ),
+                **variant_plan,
+            })
+            usable_evidence_variants.append(variant_evidence)
+        selected_index = next(
+            (
+                variant_index
+                for variant_index, variant_slot in enumerate(slot_variants)
+                if variant_slot["plan_key"] == plan["plan_key"]
+            ),
+            0,
+        )
+        if selected_index:
+            slot_variants.insert(0, slot_variants.pop(selected_index))
+            usable_evidence_variants.insert(
+                0, usable_evidence_variants.pop(selected_index)
             )
-            if _needs_supporting_code(template["id"], evidence, topic["id"]):
-                code_display = _display_code(
-                    evidence,
-                    template["id"],
-                    _template_query(topic, template, retrieval_focus),
-                )
-                if code_display is None:
-                    continue
-                (
-                    variant_slot["display_code"],
-                    variant_slot["display_language"],
-                    variant_slot["display_evidence_id"],
-                ) = code_display
-            slot_variants.append(variant_slot)
-            usable_evidence_variants.append(evidence)
-        if not slot_variants:
-            warnings.append(
-                f"Skipped {topic['name']} / {template['name']}: no concise code context."
-            )
-            continue
         tasks.append({
             "i": index,
             "slot": slot_variants[0],
             "slot_variants": slot_variants,
             "evidence_variants": usable_evidence_variants,
             "evidence_chars": template["evidence"]["chars_per_chunk"],
-            "focus_for_prompt": focus_for_prompt,
+            "focus_for_prompt": extra_focus,
             "alignment": _alignment_summary(target),
             "correct_count": _pick_correct_count(
                 cfg, max(2, min(7, int(cfg.get("choice_count", 4)))), rng
@@ -1472,7 +1201,7 @@ def generate_questions(
             "llm_seconds": 0.0,
             "repair_calls": 0,
             "validation_failures": 0,
-            "duplicate_retries": 0,
+            "duplicate_warnings": 0,
             "accepted_first_pass": 0,
             "accepted_after_repair": 0,
             "accepted_after_regeneration": 0,
@@ -1515,7 +1244,6 @@ def generate_questions(
             return task["i"], cand, warning
 
         last_err = None
-        last_valid = None
         for fresh_attempt in range(2):
             slot = task["slot_variants"][
                 min(fresh_attempt, len(task["slot_variants"]) - 1)
@@ -1532,7 +1260,7 @@ def generate_questions(
                 else:
                     prompt = _question_prompt(
                         slot, evidence, choice_count, correct_count, difficulty,
-                        task["focus_for_prompt"], task["evidence_chars"], previous_questions,
+                        task["focus_for_prompt"], task["evidence_chars"],
                     )
                     if fresh_attempt and last_err:
                         prompt += (
@@ -1545,21 +1273,20 @@ def generate_questions(
                 errs.extend(_specific_evidence_errors(q, slot, chunk_by_id))
                 if not errs:
                     duplicate = find_similar_question(q, previous_questions)
-                    if not duplicate:
-                        outcome = (
-                            "accepted_first_pass"
-                            if fresh_attempt == 0
-                            else "accepted_after_regeneration"
-                        )
-                        return _accept(q, outcome=outcome)
-                    last_valid = q
-                    last_err = (
-                        f"Too similar to existing Q{duplicate[0] + 1} "
-                        f"(similarity {duplicate[1]:.2f})"
+                    outcome = (
+                        "accepted_first_pass"
+                        if fresh_attempt == 0
+                        else "accepted_after_regeneration"
                     )
-                    if metrics is not None:
-                        metrics["duplicate_retries"] += 1
-                    continue
+                    warning = None
+                    if duplicate:
+                        warning = (
+                            f"Question {task['i'] + 1} is similar to "
+                            f"Q{duplicate[0] + 1} (similarity {duplicate[1]:.2f})."
+                        )
+                        if metrics is not None:
+                            metrics["duplicate_warnings"] += 1
+                    return _accept(q, warning=warning, outcome=outcome)
                 last_err = "; ".join(errs)
                 if metrics is not None:
                     metrics["validation_failures"] += 1
@@ -1569,7 +1296,9 @@ def generate_questions(
                     continue
 
                 repair_raw = _tracked_call(
-                    _repair_prompt(raw, evidence, choice_count, correct_count, last_err),
+                    _repair_prompt(
+                        raw, slot, evidence, choice_count, correct_count, last_err
+                    ),
                     temperature=0.0,
                     repair=True,
                 )
@@ -1578,18 +1307,19 @@ def generate_questions(
                 repair_errs.extend(_specific_evidence_errors(repaired, slot, chunk_by_id))
                 if not repair_errs:
                     duplicate = find_similar_question(repaired, previous_questions)
-                    if not duplicate:
-                        return _accept(
-                            repaired, outcome="accepted_after_repair"
+                    warning = None
+                    if duplicate:
+                        warning = (
+                            f"Question {task['i'] + 1} is similar to "
+                            f"Q{duplicate[0] + 1} (similarity {duplicate[1]:.2f})."
                         )
-                    last_valid = repaired
-                    last_err = (
-                        f"Too similar to existing Q{duplicate[0] + 1} "
-                        f"(similarity {duplicate[1]:.2f})"
+                        if metrics is not None:
+                            metrics["duplicate_warnings"] += 1
+                    return _accept(
+                        repaired,
+                        warning=warning,
+                        outcome="accepted_after_repair",
                     )
-                    if metrics is not None:
-                        metrics["duplicate_retries"] += 1
-                    continue
                 last_err = "; ".join(repair_errs)
                 if metrics is not None:
                     metrics["validation_failures"] += 1
@@ -1597,12 +1327,6 @@ def generate_questions(
                 last_err = str(exc)
             except Exception as exc:
                 last_err = f"{type(exc).__name__}: {exc}"
-        if last_valid is not None:
-            return _accept(
-                last_valid,
-                f"Question {task['i'] + 1} remained similar after regeneration.",
-                "accepted_after_regeneration",
-            )
         if metrics is not None:
             metrics["rejected"] += 1
         return task["i"], None, last_err
@@ -1634,7 +1358,23 @@ def generate_questions(
 
 
 def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | None = None) -> dict:
-    indexed_options = list(enumerate(raw.get("options", [])[:7]))
+    grouped_options = []
+    correct_options = raw.get("correct_options")
+    incorrect_options = raw.get("incorrect_options")
+    if isinstance(correct_options, list) and isinstance(incorrect_options, list):
+        grouped_options.extend(
+            {**option, "correct": True}
+            for option in correct_options
+            if isinstance(option, dict)
+        )
+        grouped_options.extend(
+            {**option, "correct": False}
+            for option in incorrect_options
+            if isinstance(option, dict)
+        )
+    else:
+        grouped_options = raw.get("options", [])
+    indexed_options = list(enumerate(grouped_options[:7]))
     # LLMs put correct options first (position bias) — shuffle so the answer
     # key is uniformly distributed across A..G.
     if rng is not None:
@@ -1673,7 +1413,7 @@ def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | No
                 "snapshot": c["snapshot"],
             })
     diff = slot.get("requested_difficulty", raw.get("difficulty", 1))
-    stem = str(raw.get("stem", "")).strip()
+    stem = str(slot.get("rendered_stem") or raw.get("stem") or "").strip()
     stem = re.sub(
         r"\s*,?\s*\b(?:notebook\s+)?cell\s+#?\d+\b",
         "",

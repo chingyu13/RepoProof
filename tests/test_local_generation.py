@@ -4,14 +4,18 @@ from unittest.mock import patch
 
 from app.generator import (
     _catalog_tasks,
-    _display_code,
     _normalize,
     _specific_evidence_errors,
-    _template_bundle,
     generate_questions,
 )
 from app.knowledge import EvidenceStore
-from app.assessment_catalog import TEMPLATE_BY_ID, TOPIC_BY_ID, weighted_template_schedule
+from app.assessment_catalog import (
+    TEMPLATES,
+    TEMPLATE_BY_ID,
+    TOPIC_BY_ID,
+    weighted_template_schedule,
+)
+from app.question_planner import display_code, render_question_plan, template_bundle
 from app.validator import find_similar_question, validate_maq
 
 
@@ -81,6 +85,16 @@ CHUNKS = [
         "        dashboard_stop.set()",
         ["symbol_table", "data_flow_graph", "control_flow_graph"],
     ),
+    chunk(
+        "c9", "dependencies", "Declared dependencies",
+        "Declared dependencies: requests, paho-mqtt",
+        ["dependency_graph"],
+    ),
+    chunk(
+        "c10", "api_discovery", "External API usage",
+        "pipeline.py uses requests.get('/records') and mqtt_client.publish('records', payload).",
+        ["api_discovery", "dependency_graph"],
+    ),
 ]
 
 
@@ -92,18 +106,29 @@ class LocalGenerationTests(unittest.TestCase):
         ]
         self.assertEqual(
             project_logic[:4],
-            ["code_explain", "code_trace", "debugging", "modification"],
+            [
+                "code_explain",
+                "fault_correction",
+                "requirement_change",
+                "condition_outcome",
+            ],
         )
         architecture = [
             template["id"]
             for template in weighted_template_schedule(TOPIC_BY_ID["architecture"], 5)
         ]
-        self.assertEqual(architecture[0], "design_behavior")
-        self.assertNotIn("code_trace", architecture)
+        self.assertEqual(architecture[0], "interaction_flow")
+        self.assertEqual(set(architecture), {"interaction_flow"})
+        self.assertNotIn("code_explain", architecture)
+
+    def test_catalog_uses_reusable_reasoning_templates_with_typed_slots(self):
+        self.assertEqual(len(TEMPLATES), 7)
+        self.assertTrue(all(template["slots"] for template in TEMPLATES))
+        self.assertTrue(all("pattern" not in template for template in TEMPLATES))
 
     def test_template_bundle_uses_required_evidence(self):
         store = EvidenceStore(CHUNKS)
-        evidence, missing = _template_bundle(
+        evidence, missing = template_bundle(
             store,
             TOPIC_BY_ID["project_logic"],
             TEMPLATE_BY_ID["code_explain"],
@@ -112,15 +137,21 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertFalse(missing)
         self.assertIn(evidence[0]["kind"], {"function", "notebook_cell", "source"})
 
-        evidence, missing = _template_bundle(
+        evidence, missing = template_bundle(
             store,
             TOPIC_BY_ID["architecture"],
-            TEMPLATE_BY_ID["design_behavior"],
+            TEMPLATE_BY_ID["interaction_flow"],
             "",
         )
         self.assertFalse(missing)
         self.assertTrue(
-            any("module_graph" in item["evidence_types"] for item in evidence)
+            any(
+                item["kind"] in {
+                    "module_graph", "flow", "callgraph", "import_graph",
+                    "api_discovery",
+                }
+                for item in evidence
+            )
         )
         self.assertTrue(
             any(
@@ -129,22 +160,23 @@ class LocalGenerationTests(unittest.TestCase):
             )
         )
 
-    def test_scenario_edge_injects_the_cited_condition_branch(self):
-        evidence, missing = _template_bundle(
+    def test_condition_outcome_injects_the_cited_condition_branch(self):
+        evidence, missing = template_bundle(
             EvidenceStore(CHUNKS),
             TOPIC_BY_ID["data_flow"],
-            TEMPLATE_BY_ID["scenario_edge"],
+            TEMPLATE_BY_ID["condition_outcome"],
             "stop services subscriber dashboard state",
         )
         self.assertFalse(missing)
-        code, language, evidence_id = _display_code(
+        code, language, evidence_id = display_code(
             evidence,
-            "scenario_edge",
+            "condition_outcome",
             "stop services subscriber dashboard state",
         )
         slot = {
-            "template_id": "scenario_edge",
-            "template_name": "Scenario / Edge Case",
+            "template_id": "condition_outcome",
+            "template_name": "Condition / Outcome",
+            "code_mode": "required",
             "display_code": code,
             "display_language": language,
             "display_evidence_id": evidence_id,
@@ -180,6 +212,59 @@ class LocalGenerationTests(unittest.TestCase):
         )
         self.assertTrue(any("exact observable" in error for error in errors))
 
+    def test_target_context_constrains_a_typed_subject_without_new_template(self):
+        evidence, missing = template_bundle(
+            EvidenceStore(CHUNKS),
+            TOPIC_BY_ID["api"],
+            TEMPLATE_BY_ID["contextual_use"],
+            "MQTT acquisition",
+        )
+        self.assertFalse(missing)
+        target = {
+            "kind": "project_scope",
+            "label": "MQTT acquisition",
+            "description": "Explain MQTT acquisition and publishing.",
+        }
+        plan, problem = render_question_plan(
+            TEMPLATE_BY_ID["contextual_use"],
+            TOPIC_BY_ID["api"],
+            target,
+            evidence,
+        )
+        self.assertFalse(problem)
+        self.assertIn("MQTT acquisition", plan["rendered_stem"])
+        self.assertRegex(plan["rendered_stem"], r"`[^`]+`")
+
+    def test_target_rejects_an_unrelated_preferred_relationship(self):
+        target = {
+            "id": "t0",
+            "kind": "project_scope",
+            "label": "MQTT acquisition and publishing",
+            "description": "Explain MQTT acquisition and publishing behavior.",
+            "source": "rubric.md",
+            "weight": 2,
+            "topic_ids": ["api"],
+            "topic_names": ["Integration / API"],
+            "coverage": "strong",
+            "evidence": [{"chunk_id": "c10", "score": 3}],
+        }
+        tasks, warnings = _catalog_tasks(
+            EvidenceStore(CHUNKS),
+            {
+                "choice_count": 4,
+                "correct_mode": "exact",
+                "correct_exact": 1,
+                "focus_areas": [{"id": "api", "weight": 5}],
+                "assessment_targets": [target],
+            },
+            1,
+            random.Random(42),
+        )
+        self.assertEqual(len(tasks), 1, warnings)
+        self.assertEqual(tasks[0]["slot"]["template_id"], "contextual_use")
+        self.assertIn("MQTT acquisition", tasks[0]["slot"]["rendered_stem"])
+        self.assertIn("publish", tasks[0]["slot"]["rendered_stem"])
+
     def test_focus_weights_allocate_question_topics(self):
         config = {
             "choice_count": 4,
@@ -197,6 +282,26 @@ class LocalGenerationTests(unittest.TestCase):
         focuses = [task["slot"]["focus"] for task in tasks]
         self.assertEqual(focuses.count("Architecture"), 4)
         self.assertEqual(focuses.count("Implementation / Code Logic"), 2)
+
+    def test_architecture_rotates_relationships_and_frames_before_inference(self):
+        tasks, warnings = _catalog_tasks(
+            EvidenceStore(CHUNKS),
+            {
+                "choice_count": 4,
+                "correct_mode": "exact",
+                "correct_exact": 1,
+                "focus_areas": [{"id": "architecture", "weight": 5}],
+            },
+            5,
+            random.Random(42),
+        )
+        self.assertEqual(len(tasks), 5, warnings)
+        stems = [task["slot"]["rendered_stem"] for task in tasks]
+        self.assertEqual(len(set(stems)), 5)
+        self.assertTrue(all(
+            task["slot"]["template_id"] == "interaction_flow"
+            for task in tasks
+        ))
 
     def test_duplicate_detection_uses_stem_options_and_evidence(self):
         question = {
@@ -320,17 +425,17 @@ class LocalGenerationTests(unittest.TestCase):
             "Static module inventory:\npipeline.py [Python]",
             ["module_graph"],
         )
-        evidence, missing = _template_bundle(
+        evidence, missing = template_bundle(
             EvidenceStore([trivial_module]),
             TOPIC_BY_ID["architecture"],
-            TEMPLATE_BY_ID["design_behavior"],
+            TEMPLATE_BY_ID["interaction_flow"],
             "",
         )
         self.assertTrue(evidence)
         self.assertIn("relational architecture evidence", missing)
 
         tasks, warnings = _catalog_tasks(
-            EvidenceStore([trivial_module, CHUNKS[-1]]),
+            EvidenceStore([trivial_module, CHUNKS[8]]),
             {
                 "choice_count": 4,
                 "correct_mode": "exact",
@@ -341,7 +446,7 @@ class LocalGenerationTests(unittest.TestCase):
             random.Random(42),
         )
         self.assertFalse(tasks)
-        self.assertTrue(any("relational architecture evidence" in warning for warning in warnings))
+        self.assertTrue(any("architecture" in warning.casefold() for warning in warnings))
 
     def test_unavailable_focus_slots_are_reallocated(self):
         trivial_module = chunk(
@@ -352,7 +457,7 @@ class LocalGenerationTests(unittest.TestCase):
             ["module_graph"],
         )
         tasks, warnings = _catalog_tasks(
-            EvidenceStore([trivial_module, CHUNKS[-1]]),
+            EvidenceStore([trivial_module, CHUNKS[8]]),
             {
                 "choice_count": 4,
                 "correct_mode": "exact",
@@ -371,7 +476,7 @@ class LocalGenerationTests(unittest.TestCase):
             task["slot"]["focus"] == "Implementation / Code Logic"
             for task in tasks
         ))
-        self.assertTrue(any("relational architecture evidence" in warning for warning in warnings))
+        self.assertTrue(any("architecture" in warning.casefold() for warning in warnings))
 
     def test_objective_design_behavior_question_passes_validation(self):
         question = {
@@ -396,8 +501,9 @@ class LocalGenerationTests(unittest.TestCase):
 
     def test_code_question_must_copy_cited_evidence(self):
         slot = {
-            "template_id": "code_trace",
-            "template_name": "Code Trace / Outcome",
+            "template_id": "code_explain",
+            "template_name": "Code Explain",
+            "code_mode": "required",
         }
         question = {
             "stem": "What is returned?\n```python\ndef process_data(value):\n    return value + 1\n```",
@@ -426,6 +532,10 @@ class LocalGenerationTests(unittest.TestCase):
             "slot": "project_logic:code_explain",
             "focus": "Implementation / Code Logic",
             "template_name": "Code Explain",
+            "rendered_stem": (
+                "Within the project's implementation logic, which statement correctly "
+                "describes the complete effect of the shown code?"
+            ),
             "display_code": (
                 "def fetch_records(client):\n"
                 "    response = client.get('/records')\n"
@@ -447,12 +557,14 @@ class LocalGenerationTests(unittest.TestCase):
             raw, slot, {item["id"]: item for item in CHUNKS}, random.Random(1)
         )
         self.assertNotIn("cell 8", question["stem"])
+        self.assertNotIn("What does `fetch_records`", question["stem"])
+        self.assertIn("complete effect", question["stem"])
         self.assertIn("```python\ndef fetch_records", question["stem"])
         self.assertEqual(question["evidence"][0]["chunk_id"], "c1")
 
     def test_normalize_uses_backend_difficulty_and_evidence_bundle(self):
         slot = {
-            "slot": "data_flow:workflow",
+            "slot": "data_flow:interaction_flow",
             "focus": "Workflow / Data Flow",
             "requested_difficulty": 4,
             "default_evidence_ids": ["c3", "c0"],
@@ -475,6 +587,46 @@ class LocalGenerationTests(unittest.TestCase):
             {"c3", "c0"},
         )
 
+    def test_normalize_accepts_grouped_local_option_contract(self):
+        question = _normalize(
+            {
+                "correct_options": [{
+                    "text": "Records are cleaned before storage.",
+                    "justification": "The call flow places cleaning before storage.",
+                }],
+                "incorrect_options": [
+                    {
+                        "text": "Storage runs before retrieval.",
+                        "justification": "The call flow begins with retrieval.",
+                    },
+                    {
+                        "text": "Cleaning is skipped.",
+                        "justification": "The call flow includes clean_records.",
+                    },
+                    {
+                        "text": "Retrieval runs after storage.",
+                        "justification": "The recorded order is the reverse.",
+                    },
+                ],
+                "explanation": "The flow runs from retrieval through cleaning to storage.",
+            },
+            {
+                "slot": "data_flow:interaction_flow",
+                "focus": "Workflow / Data Flow",
+                "rendered_stem": (
+                    "Which statement correctly describes the path from retrieval "
+                    "through cleaning to storage?"
+                ),
+                "default_evidence_ids": ["c3"],
+                "requested_difficulty": 3,
+            },
+            {item["id"]: item for item in CHUNKS},
+            random.Random(2),
+        )
+        self.assertEqual(len(question["options"]), 4)
+        self.assertEqual(len(question["answer"]), 1)
+        self.assertEqual(validate_maq(question, 4, 1), [])
+
     def test_normalize_remaps_explanation_option_after_shuffle(self):
         raw = {
             "stem": "Which statement correctly describes the workflow?",
@@ -490,7 +642,7 @@ class LocalGenerationTests(unittest.TestCase):
         }
         question = _normalize(
             raw,
-            {"slot": "data_flow:workflow", "focus": "Workflow / Data Flow"},
+            {"slot": "data_flow:interaction_flow", "focus": "Workflow / Data Flow"},
             {item["id"]: item for item in CHUNKS},
             random.Random(2),
         )
@@ -521,14 +673,18 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertTrue(any("must show the code" in error for error in errors))
         self.assertTrue(any("different correct option" in error for error in errors))
 
-    def test_workflow_template_rejects_single_condition_question(self):
+    def test_interaction_flow_rejects_single_condition_question(self):
         question = {
             "stem": "What happens if `stop` is True?",
             "evidence": [{"chunk_id": "c3"}],
         }
         errors = _specific_evidence_errors(
             question,
-            {"template_id": "workflow", "template_name": "Workflow"},
+            {
+                "template_id": "interaction_flow",
+                "template_name": "Interaction / Flow",
+                "code_mode": "none",
+            },
             {item["id"]: item for item in CHUNKS},
         )
         self.assertTrue(any("multi-stage path" in error for error in errors))
@@ -615,10 +771,10 @@ class LocalGenerationTests(unittest.TestCase):
             [question["slot"] for question in questions],
             [
                 "project_logic:code_explain",
-                "project_logic:code_trace",
-                "project_logic:debugging",
-                "project_logic:modification",
-                "project_logic:testing_behavior",
+                "project_logic:fault_correction",
+                "project_logic:requirement_change",
+                "project_logic:condition_outcome",
+                "project_logic:constraint_behavior",
             ],
         )
 

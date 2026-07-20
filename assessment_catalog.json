@@ -1,30 +1,30 @@
 {
-  "_readme": "Authoritative local-generation catalog: Topics weight reusable Templates; Templates declare Strategy metadata and Evidence requirements.",
+  "_readme": "Authoritative Local generation catalog. Templates are reasoning forms with typed slots; assignment targets constrain slot selection but do not create new templates.",
   "strategies": [
     {
       "id": "explain",
       "name": "Explain",
-      "prefix": "Explain a concrete purpose, responsibility, or design rationale supported by the evidence."
+      "prefix": "Explain a project-specific use, relationship, or constraint supported by the supplied evidence."
     },
     {
       "id": "execution",
       "name": "Execution",
-      "prefix": "Mentally execute the supplied code or workflow evidence step by step."
+      "prefix": "Trace an evidenced interaction, data path, or code path."
     },
     {
       "id": "prediction",
       "name": "Prediction",
-      "prefix": "Predict an outcome for a short scenario that is fully supported by the evidence."
+      "prefix": "Determine an observable outcome from the shown condition and code."
     },
     {
       "id": "debugging",
       "name": "Debugging",
-      "prefix": "Identify a concrete fault or risky behavior and the correction that addresses it."
+      "prefix": "Reason about one explicit hypothetical change and the behavior it would break."
     },
     {
       "id": "modification",
       "name": "Modification",
-      "prefix": "Choose a change that satisfies a new requirement while preserving relevant behavior."
+      "prefix": "Choose a change that meets a concrete requirement while preserving shown behavior."
     }
   ],
   "evidence_types": [
@@ -81,288 +81,449 @@
   ],
   "templates": [
     {
-      "id": "purpose_responsibility",
-      "name": "Purpose / Responsibility",
+      "id": "contextual_use",
+      "name": "Contextual Use",
       "strategy": "explain",
-      "pattern": "Name a concrete component or pipeline stage in the stem, then test a specific input/output behavior, interaction, side effect, condition, or consequence that is not obvious from its identifier or docstring. Never ask the broad purpose of a descriptively named function, never ask the student to select the responsible function/class/module by name, and never use bare identifiers as the options. Do not ask library trivia.",
-      "query": "purpose responsibility role operation function class component stage",
+      "stem_frames": [
+        "Within {context}, which statement correctly describes the project-specific use of {subject}?",
+        "In {context}, which statement correctly describes what {subject} contributes to the project?"
+      ],
+      "option_task": "Test the subject's evidenced interaction, input/output, side effect, or downstream contribution. Do not test generic library knowledge or repeat what its name suggests.",
+      "slots": {
+        "context": {
+          "source": "target_or_topic"
+        },
+        "subject": {
+          "source": "evidence_entity",
+          "types": [
+            "imported_library",
+            "api_method",
+            "component",
+            "function",
+            "class",
+            "data_store",
+            "state"
+          ],
+          "related_to": "context"
+        }
+      },
+      "code_mode": "none",
+      "query": "project-specific use interaction input output side effect dependency",
       "evidence": {
         "required": [
           {
-            "label": "concrete implementation",
-            "types": ["symbol_table", "data_flow_graph"],
-            "kinds": ["function", "class", "notebook_cell", "source"],
+            "label": "concrete usage",
+            "types": [
+              "dependency_graph",
+              "api_discovery",
+              "call_graph",
+              "data_flow_graph",
+              "symbol_table",
+              "sql_analysis"
+            ],
+            "kinds": [
+              "dependencies",
+              "imports",
+              "function",
+              "class",
+              "flow",
+              "callgraph",
+              "api_discovery",
+              "source",
+              "sql_analysis"
+            ],
             "count": 1,
-            "query": "function class method process transform publish load save"
+            "query": "import call use publish subscribe request transform save table"
           }
         ],
         "optional": [
           {
-            "label": "project context",
-            "types": ["module_graph", "call_graph"],
-            "kinds": ["module_graph", "flow", "callgraph", "import_graph"],
+            "label": "usage context",
+            "types": [
+              "call_graph",
+              "data_flow_graph",
+              "module_graph",
+              "dependency_graph"
+            ],
+            "kinds": [
+              "flow",
+              "callgraph",
+              "module_graph",
+              "import_graph",
+              "api_discovery",
+              "function"
+            ],
             "count": 2
           }
         ],
         "max_chunks": 3,
-        "chars_per_chunk": 2200
-      }
-    },
-    {
-      "id": "workflow",
-      "name": "Workflow",
-      "strategy": "execution",
-      "pattern": "Ask how data or control moves through concrete project stages in a valid order, including the resulting output or side effect.",
-      "query": "workflow order pipeline input process transform output call flow",
-      "evidence": {
-        "required": [
-          {
-            "label": "execution or data path",
-            "types": ["call_graph", "data_flow_graph"],
-            "kinds": ["flow", "callgraph"],
-            "count": 1,
-            "query": "entry run pipeline call flow read transform publish save"
-          }
-        ],
-        "optional": [
-          {
-            "label": "supporting implementation",
-            "types": ["data_flow_graph", "symbol_table"],
-            "kinds": ["function", "notebook_cell", "source"],
-            "count": 2
-          },
-          {
-            "label": "module context",
-            "types": ["module_graph", "dependency_graph"],
-            "kinds": ["module_graph", "import_graph", "structure"],
-            "count": 1
-          }
-        ],
-        "max_chunks": 4,
-        "chars_per_chunk": 2000
-      }
-    },
-    {
-      "id": "design_behavior",
-      "name": "Design Behavior",
-      "strategy": "explain",
-      "pattern": "Name relevant components in the stem, then ask about a non-obvious evidenced relationship between at least two components: a boundary, dependency, shared downstream path, separation, ordering, or cross-component consequence that cannot be guessed from an identifier or docstring. Never ask what happens when one named function is called. Every option must be a complete relational claim; never ask the broad purpose/behavior of a descriptively named function, never ask which function/class/module is responsible, and never offer bare identifiers as options. Wrong options must assert relationships contradicted by evidence. Never ask which design is best or infer undocumented advantages.",
-      "query": "architecture design boundary dependency abstraction separation behavior relationship",
-      "evidence": {
-        "required": [
-          {
-            "label": "design structure",
-            "types": ["module_graph", "dependency_graph", "call_graph", "api_discovery"],
-            "kinds": ["module_graph", "import_graph", "flow", "callgraph", "api_discovery"],
-            "count": 1
-          }
-        ],
-        "optional": [
-          {
-            "label": "documented context",
-            "kinds": ["readme", "dependencies"],
-            "count": 1
-          },
-          {
-            "label": "implementation context",
-            "types": ["call_graph", "symbol_table"],
-            "kinds": ["flow", "function", "class"],
-            "count": 2
-          }
-        ],
-        "max_chunks": 4,
         "chars_per_chunk": 1800
       }
     },
     {
-      "id": "scenario_edge",
-      "name": "Scenario / Edge Case",
-      "strategy": "prediction",
-      "pattern": "Show the complete minimal code branch for a concrete condition, failure, state change, or side effect. Use a neutral stem such as 'For the shown code, if <condition>, which observable behavior occurs?' and do not presuppose that a print, update, error, or return happens. The student must be able to derive every option from the displayed code without remembering the project. The correct answer must state the executed calls, assignments, return, or output exactly; never call a visible print or update 'no action' or 'nothing happens'. Avoid unsupported hypothetical features.",
-      "query": "scenario failure empty invalid boundary exception retry state outcome",
+      "id": "interaction_flow",
+      "name": "Interaction / Flow",
+      "strategy": "execution",
+      "stem_frames": [
+        "Within {context}, which statement correctly describes the interaction between {subject} and {counterpart}?",
+        "Within {context}, which statement is consistent with the evidenced dependency from {subject} to {counterpart}?",
+        "For {context}, which statement correctly traces what passes from {subject} to {counterpart}?"
+      ],
+      "option_task": "Test an evidenced direction, ordering, transferred data, or cross-component consequence. Every option must be a complete relational claim.",
+      "slots": {
+        "context": {
+          "source": "target_or_topic"
+        },
+        "subject": {
+          "source": "relation_source",
+          "types": [
+            "component",
+            "function",
+            "api_method",
+            "data_store"
+          ],
+          "related_to": "context"
+        },
+        "counterpart": {
+          "source": "relation_target",
+          "types": [
+            "component",
+            "function",
+            "api_method",
+            "data_store"
+          ],
+          "related_to": "subject"
+        }
+      },
+      "code_mode": "none",
+      "query": "workflow order interaction source destination call flow dependency",
       "evidence": {
         "required": [
           {
-            "label": "conditional behavior",
-            "types": ["control_flow_graph", "data_flow_graph", "api_discovery", "test_discovery"],
-            "kinds": ["function", "notebook_cell", "source"],
+            "label": "evidenced relationship",
+            "types": [
+              "call_graph",
+              "data_flow_graph",
+              "dependency_graph",
+              "module_graph",
+              "api_discovery"
+            ],
+            "kinds": [
+              "flow",
+              "callgraph",
+              "import_graph",
+              "module_graph",
+              "api_discovery"
+            ],
             "count": 1,
-            "query": "if else except error retry empty missing invalid"
+            "query": "source destination call order data flow dependency"
           }
         ],
         "optional": [
           {
-            "label": "related state or flow",
-            "types": ["control_flow_graph", "call_graph", "symbol_table"],
-            "kinds": ["function", "flow", "module_var", "notebook_cell"],
+            "label": "supporting behavior",
+            "types": [
+              "data_flow_graph",
+              "symbol_table",
+              "api_discovery"
+            ],
+            "kinds": [
+              "function",
+              "source",
+              "notebook_cell",
+              "api_discovery"
+            ],
             "count": 2
           }
         ],
         "max_chunks": 3,
-        "chars_per_chunk": 2400
+        "chars_per_chunk": 1800
+      }
+    },
+    {
+      "id": "condition_outcome",
+      "name": "Condition / Outcome",
+      "strategy": "prediction",
+      "stem_frames": [
+        "For the shown code within {context}, if {condition}, which observable behavior occurs?"
+      ],
+      "option_task": "State exact calls, assignments, output, exceptions, or return behavior visible in the complete shown branch.",
+      "slots": {
+        "context": {
+          "source": "target_or_topic"
+        },
+        "condition": {
+          "source": "code_condition"
+        }
+      },
+      "code_mode": "required",
+      "query": "condition branch state outcome exception return side effect",
+      "evidence": {
+        "required": [
+          {
+            "label": "conditional code",
+            "types": [
+              "control_flow_graph",
+              "data_flow_graph"
+            ],
+            "kinds": [
+              "function",
+              "notebook_cell",
+              "source"
+            ],
+            "count": 1,
+            "query": "if else try except match return set update"
+          }
+        ],
+        "optional": [
+          {
+            "label": "state context",
+            "types": [
+              "symbol_table",
+              "call_graph"
+            ],
+            "kinds": [
+              "module_var",
+              "flow",
+              "function"
+            ],
+            "count": 1
+          }
+        ],
+        "max_chunks": 2,
+        "chars_per_chunk": 2600
       }
     },
     {
       "id": "code_explain",
       "name": "Code Explain",
       "strategy": "explain",
-      "pattern": "Show one minimal self-contained code excerpt and ask its concrete purpose. The correct option must cover all material visible effects, including conditional calls, rather than describing only the first assignment.",
-      "query": "function method implementation purpose code behavior",
+      "stem_frames": [
+        "Within {context}, which statement correctly describes the complete effect of the shown code?"
+      ],
+      "option_task": "Test the complete visible effect, including material calls, transformations, state changes, and return behavior.",
+      "slots": {
+        "context": {
+          "source": "target_or_topic"
+        }
+      },
+      "code_mode": "required",
+      "query": "implementation effect transformation state return code",
       "evidence": {
         "required": [
           {
-            "label": "complete code context",
-            "types": ["symbol_table", "data_flow_graph", "control_flow_graph"],
-            "kinds": ["function", "notebook_cell", "source"],
+            "label": "self-contained code",
+            "types": [
+              "symbol_table",
+              "data_flow_graph",
+              "control_flow_graph"
+            ],
+            "kinds": [
+              "function",
+              "notebook_cell",
+              "source"
+            ],
             "count": 1
           }
         ],
         "optional": [
           {
-            "label": "caller or state context",
-            "types": ["call_graph", "symbol_table"],
-            "kinds": ["flow", "module_var", "function"],
+            "label": "caller context",
+            "types": [
+              "call_graph",
+              "symbol_table"
+            ],
+            "kinds": [
+              "flow",
+              "function",
+              "module_var"
+            ],
             "count": 1
           }
         ],
         "max_chunks": 2,
-        "chars_per_chunk": 3600
+        "chars_per_chunk": 2800
       }
     },
     {
-      "id": "code_trace",
-      "name": "Code Trace / Outcome",
-      "strategy": "execution",
-      "pattern": "Show a minimal self-contained excerpt and ask about its output, state change, return value, or call order under a stated input.",
-      "query": "trace output return state variable call order behavior",
-      "evidence": {
-        "required": [
-          {
-            "label": "executable code context",
-            "types": ["control_flow_graph", "data_flow_graph", "symbol_table"],
-            "kinds": ["function", "notebook_cell", "source"],
-            "count": 1
-          }
-        ],
-        "optional": [
-          {
-            "label": "call or state context",
-            "types": ["call_graph", "symbol_table"],
-            "kinds": ["flow", "module_var", "function"],
-            "count": 1
-          }
-        ],
-        "max_chunks": 2,
-        "chars_per_chunk": 3800
-      }
-    },
-    {
-      "id": "debugging",
-      "name": "Debug / Correct",
+      "id": "fault_correction",
+      "name": "Fault / Correction",
       "strategy": "debugging",
-      "pattern": "Show a self-contained excerpt with one demonstrable fault, or a clearly identified proposed change containing the fault, and ask for the correction. Do not falsely claim the original project is broken.",
-      "query": "debug error bug incorrect exception boundary condition fix",
+      "stem_frames": [
+        "A maintainer proposes to {mutation}. For the shown code within {context}, which statement correctly identifies the resulting fault and the correction?"
+      ],
+      "option_task": "Exactly one option must pair the observable consequence of the explicit hypothetical mutation with the correction that restores the shown behavior. Do not claim the original code is faulty.",
+      "slots": {
+        "context": {
+          "source": "target_or_topic"
+        },
+        "mutation": {
+          "source": "code_mutation"
+        }
+      },
+      "code_mode": "required",
+      "query": "hypothetical change consequence correction condition return call",
       "evidence": {
         "required": [
           {
-            "label": "code with relevant control flow",
-            "types": ["control_flow_graph", "data_flow_graph", "symbol_table"],
-            "kinds": ["function", "notebook_cell", "source"],
+            "label": "mutable code path",
+            "types": [
+              "control_flow_graph",
+              "data_flow_graph",
+              "symbol_table"
+            ],
+            "kinds": [
+              "function",
+              "notebook_cell",
+              "source"
+            ],
             "count": 1,
-            "query": "if else loop try except return update validate"
+            "query": "if return call assignment update"
           }
         ],
         "optional": [
           {
-            "label": "expected flow or state",
-            "types": ["call_graph", "symbol_table", "test_discovery"],
-            "kinds": ["flow", "module_var", "test_discovery", "function"],
+            "label": "expected behavior",
+            "types": [
+              "call_graph",
+              "test_discovery",
+              "symbol_table"
+            ],
+            "kinds": [
+              "flow",
+              "test_discovery",
+              "function"
+            ],
             "count": 1
           }
         ],
         "max_chunks": 2,
-        "chars_per_chunk": 3800
+        "chars_per_chunk": 2800
       }
     },
     {
-      "id": "modification",
-      "name": "Modification / Insertion",
+      "id": "requirement_change",
+      "name": "Requirement / Change",
       "strategy": "modification",
-      "pattern": "State one new requirement, show sufficient insertion or replacement context, and ask which short change belongs there while preserving current behavior.",
-      "query": "modify insert requirement refactor extend change implementation",
+      "stem_frames": [
+        "Requirement: {requirement}. At INSERT HERE in the shown code, which option satisfies it while preserving the existing behavior?"
+      ],
+      "option_task": "Each option must be a short syntactically plausible snippet for the marked location. Exactly one must satisfy the stated requirement and preserve the visible control/data flow.",
+      "slots": {
+        "requirement": {
+          "source": "target_or_requirement"
+        }
+      },
+      "code_mode": "insertion",
+      "query": "requirement insert extend log validate preserve behavior",
       "evidence": {
         "required": [
           {
-            "label": "modifiable code context",
-            "types": ["control_flow_graph", "data_flow_graph", "symbol_table"],
-            "kinds": ["function", "notebook_cell", "source"],
+            "label": "insertion context",
+            "types": [
+              "control_flow_graph",
+              "data_flow_graph",
+              "symbol_table"
+            ],
+            "kinds": [
+              "function",
+              "notebook_cell",
+              "source"
+            ],
             "count": 1
           }
         ],
         "optional": [
           {
             "label": "surrounding contract",
-            "types": ["call_graph", "symbol_table", "dependency_graph"],
-            "kinds": ["flow", "module_var", "class", "imports", "function"],
+            "types": [
+              "call_graph",
+              "dependency_graph",
+              "symbol_table"
+            ],
+            "kinds": [
+              "flow",
+              "imports",
+              "module_var",
+              "function"
+            ],
             "count": 1
           }
         ],
         "max_chunks": 2,
-        "chars_per_chunk": 4000
+        "chars_per_chunk": 3000
       }
     },
     {
-      "id": "schema_integrity",
-      "name": "Schema / Integrity",
+      "id": "constraint_behavior",
+      "name": "Constraint / Verification",
       "strategy": "explain",
-      "pattern": "Ask about an evidenced schema, field relationship, constraint, persistence operation, or data-integrity rule.",
-      "query": "schema table column key constraint relation database sql integrity model",
+      "stem_frames": [
+        "Within {context}, which statement is consistent with the evidenced constraint on {subject}?",
+        "For {context}, which statement correctly describes the verified behavior of {subject}?"
+      ],
+      "option_task": "Test a concrete schema rule, validation guard, test expectation, security condition, data-quality rule, or measured complexity indicator. Do not ask for an undocumented design preference.",
+      "slots": {
+        "context": {
+          "source": "target_or_topic"
+        },
+        "subject": {
+          "source": "evidence_entity",
+          "types": [
+            "data_store",
+            "state",
+            "component",
+            "function",
+            "api_method"
+          ],
+          "related_to": "context"
+        }
+      },
+      "code_mode": "none",
+      "query": "constraint validation assertion schema integrity guard complexity",
       "evidence": {
         "required": [
           {
-            "label": "schema or persistence evidence",
-            "types": ["sql_analysis", "data_flow_graph", "symbol_table"],
-            "kinds": ["sql_analysis", "source", "function", "notebook_cell", "module_var"],
-            "count": 1
+            "label": "verifiable constraint",
+            "types": [
+              "sql_analysis",
+              "test_discovery",
+              "control_flow_graph",
+              "complexity_analysis",
+              "api_discovery",
+              "data_flow_graph"
+            ],
+            "kinds": [
+              "sql_analysis",
+              "test_discovery",
+              "complexity",
+              "function",
+              "source",
+              "notebook_cell"
+            ],
+            "count": 1,
+            "query": "constraint not null primary key assertion validate guard loop branch"
           }
         ],
         "optional": [
           {
-            "label": "related data path",
-            "types": ["data_flow_graph", "dependency_graph"],
-            "kinds": ["function", "notebook_cell", "flow", "imports"],
-            "count": 2
-          }
-        ],
-        "max_chunks": 3,
-        "chars_per_chunk": 3000
-      }
-    },
-    {
-      "id": "testing_behavior",
-      "name": "Test / Expected Behavior",
-      "strategy": "prediction",
-      "pattern": "Ask which test, assertion, or boundary case verifies a concrete behavior shown by the implementation.",
-      "query": "test assertion expected behavior boundary fixture failure validation",
-      "evidence": {
-        "required": [
-          {
-            "label": "testable behavior",
-            "types": ["test_discovery", "control_flow_graph", "data_flow_graph"],
-            "kinds": ["test_discovery", "function", "notebook_cell", "source"],
+            "label": "supporting context",
+            "types": [
+              "symbol_table",
+              "data_flow_graph",
+              "dependency_graph"
+            ],
+            "kinds": [
+              "function",
+              "module_var",
+              "flow",
+              "imports"
+            ],
             "count": 1
           }
         ],
-        "optional": [
-          {
-            "label": "existing tests or call context",
-            "types": ["test_discovery", "call_graph", "symbol_table"],
-            "kinds": ["test_discovery", "function", "flow", "module_var"],
-            "count": 2
-          }
-        ],
-        "max_chunks": 3,
-        "chars_per_chunk": 3000
+        "max_chunks": 2,
+        "chars_per_chunk": 2200
       }
     }
   ],
@@ -372,37 +533,43 @@
       "name": "Architecture",
       "description": "Internal components, boundaries, dependencies, and how project parts work together.",
       "query": "architecture module package dependency layer component boundary structure",
-      "evidence_types": ["module_graph", "dependency_graph", "call_graph", "symbol_table", "data_flow_graph"],
+      "evidence_types": [
+        "module_graph",
+        "dependency_graph",
+        "call_graph",
+        "symbol_table",
+        "data_flow_graph"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.9,
-        "workflow": 0.95,
-        "design_behavior": 1.0,
-        "scenario_edge": 0.1,
+        "contextual_use": 0,
+        "interaction_flow": 1.0,
+        "condition_outcome": 0,
         "code_explain": 0,
-        "code_trace": 0,
-        "debugging": 0,
-        "modification": 0.2,
-        "schema_integrity": 0.2,
-        "testing_behavior": 0.2
+        "fault_correction": 0,
+        "requirement_change": 0,
+        "constraint_behavior": 0
       }
     },
     {
       "id": "api",
       "name": "Integration / API",
-      "description": "External APIs, services, databases, message queues, contracts, payloads, failures, and retries.",
+      "description": "External APIs, services, message queues, contracts, payloads, failures, and retries.",
       "query": "integration api endpoint request response client payload mqtt publish subscribe external service retry",
-      "evidence_types": ["api_discovery", "dependency_graph", "data_flow_graph", "control_flow_graph"],
+      "evidence_types": [
+        "api_discovery",
+        "dependency_graph",
+        "data_flow_graph",
+        "control_flow_graph",
+        "call_graph"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.7,
-        "workflow": 1.0,
-        "design_behavior": 0.9,
-        "scenario_edge": 0.55,
-        "code_explain": 0.15,
-        "code_trace": 0.2,
-        "debugging": 0.4,
-        "modification": 0.45,
-        "schema_integrity": 0.35,
-        "testing_behavior": 0.55
+        "contextual_use": 0.9,
+        "interaction_flow": 1.0,
+        "condition_outcome": 0.7,
+        "code_explain": 0.1,
+        "fault_correction": 0.55,
+        "requirement_change": 0.6,
+        "constraint_behavior": 0.7
       }
     },
     {
@@ -410,18 +577,20 @@
       "name": "Workflow / Data Flow",
       "description": "How control or data moves from inputs through processing stages to outputs.",
       "query": "workflow data flow pipeline input output transform validate load save process stage",
-      "evidence_types": ["data_flow_graph", "call_graph", "symbol_table", "module_graph"],
+      "evidence_types": [
+        "data_flow_graph",
+        "call_graph",
+        "symbol_table",
+        "module_graph"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.75,
-        "workflow": 1.0,
-        "design_behavior": 0.8,
-        "scenario_edge": 0.4,
-        "code_explain": 0.15,
-        "code_trace": 0.35,
-        "debugging": 0.25,
-        "modification": 0.4,
-        "schema_integrity": 0.45,
-        "testing_behavior": 0.45
+        "contextual_use": 0.75,
+        "interaction_flow": 1.0,
+        "condition_outcome": 0.65,
+        "code_explain": 0.2,
+        "fault_correction": 0.3,
+        "requirement_change": 0.5,
+        "constraint_behavior": 0.65
       }
     },
     {
@@ -429,18 +598,20 @@
       "name": "Implementation / Code Logic",
       "description": "Local rules, transformations, conditions, state changes, and implementation behavior.",
       "query": "implementation code logic function condition state behavior transformation calculation",
-      "evidence_types": ["symbol_table", "control_flow_graph", "data_flow_graph", "call_graph"],
+      "evidence_types": [
+        "symbol_table",
+        "control_flow_graph",
+        "data_flow_graph",
+        "call_graph"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.3,
-        "workflow": 0.4,
-        "design_behavior": 0.3,
-        "scenario_edge": 0.6,
+        "contextual_use": 0.25,
+        "interaction_flow": 0.4,
+        "condition_outcome": 0.8,
         "code_explain": 1.0,
-        "code_trace": 1.0,
-        "debugging": 1.0,
-        "modification": 1.0,
-        "schema_integrity": 0,
-        "testing_behavior": 0.7
+        "fault_correction": 1.0,
+        "requirement_change": 1.0,
+        "constraint_behavior": 0.75
       }
     },
     {
@@ -448,18 +619,20 @@
       "name": "Data Modelling",
       "description": "Persistence, schemas, relationships, queries, constraints, and data integrity.",
       "query": "database schema table query sql transaction persist model record relationship constraint",
-      "evidence_types": ["sql_analysis", "data_flow_graph", "dependency_graph", "symbol_table"],
+      "evidence_types": [
+        "sql_analysis",
+        "data_flow_graph",
+        "dependency_graph",
+        "symbol_table"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.7,
-        "workflow": 0.8,
-        "design_behavior": 0.9,
-        "scenario_edge": 0.35,
-        "code_explain": 0.1,
-        "code_trace": 0.2,
-        "debugging": 0.35,
-        "modification": 0.45,
-        "schema_integrity": 1.0,
-        "testing_behavior": 0.5
+        "contextual_use": 0.8,
+        "interaction_flow": 0.75,
+        "condition_outcome": 0.5,
+        "code_explain": 0.15,
+        "fault_correction": 0.5,
+        "requirement_change": 0.65,
+        "constraint_behavior": 1.0
       }
     },
     {
@@ -467,18 +640,20 @@
       "name": "Security",
       "description": "Validation, authentication, authorization, secrets, and safe data handling.",
       "query": "security authenticate authorize permission input validation secret token encrypt sanitize",
-      "evidence_types": ["control_flow_graph", "api_discovery", "symbol_table", "data_flow_graph"],
+      "evidence_types": [
+        "control_flow_graph",
+        "api_discovery",
+        "symbol_table",
+        "data_flow_graph"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.4,
-        "workflow": 0.5,
-        "design_behavior": 0.8,
-        "scenario_edge": 1.0,
-        "code_explain": 0.3,
-        "code_trace": 0.5,
-        "debugging": 1.0,
-        "modification": 0.8,
-        "schema_integrity": 0.7,
-        "testing_behavior": 0.9
+        "contextual_use": 0.6,
+        "interaction_flow": 0.6,
+        "condition_outcome": 1.0,
+        "code_explain": 0.25,
+        "fault_correction": 1.0,
+        "requirement_change": 0.9,
+        "constraint_behavior": 1.0
       }
     },
     {
@@ -486,37 +661,39 @@
       "name": "Testing",
       "description": "Test cases, assertions, expected behavior, boundaries, and fault detection.",
       "query": "test testing assertion fixture validate expected error boundary behavior",
-      "evidence_types": ["test_discovery", "control_flow_graph", "data_flow_graph"],
+      "evidence_types": [
+        "test_discovery",
+        "control_flow_graph",
+        "data_flow_graph"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.3,
-        "workflow": 0.5,
-        "design_behavior": 0.4,
-        "scenario_edge": 1.0,
+        "contextual_use": 0.3,
+        "interaction_flow": 0.4,
+        "condition_outcome": 0.9,
         "code_explain": 0.5,
-        "code_trace": 0.7,
-        "debugging": 0.9,
-        "modification": 0.6,
-        "schema_integrity": 0.4,
-        "testing_behavior": 1.0
+        "fault_correction": 0.9,
+        "requirement_change": 0.7,
+        "constraint_behavior": 1.0
       }
     },
     {
       "id": "complexity",
       "name": "Complexity",
-      "description": "Time, space, scalability, resource use, and performance trade-offs.",
+      "description": "Time, space, scalability, resource use, and performance implications.",
       "query": "complexity performance efficient optimize scalability time space memory loop",
-      "evidence_types": ["complexity_analysis", "control_flow_graph", "data_flow_graph"],
+      "evidence_types": [
+        "complexity_analysis",
+        "control_flow_graph",
+        "data_flow_graph"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.3,
-        "workflow": 0.4,
-        "design_behavior": 0.9,
-        "scenario_edge": 0.7,
-        "code_explain": 0.5,
-        "code_trace": 0.8,
-        "debugging": 0.5,
-        "modification": 1.0,
-        "schema_integrity": 0,
-        "testing_behavior": 0.6
+        "contextual_use": 0.3,
+        "interaction_flow": 0.4,
+        "condition_outcome": 0.7,
+        "code_explain": 0.6,
+        "fault_correction": 0.65,
+        "requirement_change": 1.0,
+        "constraint_behavior": 1.0
       }
     },
     {
@@ -524,18 +701,19 @@
       "name": "OOP",
       "description": "Classes, objects, encapsulation, inheritance, composition, and collaboration.",
       "query": "oop object class method inheritance composition interface encapsulation polymorphism",
-      "evidence_types": ["symbol_table", "module_graph", "call_graph"],
+      "evidence_types": [
+        "symbol_table",
+        "module_graph",
+        "call_graph"
+      ],
       "template_weights": {
-        "purpose_responsibility": 0.8,
-        "workflow": 0.6,
-        "design_behavior": 1.0,
-        "scenario_edge": 0.7,
-        "code_explain": 0.7,
-        "code_trace": 0.6,
-        "debugging": 0.5,
-        "modification": 0.9,
-        "schema_integrity": 0,
-        "testing_behavior": 0.6
+        "contextual_use": 0.8,
+        "interaction_flow": 1.0,
+        "condition_outcome": 0.6,
+        "code_explain": 0.5,
+        "fault_correction": 0.6,
+        "requirement_change": 0.9,
+        "constraint_behavior": 0.6
       }
     }
   ]
