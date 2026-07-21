@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS attempts (
     submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Background generation runs. Persisted (not in-memory) so a run's status
+-- survives server restarts and is visible from any worker process.
+CREATE TABLE IF NOT EXISTS generation_runs (
+    id TEXT PRIMARY KEY,
+    project_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'queued',   -- queued | running | complete | failed
+    data_json TEXT NOT NULL DEFAULT '{}',    -- progress / context / result / error
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Operational telemetry for the MLOps loop. Holds derived metadata only
 -- (model/config, human review actions, outcomes) — never raw project code.
 CREATE TABLE IF NOT EXISTS events (
@@ -73,6 +84,7 @@ CREATE TABLE IF NOT EXISTS events (
 # Applied idempotently on init() so existing SQLite files pick them up.
 _MIGRATIONS = [
     ("projects", "consent_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("questions", "flags_json", "TEXT NOT NULL DEFAULT '[]'"),   # soft quality flags for review
     ("projects", "project_path", "TEXT NOT NULL DEFAULT ''"),
     ("questions", "alignment_json", "TEXT NOT NULL DEFAULT '{}'"),
 ]
@@ -101,6 +113,12 @@ def log_event(kind: str, data: dict, project_id: int | None = None) -> None:
 def connect():
     con = sqlite3.connect(config.DB_PATH)
     con.row_factory = sqlite3.Row
+    # WAL lets the background generation thread write while API requests read;
+    # busy_timeout makes concurrent writers wait (up to 5s) instead of raising
+    # "database is locked" immediately. journal_mode is sticky per database
+    # file, but setting it every time is cheap and harmless.
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=5000")
     try:
         yield con
         con.commit()

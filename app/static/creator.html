@@ -105,6 +105,8 @@ button:disabled{opacity:.5;cursor:default}
 .q .approve.is-approved:hover{background:#05a34e}
 .evidence{font-size:.78rem;color:var(--muted);background:var(--bg);border-radius:10px;padding:.5rem .7rem;margin-top:.5rem}
 .alignment{font-size:.78rem;color:var(--muted);margin:.45rem 0}
+.qflags{font-size:.78rem;background:#fef3c7;color:#92400e;border-radius:5px;padding:.4rem .6rem;margin:.45rem 0}
+[data-theme="dark"] .qflags{background:#3d2f0a;color:#f5d67a}
 .small{font-size:.8rem;color:var(--muted)}
 a{color:var(--accent)}
 .hidden{display:none}
@@ -971,10 +973,15 @@ function renderQuestion(q, pos){
   const alignment = q.alignment?.label
     ? `<div class="alignment">Assessment alignment: ${esc(q.alignment.label)}${q.alignment.source ? ` · ${esc(q.alignment.source)}` : ''}</div>`
     : '';
+  // soft quality flags: advisory heuristics that no longer block generation —
+  // the reviewer decides whether they matter for this question
+  const flags = (q.flags && q.flags.length)
+    ? `<div class="qflags">⚠ Review hints: ${q.flags.map(esc).join(' · ')}</div>`
+    : '';
   div.innerHTML = `
     <span class="status ${q.status}">${q.status}</span>
     <div class="small" style="margin:0 0 .4rem"><strong>Q${pos}</strong> · slot: ${q.slot} · by ${q.generator} · ref #${q.id}</div>
-    ${alignment}
+    ${alignment}${flags}
     <textarea class="stem">${esc(q.stem)}</textarea>
     <div class="opts"></div>
     <div class="row" style="margin-top:.4rem">

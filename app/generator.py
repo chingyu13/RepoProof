@@ -17,7 +17,7 @@ from .assessment_catalog import (
     TOPIC_BY_ID,
     weighted_template_schedule,
 )
-from .validator import OPTION_KEYS, find_similar_question, validate_maq
+from .validator import OPTION_KEYS, find_similar_question, validate_maq, validate_maq_split
 
 SYSTEM_PROMPT = """You write answer options for ONE fixed, evidence-grounded RepoProof question.
 The backend has already selected the topic, assessment context, subject, stem, code, and evidence.
@@ -1299,9 +1299,18 @@ def generate_questions(
                         )
                     raw = _tracked_call(prompt)
                 q = _normalize(raw, slot, chunk_by_id, trng)
-                errs = validate_maq(q, choice_count, correct_count)
+                # Two-tier: only HARD failures trigger the costly repair /
+                # regeneration loop. Soft style heuristics ride along as
+                # quality flags for the reviewer instead of burning LLM calls.
+                errs, soft_flags = validate_maq_split(q, choice_count, correct_count)
                 errs.extend(_specific_evidence_errors(q, slot, chunk_by_id))
                 if not errs:
+                    if soft_flags:
+                        q["quality_flags"] = soft_flags
+                        if metrics is not None:
+                            metrics["quality_flags"] = (
+                                metrics.get("quality_flags", 0) + len(soft_flags)
+                            )
                     duplicate = find_similar_question(q, previous_questions)
                     outcome = (
                         "accepted_first_pass"
@@ -1333,9 +1342,15 @@ def generate_questions(
                     repair=True,
                 )
                 repaired = _normalize(repair_raw, slot, chunk_by_id, trng)
-                repair_errs = validate_maq(repaired, choice_count, correct_count)
+                repair_errs, repair_flags = validate_maq_split(repaired, choice_count, correct_count)
                 repair_errs.extend(_specific_evidence_errors(repaired, slot, chunk_by_id))
                 if not repair_errs:
+                    if repair_flags:
+                        repaired["quality_flags"] = repair_flags
+                        if metrics is not None:
+                            metrics["quality_flags"] = (
+                                metrics.get("quality_flags", 0) + len(repair_flags)
+                            )
                     duplicate = find_similar_question(repaired, previous_questions)
                     warning = None
                     if duplicate:

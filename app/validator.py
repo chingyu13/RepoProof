@@ -79,10 +79,20 @@ def _stem_code_errors(stem: str, options: list[str]) -> list[str]:
     return errors
 
 
-def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
-                 *, semantic_checks: bool = True) -> list[str]:
-    """Return a list of problems; empty list means valid."""
+def validate_maq_split(q: dict, choice_count: int, correct_count: int | None = None,
+                       ) -> tuple[list[str], list[str]]:
+    """Two-tier validation: returns (hard_errors, soft_warnings).
+
+    HARD errors mean the question is structurally unusable (schema, counts,
+    answer key, taker-visible leaks) — worth an LLM repair/regeneration round.
+
+    SOFT warnings are the semantic style heuristics (subjective stem,
+    identifier lookup, giveaway wording, ...). On the template-driven Local
+    path they are advisory: attached to the question as quality flags for the
+    reviewer to judge, instead of burning a repair cycle on a regex opinion.
+    """
     errors: list[str] = []
+    warnings: list[str] = []
 
     stem = (q.get("stem") or "").strip()
     if len(stem) < 10:
@@ -108,36 +118,34 @@ def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
         errors.append("Every option needs text.")
     if len({t.lower() for t in texts}) != len(texts):
         errors.append("Options must be distinct.")
-    if semantic_checks:
-        if _SUBJECTIVE_STEM_RE.search(stem):
-            errors.append(
-                "The stem must ask for a factually correct statement, not a best/preferred choice or design rationale."
-            )
-        if any(_VAGUE_OPTION_RE.search(text) for text in texts):
-            errors.append("Options must state a concrete, evidence-supported operation rather than a vague responsibility.")
-        identifier_lookup = _IDENTIFIER_LOOKUP_STEM_RE.search(stem)
-        bare_identifier_options = len(texts) >= 2 and all(
-            _BARE_IDENTIFIER_RE.fullmatch(text) for text in texts
+
+    # ---- soft, style-level heuristics -------------------------------------
+    if _SUBJECTIVE_STEM_RE.search(stem):
+        warnings.append(
+            "The stem may be subjective (best/preferred/why) rather than a factual statement."
         )
-        if identifier_lookup or bare_identifier_options:
-            errors.append(
-                "Do not test identifier-name matching. Name the component in the stem and "
-                "make every option a complete behavior, interaction, ordering, or consequence."
-            )
-        if _BROAD_NAMED_BEHAVIOR_RE.search(stem):
-            errors.append(
-                "A named component's broad purpose can be guessed from its identifier. Ask about "
-                "a non-obvious condition, transformation, preserved state, dependency, or consequence."
-            )
-        if (
-            _HIDDEN_IMPLEMENTATION_CONDITION_RE.search(stem)
-            and not _CODE_BLOCK_RE.search(stem)
-        ):
-            errors.append(
-                "A question about an implementation variable or condition must show the "
-                "code needed to derive the answer."
-            )
-        errors.extend(_stem_code_errors(stem, texts))
+    if any(_VAGUE_OPTION_RE.search(text) for text in texts):
+        warnings.append("An option states a vague responsibility rather than a concrete operation.")
+    identifier_lookup = _IDENTIFIER_LOOKUP_STEM_RE.search(stem)
+    bare_identifier_options = len(texts) >= 2 and all(
+        _BARE_IDENTIFIER_RE.fullmatch(text) for text in texts
+    )
+    if identifier_lookup or bare_identifier_options:
+        warnings.append(
+            "Looks like identifier-name matching; options should test behavior/interaction/consequence."
+        )
+    if _BROAD_NAMED_BEHAVIOR_RE.search(stem):
+        warnings.append(
+            "The named component's broad purpose may be guessable from its identifier alone."
+        )
+    if (
+        _HIDDEN_IMPLEMENTATION_CONDITION_RE.search(stem)
+        and not _CODE_BLOCK_RE.search(stem)
+    ):
+        warnings.append(
+            "The stem references an implementation condition without showing the relevant code."
+        )
+    warnings.extend(_stem_code_errors(stem, texts))
 
     answer = q.get("answer") or []
     if not answer:
@@ -151,30 +159,31 @@ def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
         errors.append("Correct-answer count must be between 1 and (options - 1).")
     if correct_count is not None and len(answer) != correct_count:
         errors.append(f"Expected exactly {correct_count} correct options, got {len(answer)}.")
-    if semantic_checks and isinstance(q.get("justifications"), dict):
+
+    if isinstance(q.get("justifications"), dict):
         for option in options:
             key = option.get("key")
             reason = str(q["justifications"].get(key, "")).strip()
             if key not in answer and _GIVEAWAY_DISTRACTOR_RE.search(
                 str(option.get("text", ""))
             ):
-                errors.append(
-                    f"Option {key} uses giveaway absolute wording. Write a plausible "
-                    "evidence-contradicted distractor without always/never/every-time phrasing."
+                warnings.append(
+                    f"Option {key} uses giveaway absolute wording (always/never/every time)."
                 )
             if key not in answer and _UNPROVEN_FALSE_REASON_RE.search(reason):
-                errors.append(
-                    f"Option {key} is treated as false only because it is unstated; "
-                    "an incorrect option must contradict the evidence."
+                warnings.append(
+                    f"Option {key} may be false only because it is unstated, not contradicted."
                 )
-    if semantic_checks:
-        explanation_letters = set(
-            _EXPLANATION_ANSWER_RE.findall(str(q.get("explanation") or ""))
+
+    # Explanation naming a different correct option is a real inconsistency the
+    # taker would see after submitting — hard, not stylistic.
+    explanation_letters = set(
+        _EXPLANATION_ANSWER_RE.findall(str(q.get("explanation") or ""))
+    )
+    if explanation_letters.difference(answer):
+        errors.append(
+            "The explanation identifies a different correct option from the answer key."
         )
-        if explanation_letters.difference(answer):
-            errors.append(
-                "The explanation identifies a different correct option from the answer key."
-            )
 
     difficulty = q.get("difficulty")
     if not isinstance(difficulty, int) or not (1 <= difficulty <= 5):
@@ -183,7 +192,16 @@ def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
     if not q.get("evidence"):
         errors.append("Question has no linked evidence (insufficient evidence -> reject).")
 
-    return errors
+    return errors, warnings
+
+
+def validate_maq(q: dict, choice_count: int, correct_count: int | None = None,
+                 *, semantic_checks: bool = True) -> list[str]:
+    """Compatibility wrapper over validate_maq_split: returns a single merged
+    list. semantic_checks=False keeps only the hard errors (used by the raw
+    OpenAI path and the approve gate)."""
+    errors, warnings = validate_maq_split(q, choice_count, correct_count)
+    return errors + (warnings if semantic_checks else [])
 
 
 def question_similarity(left: dict, right: dict) -> float:

@@ -407,8 +407,10 @@ class LocalGenerationTests(unittest.TestCase):
             "evidence": [{"chunk_id": "c0"}],
         }
         errors = validate_maq(question, 4, 1)
-        self.assertTrue(any("factually correct statement" in error for error in errors))
-        self.assertTrue(any("treated as false only because it is unstated" in error for error in errors))
+        # Two-tier validator: these are soft advisory warnings now (they show
+        # up in the merged validate_maq list, but no longer trigger repair).
+        self.assertTrue(any("may be subjective" in error for error in errors))
+        self.assertTrue(any("false only because it is unstated" in error for error in errors))
 
     def test_identifier_name_matching_question_is_rejected(self):
         question = {
@@ -477,7 +479,7 @@ class LocalGenerationTests(unittest.TestCase):
             "evidence": [{"chunk_id": "c8"}],
         }
         errors = validate_maq(question, 4, 1)
-        self.assertTrue(any("broad purpose can be guessed" in error for error in errors))
+        self.assertTrue(any("guessable from its identifier" in error for error in errors))
 
     def test_architecture_requires_relational_evidence(self):
         trivial_module = chunk(
@@ -732,8 +734,14 @@ class LocalGenerationTests(unittest.TestCase):
             "explanation": "Option B is the correct answer because the connection remains active.",
         }
         errors = validate_maq(question, 2, 1)
-        self.assertTrue(any("must show the code" in error for error in errors))
+        self.assertTrue(any("without showing the relevant code" in error for error in errors))
         self.assertTrue(any("different correct option" in error for error in errors))
+        # explanation/answer-key mismatch must stay a HARD error (blocks repair),
+        # while the hidden-condition heuristic is soft
+        from app.validator import validate_maq_split
+        hard, soft = validate_maq_split(question, 4, 1)
+        self.assertTrue(any("different correct option" in error for error in hard))
+        self.assertTrue(any("without showing the relevant code" in warning for warning in soft))
 
     def test_interaction_flow_rejects_single_condition_question(self):
         question = {

@@ -3,7 +3,7 @@ import hashlib
 import hmac
 import json
 import secrets
-import threading
+import time
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -12,7 +12,7 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import config, db
+from . import config, db, generation_runs
 from .alignment import (
     MAX_FILE_BYTES,
     ContextDocumentError,
@@ -31,29 +31,53 @@ from .validator import normalize_answer, validate_maq
 
 app = FastAPI(title="RepoProof", version="0.1.0")
 db.init()
+_interrupted = generation_runs.fail_stale_running("Server restarted during generation — start a new run.")
+if _interrupted:
+    print(f"[repoproof] marked {_interrupted} interrupted generation run(s) as failed")
+if config.ACCESS_PASSWORD and (len(config.ACCESS_PASSWORD) < 8 or config.ACCESS_PASSWORD.isdigit()):
+    print("[repoproof] WARNING: REPOPROOF_ACCESS_PASSWORD is weak — change it before exposing this server")
 
 STATIC_DIR = Path(__file__).parent / "static"
 COOKIE_NAME = "repoproof_creator"
 _SESSION_SECRET = config.SESSION_SECRET or secrets.token_urlsafe(32)
-_GENERATION_RUNS: dict[str, dict] = {}
-_GENERATION_LOCK = threading.Lock()
+SESSION_TTL_SECONDS = 8 * 60 * 60
 
 
-def _session_token() -> str:
-    """Stateless session: the cookie value is HMAC(secret, constant), so it is
-    the SAME for every login and stays valid until the secret changes. No
-    server-side session store is needed, but note two consequences: (1) the
-    cookie can't be revoked per-user — rotate REPOPROOF_SESSION_SECRET to kill
-    all sessions; (2) max_age only expires it client-side. Fine for a
-    single-creator prototype; use per-session tokens with expiry for multi-user."""
-    return hmac.new(_SESSION_SECRET.encode(), b"creator-access", hashlib.sha256).hexdigest()
+def _session_token(expires_at: int | None = None) -> str:
+    """Stateless session WITH expiry: the cookie is `<exp>.<hmac(secret, exp)>`,
+    so it self-expires server-side (not just via max_age) and a new login gets
+    a fresh token. Still no per-user revocation — rotate
+    REPOPROOF_SESSION_SECRET to kill all sessions at once."""
+    exp = int(expires_at if expires_at is not None else time.time() + SESSION_TTL_SECONDS)
+    sig = hmac.new(_SESSION_SECRET.encode(), f"creator-access:{exp}".encode(),
+                   hashlib.sha256).hexdigest()
+    return f"{exp}.{sig}"
 
 
 def _authenticated(request: Request) -> bool:
     supplied = request.cookies.get(COOKIE_NAME, "")
+    exp_str, _, _sig = supplied.partition(".")
+    if not exp_str.isdigit():
+        return False
+    exp = int(exp_str)
+    if exp < time.time():
+        return False
     # compare_digest = constant-time comparison; a plain `==` would leak how
     # many leading characters match through response-timing differences.
-    return bool(supplied) and secrets.compare_digest(supplied, _session_token())
+    return secrets.compare_digest(supplied, _session_token(exp))
+
+
+# Per-IP failed-login throttle (in-memory is fine: it only guards one endpoint
+# and resets on restart). 5 failures within 5 minutes -> 429.
+_LOGIN_FAILURES: dict[str, list[float]] = {}
+_LOGIN_WINDOW, _LOGIN_MAX_FAILURES = 300.0, 5
+
+
+def _login_blocked(ip: str) -> bool:
+    now = time.time()
+    recent = [t for t in _LOGIN_FAILURES.get(ip, []) if now - t < _LOGIN_WINDOW]
+    _LOGIN_FAILURES[ip] = recent
+    return len(recent) >= _LOGIN_MAX_FAILURES
 
 
 def _requires_creator_auth(path: str) -> bool:
@@ -113,14 +137,19 @@ class LoginRequest(BaseModel):
 def login(req: LoginRequest, request: Request):
     if not config.ACCESS_PASSWORD:
         raise HTTPException(503, "Creator access is not configured on this server.")
+    ip = (request.client.host if request.client else "") or "unknown"
+    if _login_blocked(ip):
+        raise HTTPException(429, "Too many failed attempts — try again in a few minutes.")
     if not secrets.compare_digest(req.password, config.ACCESS_PASSWORD):
+        _LOGIN_FAILURES.setdefault(ip, []).append(time.time())
         raise HTTPException(401, "Incorrect password.")
+    _LOGIN_FAILURES.pop(ip, None)
     response = JSONResponse({"ok": True})
     forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
     response.set_cookie(
         COOKIE_NAME,
         _session_token(),
-        max_age=8 * 60 * 60,
+        max_age=SESSION_TTL_SECONDS,
         httponly=True,
         secure=request.url.scheme == "https" or forwarded_proto == "https",
         samesite="lax",
@@ -361,6 +390,7 @@ def _store_generated_questions(
             "focus_areas_json": q["focus_areas"],
             "explanation": q["explanation"],
             "generator": q["generator"],
+            "flags_json": q.get("quality_flags", []),
         })
         ids.append(qid)
     provider_used = questions[0]["generator"] if questions else (
@@ -405,11 +435,7 @@ def _raw_files_for_generation(project: dict, cfg: dict) -> list[dict] | None:
 
 
 def _update_generation_run(run_id: str, **values) -> None:
-    with _GENERATION_LOCK:
-        run = _GENERATION_RUNS.get(run_id)
-        if run:
-            run.update(values)
-            run["updated_at"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    generation_runs.update_run(run_id, **values)
 
 
 def _generation_progress(run_id: str, **progress) -> None:
@@ -575,30 +601,7 @@ async def start_generation(
     prior_payloads = await read_uploads(prior_files)
     scope_payloads = await read_uploads(scope_files)
     run_id = secrets.token_urlsafe(12)
-    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
-    with _GENERATION_LOCK:
-        completed = [
-            key for key, value in _GENERATION_RUNS.items()
-            if value.get("status") in {"complete", "failed"}
-        ]
-        while len(_GENERATION_RUNS) >= 100 and completed:
-            _GENERATION_RUNS.pop(completed.pop(0), None)
-        _GENERATION_RUNS[run_id] = {
-            "id": run_id,
-            "project_id": project_id,
-            "status": "queued",
-            "progress": {
-                "stage": "queued",
-                "current": 0,
-                "total": cfg["num_questions"],
-                "message": "Generation queued.",
-            },
-            "context": {},
-            "result": None,
-            "error": "",
-            "created_at": now,
-            "updated_at": now,
-        }
+    generation_runs.create_run(run_id, project_id, cfg["num_questions"])
     background_tasks.add_task(
         _run_generation,
         run_id,
@@ -614,11 +617,10 @@ async def start_generation(
 
 @app.get("/api/generation-runs/{run_id}")
 def generation_run(run_id: str):
-    with _GENERATION_LOCK:
-        run = _GENERATION_RUNS.get(run_id)
-        if not run:
-            raise HTTPException(404, "Generation run not found")
-        return dict(run)
+    run = generation_runs.get_run(run_id)
+    if not run:
+        raise HTTPException(404, "Generation run not found")
+    return run
 
 
 @app.get("/api/projects/{project_id}/questions")
@@ -680,7 +682,9 @@ def edit_question(question_id: int, edit: QuestionEdit):
         merged["explanation"] != q["explanation"],
     ])
     if status == "approved":
-        errs = validate_maq(merged, choice_count=len(merged["options"]))
+        # Approval gate blocks on HARD errors only — the human reviewer is
+        # looking straight at the soft quality flags and can overrule them.
+        errs = validate_maq(merged, choice_count=len(merged["options"]), semantic_checks=False)
         if errs:
             db.log_event("question_review", {
                 "question_id": question_id, "action": "approve_blocked",
