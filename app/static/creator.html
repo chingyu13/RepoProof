@@ -104,7 +104,6 @@ button:disabled{opacity:.5;cursor:default}
 .q .approve.is-approved{background:var(--ok);color:#fff;border-color:#05913f}
 .q .approve.is-approved:hover{background:#05a34e}
 .evidence{font-size:.78rem;color:var(--muted);background:var(--bg);border-radius:10px;padding:.5rem .7rem;margin-top:.5rem}
-.alignment{font-size:.78rem;color:var(--muted);margin:.45rem 0}
 .qflags{font-size:.78rem;background:#fef3c7;color:#92400e;border-radius:5px;padding:.4rem .6rem;margin:.45rem 0}
 [data-theme="dark"] .qflags{background:#3d2f0a;color:#f5d67a}
 .small{font-size:.8rem;color:var(--muted)}
@@ -970,9 +969,6 @@ function renderQuestion(q, pos){
   const approved = q.status === 'approved';
   if (approved) selectedForPublish.add(q.id);   // approval = selected for the assessment
   const ev = (q.evidence||[]).map(e=>`${e.title}${e.file?` — ${e.file}${e.lines?' : '+e.lines:''}`:''}`).join('<br>') || 'No evidence linked';
-  const alignment = q.alignment?.label
-    ? `<div class="alignment">Assessment alignment: ${esc(q.alignment.label)}${q.alignment.source ? ` · ${esc(q.alignment.source)}` : ''}</div>`
-    : '';
   // soft quality flags: advisory heuristics that no longer block generation —
   // the reviewer decides whether they matter for this question
   const flags = (q.flags && q.flags.length)
@@ -981,7 +977,7 @@ function renderQuestion(q, pos){
   div.innerHTML = `
     <span class="status ${q.status}">${q.status}</span>
     <div class="small" style="margin:0 0 .4rem"><strong>Q${pos}</strong> · slot: ${q.slot} · by ${q.generator} · ref #${q.id}</div>
-    ${alignment}${flags}
+    ${flags}
     <textarea class="stem">${esc(q.stem)}</textarea>
     <div class="opts"></div>
     <div class="row" style="margin-top:.4rem">

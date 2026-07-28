@@ -183,10 +183,15 @@ function renderQuestionBlock(q, label){
   const d = document.createElement('div');
   d.className = 'q';
   d.dataset.qid = q.id;
-  const hint = q.correct_count ? ` <span class="small">(${q.correct_count} correct)</span>` : '';
+  const single = !!q.single;
+  const hint = single
+    ? ' <span class="small">(select one)</span>'
+    : (q.correct_count ? ` <span class="small">(${q.correct_count} correct)</span>` : '');
+  const inputType = single ? 'radio' : 'checkbox';
+  const nameAttr = single ? ` name="q-${q.id}"` : '';
   const opts = q.options.map(o =>
     `<div class="opt" data-key="${o.key}">
-       <label class="opt-row"><input type="checkbox" data-q="${q.id}" value="${o.key}">
+       <label class="opt-row"><input type="${inputType}"${nameAttr} data-q="${q.id}" value="${o.key}">
          <span><strong>${o.key}.</strong> ${esc(o.text)}</span><span class="mark"></span></label>
        <div class="opt-exp"></div>
      </div>`
@@ -194,15 +199,24 @@ function renderQuestionBlock(q, label){
   d.innerHTML =
     `<div class="stem"><strong>${label}.</strong> ${renderRich(q.stem)}${hint}</div>
      ${opts}
-     <button class="check-btn" type="button">Check answer</button>`;
-  const btn = d.querySelector('.check-btn');
-  btn.onclick = ()=>checkQuestion(q, d, btn);
+     ${single ? '' : '<button class="check-btn" type="button">Check answer</button>'}`;
+  if (single){
+    // Single-answer: selecting an option reveals feedback immediately, no button.
+    d.querySelectorAll('input[type=radio]').forEach(r =>
+      r.addEventListener('change', ()=>checkQuestion(q, d, null)));
+  } else {
+    const btn = d.querySelector('.check-btn');
+    btn.onclick = ()=>checkQuestion(q, d, btn);
+  }
   return d;
 }
 
 async function checkQuestion(q, block, btn){
+  if (block.dataset.done) return;   // answer once
+  const selected = [...block.querySelectorAll('input:checked')].map(c=>c.value);
+  if (!selected.length){ $('err').textContent = 'Select an option first.'; return; }
+  block.dataset.done = '1';
   $('err').textContent = '';
-  const selected = [...block.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
   let res;
   try {
     res = await api('/api/take/'+token+'/check', {
@@ -229,7 +243,7 @@ async function checkQuestion(q, block, btn){
       }
     }
   });
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
 }
 
 async function load(){
@@ -285,10 +299,17 @@ async function doSubmit(responses){
 
 $('submit').onclick = async ()=>{
   $('err').textContent = '';
+  // Gate: every question must be answered before finishing.
+  const unanswered = data.questions.filter(q => !(checked[q.id] && checked[q.id].length));
+  if (unanswered.length){
+    $('err').textContent = `Please answer all questions first — ${unanswered.length} still to go.`;
+    const first = document.querySelector('.q[data-qid="'+unanswered[0].id+'"]');
+    if (first) first.scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
   const responses = {};
   data.questions.forEach(q=>{ responses[q.id] = checked[q.id] || []; });
-  // include any answers selected but not explicitly "checked"
-  document.querySelectorAll('#paper input[type=checkbox]:checked').forEach(c=>{
+  document.querySelectorAll('#paper input:checked').forEach(c=>{
     const arr = responses[c.dataset.q] || (responses[c.dataset.q] = []);
     if (!arr.includes(c.value)) arr.push(c.value);
   });

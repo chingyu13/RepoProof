@@ -868,7 +868,9 @@ def _taker_item(q: dict, show_count: bool) -> dict:
     # SECURITY: build the taker payload by whitelisting fields — answer,
     # justifications, and evidence must never reach the taker's browser.
     item = {"id": q["id"], "stem": q["stem"], "options": q["options"],
-            "difficulty": q["difficulty"]}
+            "difficulty": q["difficulty"],
+            # single-answer vs multi-answer only — never which option is correct.
+            "single": len(q["answer"]) == 1}
     if show_count:
         item["correct_count"] = len(q["answer"])
     return item
