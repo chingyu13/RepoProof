@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from datetime import datetime
@@ -173,10 +174,13 @@ def meta():
     return {
         "mock_mode": default_provider == "mock",
         "model": config.OPENAI_MODEL,
+        "local_only": config.local_only(),
         "providers": {
             "default": default_provider,
             "openai": {
-                "available": bool(config.openai_api_key()),
+                # In local-only (privacy) mode OpenAI is never offered, so the
+                # UI must not present it even if an API key happens to be set.
+                "available": bool(config.openai_api_key()) and not config.local_only(),
                 "model": config.OPENAI_MODEL,
                 "models": config.openai_model_options(),
             },
@@ -424,7 +428,8 @@ def _store_generated_questions(
 
 def _raw_files_for_generation(project: dict, cfg: dict) -> list[dict] | None:
     provider = (cfg.get("provider") or config.default_provider()).lower()
-    if provider != "openai":
+    if provider != "openai" or config.local_only():
+        # Local-only mode never ships raw project files to a third-party API.
         return None
     root = _project_root(project)
     if root is None:
@@ -575,6 +580,9 @@ async def start_generation(
         cfg = GenerateConfig(**json.loads(config_json)).model_dump()
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid question framework.") from exc
+    if config.local_only() and (cfg.get("provider") or "").lower() == "openai":
+        raise HTTPException(400, "This server runs in local-only privacy mode; the OpenAI provider is disabled. "
+                                 "Use the local model or mock.")
     valid_topic_ids = {topic["id"] for topic in public_topics()}
     selected_focus = []
     for area in cfg["focus_areas"]:
@@ -818,6 +826,35 @@ def list_attempts(assessment_id: int):
     return db.list_where("attempts", "assessment_id=?", (assessment_id,))
 
 
+@app.get("/api/assessments/{assessment_id}/completions")
+def list_completions(assessment_id: int):
+    """Integrity check for participation marks: which RepoIDs completed, and
+    when (coarsened to the hour). No answers, no SID — the teaching team maps
+    RepoID→student on their side and cross-checks against the pasted codes."""
+    rows = db.list_where("attempts", "assessment_id=?", (assessment_id,))
+    out = []
+    for r in rows:
+        rid = r.get("repo_id") or ""
+        if not rid:
+            continue
+        ts = str(r.get("submitted_at") or "")
+        out.append({"repo_id": rid, "completed_hour": ts[:13]})  # 'YYYY-MM-DD HH'
+    return {"completed": out, "count": len(out)}
+
+
+@app.delete("/api/assessments/{assessment_id}/attempts/{repo_id}")
+def delete_attempt_by_repo(assessment_id: int, repo_id: str):
+    """Right to withdraw: delete a student's stored attempt(s) by RepoID.
+    Does not affect the 2% (that is recorded on the Canvas side)."""
+    rid = _safe_repo_id(repo_id)
+    if not rid:
+        raise HTTPException(400, "Invalid RepoID.")
+    rows = db.list_where("attempts", "assessment_id=? AND repo_id=?", (assessment_id, rid))
+    db.delete_where("attempts", "assessment_id=? AND repo_id=?", (assessment_id, rid))
+    db.log_event("attempt_withdrawn", {"assessment_id": assessment_id, "deleted": len(rows)})
+    return {"ok": True, "deleted": len(rows)}
+
+
 # ---------- taking ----------
 
 def _assessment_by_token(token: str) -> dict:
@@ -885,9 +922,47 @@ def take_next(token: str, req: NextRequest):
             "answered": len(answered), "total": total}
 
 
+class CheckRequest(BaseModel):
+    question_id: int
+    selected: list[str] = []
+
+
+@app.post("/api/take/{token}/check")
+def check_answer(token: str, req: CheckRequest):
+    """Immediate per-question feedback. Reveals the correct answer and the
+    explanation for ONE question the taker has just answered — never the whole
+    key up front. Correctness carries no mark; this is a learning check."""
+    a = _assessment_by_token(token)
+    if req.question_id not in a["question_ids"]:
+        raise HTTPException(404, "Question is not part of this assessment.")
+    q = db.get("questions", req.question_id)
+    if not q:
+        raise HTTPException(404, "Question not found.")
+    answer = normalize_answer(q["answer"])
+    selected = normalize_answer(req.selected)
+    # Per-option reasoning, only for options that matter: the correct answer(s)
+    # and any option the student actually chose. Others are withheld.
+    justifications = q.get("justifications", {}) or {}
+    relevant = set(answer) | set(selected)
+    explanations = {k: justifications.get(k, "") for k in relevant if justifications.get(k, "")}
+    return {"correct": selected == answer, "answer": answer,
+            "explanations": explanations,
+            "explanation": q.get("explanation", "")}
+
+
 class SubmitRequest(BaseModel):
     taker_name: str = ""
+    repo_id: str = ""       # pseudonymous id from the personalised link — NEVER a student ID
     responses: dict[str, list[str]]
+
+
+def _safe_repo_id(raw: str) -> str:
+    """Keep only a short pseudonymous token. Defensive: a real SID (all digits,
+    9+ chars) is rejected so it can never be stored even if mis-sent."""
+    rid = re.sub(r"[^A-Za-z0-9_-]", "", (raw or ""))[:32]
+    if rid.isdigit() and len(rid) >= 7:
+        return ""
+    return rid
 
 
 @app.post("/api/take/{token}/submit")
@@ -895,13 +970,18 @@ def submit(token: str, req: SubmitRequest):
     a = _assessment_by_token(token)
     questions = [db.get("questions", qid) for qid in a["question_ids"]]
     score = score_attempt(questions, req.responses)
+    repo_id = _safe_repo_id(req.repo_id)
     db.insert("attempts", {
         "assessment_id": a["id"],
-        "taker_name": req.taker_name.strip()[:80],
+        # Identity is the pseudonymous RepoID from the personalised link.
+        # taker_name is retained only for legacy links and is never the SID.
+        "taker_name": "" if repo_id else req.taker_name.strip()[:80],
+        "repo_id": repo_id,
         "responses_json": req.responses,
         "score_json": score,
     })
-    return score
+    # Completion code = the RepoID, to paste into Canvas for the participation mark.
+    return {**score, "completion_code": repo_id or None}
 
 
 # ---------- printable export ----------

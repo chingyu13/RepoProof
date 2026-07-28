@@ -87,6 +87,7 @@ _MIGRATIONS = [
     ("questions", "flags_json", "TEXT NOT NULL DEFAULT '[]'"),   # soft quality flags for review
     ("projects", "project_path", "TEXT NOT NULL DEFAULT ''"),
     ("questions", "alignment_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("attempts", "repo_id", "TEXT NOT NULL DEFAULT ''"),   # pseudonymous taker id — never the SID
 ]
 
 

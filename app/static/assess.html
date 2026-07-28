@@ -8,14 +8,16 @@
 /* Theme tokens from Figma: File Uploader — Light & Dark Mode (Community) */
 :root{
   --bg:#f1f4ff; --card:#ffffff; --ink:#0c1421; --muted:#7d7d7d;
-  --line:#d8daeb; --input-bg:#fefefe; --placeholder:#949fb1;
-  --accent:#5046fa; --accent-hover:#4238e0; --ok:#06bf5c; --bad:#df3d43;
+  --line:#d8daeb; --input-bg:#fefefe; --placeholder:#949fb1; --chip:#e7e9f5;
+  --accent:#5046fa; --accent-hover:#4238e0; --ok:#06bf5c; --bad:#e33434;
+  --code-bg:#0f1420; --code-ink:#e6e9f0;
   --shadow:0 12px 32px rgba(12,20,33,.07);
 }
 [data-theme="dark"]{
   --bg:#161618; --card:#1e1f22; --ink:#f5f6f8; --muted:#9a9aa3;
-  --line:#33343a; --input-bg:#232428; --placeholder:#6f7078;
+  --line:#33343a; --input-bg:#232428; --placeholder:#6f7078; --chip:#3a3b40;
   --accent:#5046fa; --accent-hover:#6157ff; --ok:#06bf5c; --bad:#f2555a;
+  --code-bg:#0b0e16; --code-ink:#e6e9f0;
   --shadow:0 12px 32px rgba(0,0,0,.4);
 }
 *{box-sizing:border-box}
@@ -23,24 +25,39 @@ body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;backg
 main{max-width:760px;margin:2rem auto;padding:0 1rem}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.3rem 1.5rem;margin-bottom:1rem;box-shadow:var(--shadow)}
 h1{font-size:1.3rem;font-weight:600}
-.q{margin:1.2rem 0;padding-top:.8rem;border-top:1px solid var(--line)}
-.opt{display:flex;gap:.6rem;align-items:flex-start;margin:.35rem 0;padding:.5rem .6rem;border-radius:10px;border:1px solid transparent}
-.opt:hover{background:var(--bg);border-color:var(--line)}
+.q{margin:1.4rem 0;padding-top:1rem;border-top:1px solid var(--line)}
+.q:first-child{border-top:0;padding-top:.2rem}
+.stem{margin:.2rem 0 .7rem}
+.opt{display:block;margin:.4rem 0;border-radius:10px;border:1px solid var(--line);overflow:hidden;transition:background .12s,border-color .12s}
+.opt-row{display:flex;gap:.6rem;align-items:flex-start;padding:.55rem .7rem;cursor:pointer}
+.opt-row:hover{background:var(--bg)}
+.opt .mark{margin-left:auto;font-weight:800;font-size:1rem}
+.opt.correct-opt{border-color:var(--ok);background:rgba(6,191,92,.09)}
+.opt.wrong-opt{border-color:var(--bad);background:rgba(227,52,52,.09)}
+.opt-exp{display:none;color:var(--muted);font-size:.8rem;line-height:1.55;padding:0 .8rem .55rem 2rem}
 .small{font-size:.82rem;color:var(--muted)}
 button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:.65rem 1.2rem;font:inherit;font-weight:500;letter-spacing:.03em;cursor:pointer}
 button:hover{background:var(--accent-hover)}
 button:disabled{opacity:.5;cursor:default}
+button.check-btn{background:var(--input-bg);color:var(--ink);border:1.5px solid var(--accent);padding:.45rem 1rem;margin-top:.4rem}
+button.check-btn:hover{background:var(--bg)}
 #themeToggle{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:5px;float:right;display:flex;gap:8px;padding:5px}
 #themeToggle .seg{width:24px;height:24px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--muted);background:transparent}
 #themeToggle .seg.active{background:var(--chip);color:var(--ink)}
 #themeToggle .theme-icon{width:20px;height:20px;display:block}
 #themeToggle .theme-icon *{stroke:currentColor}
-input[type=text]{padding:.55rem .7rem;border:1px solid var(--line);border-radius:10px;font:inherit;width:100%;background:var(--input-bg);color:var(--ink)}
-input::placeholder{color:var(--placeholder)}
-.correct{color:var(--ok)} .wrong{color:var(--bad)}
-.result-q{border-left:3px solid var(--line);padding-left:.8rem;margin:.8rem 0}
-.result-q.ok{border-color:var(--ok)} .result-q.bad{border-color:var(--bad)}
+/* code blocks & inline code embedded in stems / explanations */
+pre.code{background:var(--code-bg);color:var(--code-ink);border-radius:12px;padding:.8rem 1rem;overflow:auto;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85rem;line-height:1.5;margin:.55rem 0;
+  white-space:pre;tab-size:4}
+code.inline{background:var(--chip);border-radius:6px;padding:.06rem .38rem;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em}
+/* Python-ish syntax highlight tokens (readable on the dark code panel) */
+.tok-kw{color:#569cd6} .tok-fn{color:#dcdcaa} .tok-str{color:#ce9178}
+.tok-com{color:#6a9955;font-style:italic} .tok-num{color:#b5cea8} .tok-bi{color:#4ec9b0} .tok-dec{color:#4ec9b0}
+.answer-line{font-size:.8rem;color:var(--muted);margin:.5rem 0 .2rem;font-weight:500}
 .err{color:var(--bad)}
+.profile-row{display:flex;align-items:center;gap:.6rem;margin:.25rem 0}
 </style>
 </head>
 <body>
@@ -63,17 +80,27 @@ input::placeholder{color:var(--placeholder)}
     </button>
     <h1 id="title">Loading…</h1>
     <p class="small" id="scoring"></p>
-    <label class="small">Your name (optional)</label>
-    <input type="text" id="taker">
+    <p class="small" id="ridNote" style="display:none"></p>
   </div>
   <div class="card" id="paper"></div>
-  <div class="card"><button id="submit">Submit answers</button> <span class="err" id="err"></span></div>
+  <div class="card"><button id="submit">Finish &amp; get completion code</button> <span class="err" id="err"></span></div>
   <div class="card" id="report" style="display:none"></div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const token = location.pathname.split('/').pop();
+// Personalised link: /a/<token>?rid=<RepoID>. The RepoID is a pseudonymous code;
+// the student's SID is never part of the link and never sent to RepoProof.
+const repoId = (new URLSearchParams(location.search).get('rid') || '').trim();
 let data = null;
+const checked = {};   // qid -> selected options (from immediate-feedback checks)
+
+if (repoId) {
+  const note = $('ridNote');
+  note.style.display = 'block';
+  note.innerHTML = 'You are taking this as <strong>' + repoId.replace(/[^A-Za-z0-9_-]/g,'') +
+    '</strong>. RepoProof identifies you only by this code — your student ID is never sent.';
+}
 
 const savedTheme = localStorage.getItem('rp-theme');
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
@@ -97,9 +124,57 @@ async function api(path, opts={}) {
   if (!r.ok) throw new Error(body.detail || JSON.stringify(body));
   return body;
 }
-function esc(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function esc(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-/* Adaptive delivery submits each answer before requesting the next question. */
+// Render stems/explanations that may contain fenced code (```lang\n...```) and
+// inline `code`. Fenced blocks become styled, syntax-highlighted <pre> panels.
+function renderRich(txt){
+  const s = txt || '';
+  const re = /```([a-zA-Z0-9_+.#-]*)\n?([\s\S]*?)```/g;
+  let out = '', last = 0, m;
+  while ((m = re.exec(s))){
+    out += inlineBits(s.slice(last, m.index));
+    out += '<pre class="code"><code>' + highlight(m[1].toLowerCase(), m[2].replace(/\n$/,'')) + '</code></pre>';
+    last = re.lastIndex;
+  }
+  out += inlineBits(s.slice(last));
+  return out;
+}
+function inlineBits(chunk){
+  return '<span style="white-space:pre-wrap">' +
+    esc(chunk).replace(/`([^`\n]+)`/g, (_,c)=>'</span><code class="inline">'+c+'</code><span style="white-space:pre-wrap">') +
+    '</span>';
+}
+
+// Lightweight, dependency-free syntax highlighter. Python (and unlabelled code,
+// since notebooks are Python) gets keyword/function/string/comment colouring.
+const PY_KW = new Set(['def','return','if','elif','else','for','while','in','not','and','or','import',
+  'from','as','class','with','try','except','finally','raise','lambda','yield','pass','break','continue',
+  'global','nonlocal','assert','del','is','None','True','False','async','await','match','case']);
+const PY_BI = new Set(['print','len','range','int','str','float','list','dict','set','tuple','bool','open',
+  'enumerate','zip','map','filter','sum','min','max','sorted','abs','type','isinstance','super','pd','np','self','cls']);
+function highlight(lang, code){
+  if (lang && !['python','py','ipynb','','text'].includes(lang)) return esc(code);
+  const re = /(#[^\n]*)|('''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")|(\b\d+\.?\d*\b)|(@[A-Za-z_]\w*)|([A-Za-z_]\w*)|([\s\S])/g;
+  let out = '', m, defNext = false;
+  while ((m = re.exec(code))){
+    if (m[1]) out += `<span class="tok-com">${esc(m[1])}</span>`;
+    else if (m[2]) out += `<span class="tok-str">${esc(m[2])}</span>`;
+    else if (m[3]) out += `<span class="tok-num">${esc(m[3])}</span>`;
+    else if (m[4]) out += `<span class="tok-dec">${esc(m[4])}</span>`;
+    else if (m[5]){
+      const w = m[5];
+      if (PY_KW.has(w)) { out += `<span class="tok-kw">${esc(w)}</span>`; defNext = (w==='def'||w==='class'); }
+      else if (defNext) { out += `<span class="tok-fn">${esc(w)}</span>`; defNext = false; }
+      else if (/^\s*\(/.test(code.slice(re.lastIndex))) out += `<span class="tok-fn">${esc(w)}</span>`;
+      else if (PY_BI.has(w)) out += `<span class="tok-bi">${esc(w)}</span>`;
+      else out += esc(w);
+    }
+    else { out += esc(m[6]); if (!/\s/.test(m[6])) defNext = false; }
+  }
+  return out;
+}
+
 let adaptive = false;
 const accResponses = {};
 const accOrder = [];
@@ -107,27 +182,65 @@ const accOrder = [];
 function renderQuestionBlock(q, label){
   const d = document.createElement('div');
   d.className = 'q';
+  d.dataset.qid = q.id;
   const hint = q.correct_count ? ` <span class="small">(${q.correct_count} correct)</span>` : '';
-  // pre-wrap: stems may embed quoted code blocks with meaningful line breaks
-  d.innerHTML = `<p style="white-space:pre-wrap"><strong>${label}.</strong> ${esc(q.stem)}${hint}</p>`;
-  q.options.forEach(o=>{
-    const l = document.createElement('label');
-    l.className = 'opt';
-    l.innerHTML = `<input type="checkbox" data-q="${q.id}" value="${o.key}"> <span><strong>${o.key}.</strong> ${esc(o.text)}</span>`;
-    d.appendChild(l);
-  });
+  const opts = q.options.map(o =>
+    `<div class="opt" data-key="${o.key}">
+       <label class="opt-row"><input type="checkbox" data-q="${q.id}" value="${o.key}">
+         <span><strong>${o.key}.</strong> ${esc(o.text)}</span><span class="mark"></span></label>
+       <div class="opt-exp"></div>
+     </div>`
+  ).join('');
+  d.innerHTML =
+    `<div class="stem"><strong>${label}.</strong> ${renderRich(q.stem)}${hint}</div>
+     ${opts}
+     <button class="check-btn" type="button">Check answer</button>`;
+  const btn = d.querySelector('.check-btn');
+  btn.onclick = ()=>checkQuestion(q, d, btn);
   return d;
+}
+
+async function checkQuestion(q, block, btn){
+  $('err').textContent = '';
+  const selected = [...block.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
+  let res;
+  try {
+    res = await api('/api/take/'+token+'/check', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({question_id: q.id, selected})});
+  } catch(e){ $('err').textContent = e.message; return; }
+  checked[q.id] = selected;
+  const ans = res.answer, exps = res.explanations || {};
+  block.querySelectorAll('.opt').forEach(box=>{
+    const key = box.dataset.key;
+    const inp = box.querySelector('input');
+    inp.disabled = true;
+    const isAns = ans.includes(key), isSel = selected.includes(key);
+    const mark = box.querySelector('.mark');
+    if (isAns){ box.classList.add('correct-opt'); mark.textContent = '✓'; mark.style.color = 'var(--ok)'; }
+    else if (isSel){ box.classList.add('wrong-opt'); mark.textContent = '✗'; mark.style.color = 'var(--bad)'; }
+    // Explain only the options that matter: correct answer(s) + what the student chose.
+    if (isAns || isSel){
+      const text = exps[key] || res.explanation || '';
+      if (text){
+        const e = box.querySelector('.opt-exp');
+        e.innerHTML = renderRich(text);
+        e.style.display = 'block';
+      }
+    }
+  });
+  btn.disabled = true;
 }
 
 async function load(){
   try { data = await api('/api/take/'+token); }
   catch(e){ $('title').textContent = 'Not found'; $('err').textContent = e.message; return; }
   $('title').textContent = data.title;
-  $('scoring').textContent = data.scoring;
+  $('scoring').textContent = data.scoring + ' You get immediate feedback after each question.';
   adaptive = !!data.adaptive;
   if (adaptive){
     $('scoring').textContent += ' Question order adapts to your answers.';
-    $('submit').parentElement.style.display = 'none';   // auto-submits at the end
+    $('submit').parentElement.style.display = 'none';
     await nextAdaptive();
     return;
   }
@@ -147,11 +260,12 @@ async function nextAdaptive(){
     return;
   }
   const q = r.question;
-  paper.appendChild(renderQuestionBlock(q, `Question ${r.answered+1} / ${r.total}`));
+  const block = renderQuestionBlock(q, `Question ${r.answered+1} / ${r.total}`);
+  paper.appendChild(block);
   const btn = document.createElement('button');
   btn.textContent = (r.answered + 1 === r.total) ? 'Finish' : 'Next question';
   btn.onclick = async ()=>{
-    accResponses[q.id] = [...paper.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
+    accResponses[q.id] = [...block.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
     accOrder.push(q.id);
     btn.disabled = true;
     try { await nextAdaptive(); }
@@ -164,7 +278,7 @@ async function doSubmit(responses){
   try {
     const score = await api('/api/take/'+token+'/submit', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({taker_name:$('taker').value, responses})});
+      body: JSON.stringify({repo_id: repoId, responses})});
     showReport(score);
   } catch(e){ $('err').textContent = e.message; }
 }
@@ -172,35 +286,36 @@ async function doSubmit(responses){
 $('submit').onclick = async ()=>{
   $('err').textContent = '';
   const responses = {};
-  data.questions.forEach(q=>{ responses[q.id] = []; });
+  data.questions.forEach(q=>{ responses[q.id] = checked[q.id] || []; });
+  // include any answers selected but not explicitly "checked"
   document.querySelectorAll('#paper input[type=checkbox]:checked').forEach(c=>{
-    responses[c.dataset.q].push(c.value);
+    const arr = responses[c.dataset.q] || (responses[c.dataset.q] = []);
+    if (!arr.includes(c.value)) arr.push(c.value);
   });
+  $('submit').disabled = true;
   await doSubmit(responses);
 };
 
 function showReport(s){
-  $('submit').disabled = true;
   const r = $('report');
   r.style.display = 'block';
   let html = `<h1>Result: ${s.correct}/${s.total} (${s.percent}%)</h1>`;
-  // Understanding Profile groups results by Focus Area.
+  if (s.completion_code) {
+    html += `<div class="card" style="border:2px solid var(--ok)">
+      <p style="margin:.2rem 0"><strong>Completion code</strong> — paste this into the Canvas quiz for your 2% participation:</p>
+      <p style="font-size:1.4rem;font-weight:800;letter-spacing:.05em;margin:.2rem 0">${esc(s.completion_code)}</p>
+      <p class="small" style="margin:.2rem 0">Correctness does not affect your mark — this is a learning check.</p></div>`;
+  }
   html += '<h3>Understanding profile</h3>' + Object.entries(s.per_focus).map(([k,v])=>{
     const pct = v.total ? Math.round(100*v.correct/v.total) : 0;
-    return `<div style="display:flex;align-items:center;gap:.6rem;margin:.25rem 0">
+    return `<div class="profile-row">
       <span style="flex:0 0 9em">${esc(k)}</span>
       <span style="flex:1;height:10px;background:var(--line);border-radius:5px;overflow:hidden">
         <span style="display:block;height:100%;width:${pct}%;background:${pct>=60?'var(--ok)':pct>=40?'#d9a514':'var(--bad)'}"></span>
       </span>
       <span class="small" style="flex:0 0 6em">${pct}% (${v.correct}/${v.total})</span>
     </div>`;
-  }).join('') + '<h3>Per question</h3>';
-  s.per_question.forEach((pq,i)=>{
-    html += `<div class="result-q ${pq.correct?'ok':'bad'}">
-      <p><strong>Q${i+1}</strong> — <span class="${pq.correct?'correct':'wrong'}">${pq.correct?'correct':'incorrect'}</span>.
-      You selected [${pq.selected.join(', ')||'nothing'}]; the answer is [${pq.answer.join(', ')}].</p>
-      ${pq.explanation?`<p class="small">${esc(pq.explanation)}</p>`:''}</div>`;
-  });
+  }).join('');
   r.innerHTML = html;
   r.scrollIntoView({behavior:'smooth'});
 }

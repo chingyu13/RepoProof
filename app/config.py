@@ -44,6 +44,15 @@ LOCAL_LLM_MAX_TOKENS = int(os.environ.get("REPOPROOF_LOCAL_LLM_MAX_TOKENS", "700
 # optional forced default: 'openai' | 'local' | 'mock'
 _FORCED_PROVIDER = os.environ.get("REPOPROOF_LLM_PROVIDER", "").strip().lower()
 
+# Privacy mode for regulated deployments (e.g. USYD COMP5339): when on, the
+# OpenAI provider is refused so student data is only ever processed by the
+# local model or the deterministic mock — nothing leaves to a third-party API.
+LOCAL_ONLY = os.environ.get("REPOPROOF_LOCAL_ONLY", "").lower() in ("1", "true", "yes")
+
+
+def local_only() -> bool:
+    return LOCAL_ONLY
+
 
 def openai_api_key() -> str:
     return os.environ.get("OPENAI_API_KEY", "").strip()
@@ -79,6 +88,12 @@ def default_provider(*, local_available: bool | None = None) -> str:
     Pass ``local_available`` when the caller already probed the local server so
     availability and the selected default stay consistent in one response.
     """
+    if LOCAL_ONLY:
+        # OpenAI is off the table entirely: local if reachable, else mock.
+        if _FORCED_PROVIDER == "mock" or os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
+            return "mock"
+        available = local_llm_available() if local_available is None else local_available
+        return "local" if available else "mock"
     if _FORCED_PROVIDER in ("openai", "local", "mock"):
         return _FORCED_PROVIDER
     if os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
