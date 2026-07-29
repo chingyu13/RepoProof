@@ -92,17 +92,24 @@ code.inline{background:var(--chip);border-radius:6px;padding:.06rem .38rem;
     <h1 id="cTitle">Loading…</h1>
     <div id="consentBox">
       <p>This is a short check on the code you handed in, with feedback right after each one. You get the 2% just for finishing the quiz. Getting answers right or wrong does not change your mark.</p>
-      <p>Separately from your mark, you can choose to let RepoProof keep a de-identified copy of your submission and your answers, to study and improve this unit (COMP5339) this semester and in future ones. If you agree:</p>
+      <p><strong>Cohort-level learning analytics (opt-out).</strong> After the quiz deadline, de-identified quiz data may be combined with the rest of the class to study topic-level response patterns, broad duration bands, and trends across semesters. Reports use groups of at least five students and do not identify individual students.</p>
+      <ul>
+        <li>You will be included in these cohort-level analytics unless you opt out.</li>
+        <li>To opt out, submit the confidential Qualtrics withdrawal form provided with the quiz invitation before the quiz deadline, using your RepoID.</li>
+        <li>An independent CARE staff member will process the request. RepoProof never receives your student ID.</li>
+        <li>Opting out does not affect your 2%, quiz access, marks, feedback, or academic standing.</li>
+      </ul>
+      <p><strong>Optional individual research retention (opt-in).</strong> Separately, you may choose below to let RepoProof retain a de-identified research record of your submission and answers to evaluate and improve COMP5339 this semester and in future semesters. If you agree:</p>
       <ul>
         <li>You are known only by a random code.</li>
-        <li>Your actual code will not be kept for the long term, only general information about how it is structured.</li>
+        <li>Your actual code will not be kept for the long term; only approved, de-identified information about its structure and your quiz responses will be retained.</li>
         <li>Anything kept is stored safely for up to 5 years on the University's Research Data Store, then deleted.</li>
         <li>You can change your mind and withdraw any time until one month after the quiz deadline.</li>
-        <li>If you do not agree, your data is only used to run this quiz and is deleted about a month after the deadline. It will not be used for research.</li>
+        <li>If you do not tick the box below, no individual research record will be retained. Operational source data is deleted about one month after the deadline.</li>
       </ul>
     </div>
     <label class="agree"><input type="checkbox" id="optin">
-      <span>I agree to the optional research use described above. This is optional and does not affect your 2% or your quiz.</span></label>
+      <span>I opt in to the optional five-year retention of my de-identified individual research record. This does not affect my 2% or my quiz.</span></label>
     <p style="margin:0"><button id="startBtn" disabled>Start quiz</button> <span class="err" id="errC"></span></p>
   </div>
   <div class="card" id="intro" style="display:none">
@@ -121,7 +128,7 @@ const token = location.pathname.split('/').pop();
 // the student's SID is never part of the link and never sent to RepoProof.
 const repoId = (new URLSearchParams(location.search).get('rid') || '').trim();
 let data = null;
-let researchOptIn = false;   // set on the consent page before the quiz starts
+let researchOptIn = false;   // individual five-year research retention only
 const checked = {};   // qid -> selected options (from immediate-feedback checks)
 
 if (repoId) {
@@ -294,7 +301,7 @@ async function load(){
   $('startBtn').disabled = false;   // consent page ready
 }
 
-// Page 2: record the opt-in choice, hide the consent card, reveal the quiz.
+// Page 2: record the individual-retention opt-in, hide the consent card, reveal the quiz.
 function startQuiz(){
   if (!data) return;
   researchOptIn = $('optin').checked;
