@@ -88,6 +88,7 @@ _MIGRATIONS = [
     ("projects", "project_path", "TEXT NOT NULL DEFAULT ''"),
     ("questions", "alignment_json", "TEXT NOT NULL DEFAULT '{}'"),
     ("attempts", "repo_id", "TEXT NOT NULL DEFAULT ''"),   # pseudonymous taker id — never the SID
+    ("attempts", "research_opt_in", "INTEGER NOT NULL DEFAULT 0"),  # 1 = student opted in to research retention
 ]
 
 

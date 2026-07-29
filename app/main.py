@@ -956,6 +956,7 @@ class SubmitRequest(BaseModel):
     taker_name: str = ""
     repo_id: str = ""       # pseudonymous id from the personalised link — NEVER a student ID
     responses: dict[str, list[str]]
+    research_opt_in: bool = False   # student's opt-in to de-identified research retention
 
 
 def _safe_repo_id(raw: str) -> str:
@@ -981,6 +982,7 @@ def submit(token: str, req: SubmitRequest):
         "repo_id": repo_id,
         "responses_json": req.responses,
         "score_json": score,
+        "research_opt_in": 1 if req.research_opt_in else 0,
     })
     # Completion code = the RepoID, to paste into Canvas for the participation mark.
     return {**score, "completion_code": repo_id or None}
