@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RepoProof — Creator</title>
-<link href="/static/vendor/oxanium.css" rel="stylesheet"><!-- local (offline) fonts, if vendored -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Mozilla+Text:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#ffffff; --card:#f4f4f4; --card-border:#888888; --ink:#0c1421; --heading:#333333;
@@ -26,7 +25,7 @@
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{font-family:'Oxanium',Inter,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink);transition:background .2s}
+body{font-family:'Mozilla Text','Google Sans',-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink);transition:background .2s}
 .top-shell{position:sticky;top:0;z-index:30;background:var(--bg);box-shadow:0 4px 14px rgba(12,20,33,.05)}
 header{background:var(--bg);border-bottom:1px solid var(--line);padding:12px 24px;display:flex;align-items:center;gap:1rem}
 header h1{font-size:1.15rem;margin:0;font-weight:600}
@@ -42,15 +41,17 @@ header h1{font-size:1.15rem;margin:0;font-weight:600}
 /* blueprint preview (Step 2): plot + accessible table + unsupported list */
 .bp-h{font-size:.95rem;font-weight:600;color:var(--heading);margin:1.1rem 0 .3rem}
 .bp-plot-wrap{background:var(--input-bg);border:2px solid var(--input-border);border-radius:5px;padding:.5rem;overflow-x:auto}
-#bpPlot{width:100%;min-width:520px;height:250px;display:block}
-#bpPlot .axis{stroke:var(--chip-strong);stroke-width:1}
-#bpPlot .grid{stroke:var(--line);stroke-width:1}
-#bpPlot text{fill:var(--muted);font-size:10px}
-#bpPlot .band{stroke-width:3;stroke-linecap:round;opacity:.55}
-.bp-legend{display:flex;flex-wrap:wrap;gap:.5rem;margin:.45rem 0 .2rem;font-size:.78rem;color:var(--muted)}
-.bp-legend span{display:flex;align-items:center;gap:.3rem}
+#bpPlot{min-width:560px;height:260px;display:block}
+#bpPlot .axis{stroke:var(--chip-strong);stroke-width:1.6}
+#bpPlot .grid{stroke:var(--line);stroke-width:1.3}
+#bpPlot text{fill:var(--muted);font-family:inherit}
+#bpPlot .tick{font-size:13px}
+#bpPlot .xlab{font-size:12.5px}
+#bpPlot .band{stroke-width:10;stroke-linecap:round;opacity:.75}
+.bp-legend{display:flex;flex-wrap:wrap;gap:.6rem;margin:.5rem 0 .2rem;font-size:.85rem;color:var(--muted)}
+.bp-legend span{display:flex;align-items:center;gap:.35rem}
 .bp-legend .bp-legend-label{color:var(--heading);font-weight:500}
-.bp-legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.bp-legend i{width:13px;height:13px;border-radius:2px;display:inline-block}
 .gen-overlay{position:absolute;inset:0;background:rgba(255,255,255,.5);backdrop-filter:blur(1.5px);border-radius:16px;
   display:flex;flex-direction:column;gap:.9rem;align-items:center;justify-content:center;z-index:5}
 [data-theme="dark"] .gen-overlay{background:rgba(22,22,24,.5)}
@@ -982,25 +983,28 @@ const BP_COLORS = ['#626262','#2E6F8E','#7a5ea8','#a8683c','#3f7a5a','#8a4a63','
 
 function renderPlanPlot(plan){
   const svg = $('bpPlot'), marks = plan.plot || [];
-  const W = 720, H = 250, L = 46, R = 14, T = 14, B = 74;
+  const H = 260, L = 52, R = 20, T = 18, B = 84;
   const points = [...new Set(marks.map(m=>m.assessment_point_id))];
   const templates = [...new Set(marks.map(m=>m.template_id))];
   const colorOf = id => BP_COLORS[templates.indexOf(id) % BP_COLORS.length];
-  const xOf = i => L + (points.length === 1 ? (W-L-R)/2 : i * (W-L-R)/(points.length-1));
+  // Columns are a fixed step apart (not stretched to fill the width) and the
+  // first one is inset, so no bar sits on the y axis.
+  const STEP = 108;
+  const W = Math.max(560, L + R + STEP * Math.max(points.length, 1));
+  const xOf = i => L + STEP * (i + 0.5);
   const yOf = d => H - B - ((d-1)/4) * (H-T-B);
-  let out = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"></svg>`;
   let g = '';
   for (let d=1; d<=5; d++){
     g += `<line class="grid" x1="${L}" y1="${yOf(d)}" x2="${W-R}" y2="${yOf(d)}"/>`
-       + `<text x="${L-8}" y="${yOf(d)+3}" text-anchor="end">${d}</text>`;
+       + `<text class="tick" x="${L-10}" y="${yOf(d)+5}" text-anchor="end">${d}</text>`;
   }
   g += `<line class="axis" x1="${L}" y1="${T}" x2="${L}" y2="${H-B}"/>`
      + `<line class="axis" x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}"/>`;
   points.forEach((pid, i)=>{
     const label = (plan.catalog?.assessment_points || {})[pid] || pid;
-    const words = label.split(/[\s/]+/).slice(0,3);
+    const words = label.split(/[\s/]+/).filter(Boolean).slice(0,3);
     g += words.map((w, k)=>
-      `<text x="${xOf(i)}" y="${H-B+14+k*11}" text-anchor="middle">${esc(w)}</text>`).join('');
+      `<text class="xlab" x="${xOf(i)}" y="${H-B+20+k*14}" text-anchor="middle">${esc(w)}</text>`).join('');
   });
   // One bar per planned question spanning its expected-difficulty range. No end
   // marker: the range is the estimate, there is no single predicted value.
@@ -1008,7 +1012,7 @@ function renderPlanPlot(plan){
     const i = points.indexOf(m.assessment_point_id), c = colorOf(m.template_id);
     const lo = yOf(m.y_min), hi = yOf(m.y_max);
     const sameColumn = marks.filter(o=>o.assessment_point_id === m.assessment_point_id);
-    const jitter = (sameColumn.indexOf(m) - (sameColumn.length - 1) / 2) * 9;
+    const jitter = (sameColumn.indexOf(m) - (sameColumn.length - 1) / 2) * 18;
     const x = xOf(i) + jitter;
     g += `<line class="band" x1="${x}" y1="${lo}" x2="${x}" y2="${hi}" stroke="${c}">`
        + `<title>Q${m.index+1}: ${esc(m.assessment_point)} · ${esc(m.template)}`
