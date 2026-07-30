@@ -49,13 +49,8 @@ header h1{font-size:1.15rem;margin:0;font-weight:600}
 #bpPlot .band{stroke-width:3;stroke-linecap:round;opacity:.55}
 .bp-legend{display:flex;flex-wrap:wrap;gap:.5rem;margin:.45rem 0 .2rem;font-size:.78rem;color:var(--muted)}
 .bp-legend span{display:flex;align-items:center;gap:.3rem}
+.bp-legend .bp-legend-label{color:var(--heading);font-weight:500}
 .bp-legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
-.bp-table{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:.7rem;table-layout:fixed}
-.bp-table caption{text-align:left;margin-bottom:.35rem}
-.bp-table th,.bp-table td{border-bottom:1px solid var(--line);padding:.35rem .4rem;text-align:left;vertical-align:top;word-break:break-word}
-.bp-table th{color:var(--heading);font-weight:600}
-.bp-table tr.dropped{opacity:.45;text-decoration:line-through}
-.bp-drop{background:transparent;border:1px solid var(--input-border);color:var(--muted);border-radius:3px;padding:.1rem .35rem;font-size:.72rem;cursor:pointer}
 .gen-overlay{position:absolute;inset:0;background:rgba(255,255,255,.5);backdrop-filter:blur(1.5px);border-radius:16px;
   display:flex;flex-direction:column;gap:.9rem;align-items:center;justify-content:center;z-index:5}
 [data-theme="dark"] .gen-overlay{background:rgba(22,22,24,.5)}
@@ -366,34 +361,9 @@ a{color:var(--accent)}
   <p class="err" id="planErr"></p>
 
   <div id="blueprint" class="hidden">
-    <h3 class="bp-h">Requested</h3>
-    <p class="small" id="bpRequested"></p>
-
     <h3 class="bp-h">Planned coverage</h3>
-    <p class="small">Assessment Point (x) against expected difficulty (y). One mark per planned
-      question; colour shows the Template. Nothing has been generated yet.</p>
     <div class="bp-plot-wrap"><svg id="bpPlot" role="img" aria-label="Planned questions by assessment point and expected difficulty"></svg></div>
     <div id="bpLegend" class="bp-legend"></div>
-
-    <table class="bp-table" id="bpTable">
-      <caption class="small">Every planned question, with the evidence and reason it was selected.</caption>
-      <thead><tr>
-        <th scope="col">#</th><th scope="col">Assessment Point</th>
-        <th scope="col">Expected difficulty</th><th scope="col">Template</th>
-        <th scope="col">Focus</th><th scope="col">Planned subject</th>
-        <th scope="col">Evidence</th><th scope="col">Reason selected</th><th scope="col"></th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-
-    <div id="bpUnsupportedWrap" class="hidden">
-      <h3 class="bp-h">Unsupported</h3>
-      <p class="small">High-weight Assessment Points with no valid Template, variable binding, or
-        project evidence. These will not be tested.</p>
-      <ul class="small" id="bpUnsupported"></ul>
-    </div>
-
-    <p class="small" id="bpWarnings"></p>
     <p style="margin-top:.8rem">
       <button id="generate">Generate <span id="genCount">5</span> questions</button>
       <button class="secondary" id="rebuildPlan" type="button">Rebuild preview</button>
@@ -1032,63 +1002,30 @@ function renderPlanPlot(plan){
     g += words.map((w, k)=>
       `<text x="${xOf(i)}" y="${H-B+14+k*11}" text-anchor="middle">${esc(w)}</text>`).join('');
   });
+  // One bar per planned question spanning its expected-difficulty range. No end
+  // marker: the range is the estimate, there is no single predicted value.
   marks.forEach(m=>{
     const i = points.indexOf(m.assessment_point_id), c = colorOf(m.template_id);
     const lo = yOf(m.y_min), hi = yOf(m.y_max);
-    const jitter = (marks.filter(o=>o.assessment_point_id===m.assessment_point_id)
-      .indexOf(m)) * 7;
+    const sameColumn = marks.filter(o=>o.assessment_point_id === m.assessment_point_id);
+    const jitter = (sameColumn.indexOf(m) - (sameColumn.length - 1) / 2) * 9;
     const x = xOf(i) + jitter;
-    g += `<line class="band" x1="${x}" y1="${lo}" x2="${x}" y2="${hi}" stroke="${c}"/>`
-       + `<circle cx="${x}" cy="${hi}" r="4.5" fill="${c}"><title>Q${m.index+1}: `
-       + `${esc(m.assessment_point)} · ${esc(m.template)} · difficulty ${m.y_min}–${m.y_max}</title></circle>`;
+    g += `<line class="band" x1="${x}" y1="${lo}" x2="${x}" y2="${hi}" stroke="${c}">`
+       + `<title>Q${m.index+1}: ${esc(m.assessment_point)} · ${esc(m.template)}`
+       + ` · expected difficulty ${m.y_min}–${m.y_max}</title></line>`;
   });
   svg.innerHTML = g;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  $('bpLegend').innerHTML = templates.map(t=>
+  // Colour encodes the Template (not the Assessment Point — several questions
+  // can share a template, and a point can appear more than once).
+  $('bpLegend').innerHTML = '<span class="bp-legend-label">Template:</span>' + templates.map(t=>
     `<span><i style="background:${colorOf(t)}"></i>${esc((plan.catalog?.templates||{})[t]||t)}</span>`
   ).join('');
 }
 
-function renderPlanTable(plan){
-  const body = $('bpTable').querySelector('tbody');
-  const focusName = id => (plan.catalog?.focus || {})[id] || id;
-  body.innerHTML = (plan.planned || []).map(s=>{
-    const d = s.expected_difficulty || {};
-    const secondary = (s.secondary_focus_ids || []).map(focusName).join(', ');
-    return `<tr>
-      <td>${s.index + 1}</td>
-      <td>${esc((plan.catalog?.assessment_points||{})[s.assessment_point_id] || s.assessment_point_id)}</td>
-      <td>${d.min === d.max ? d.min : `${d.min}–${d.max}`}</td>
-      <td>${esc((plan.catalog?.templates||{})[s.template_id] || s.template_id)}</td>
-      <td>${esc(focusName(s.primary_focus_id))}${secondary ? `<br><span class="small">+ ${esc(secondary)}</span>` : ''}</td>
-      <td>${esc(s.subject || '—')}</td>
-      <td>Ready, ${(s.evidence_ids||[]).length} chunk(s)</td>
-      <td>${esc(s.reason_selected || '')}</td>
-      <td><button class="bp-drop" type="button" data-drop="${esc(s.assessment_point_id)}"
-            title="Exclude this Assessment Point and rebuild">exclude</button></td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="9">No evidence-supported plans.</td></tr>';
-  body.querySelectorAll('[data-drop]').forEach(btn=>{
-    btn.onclick = async ()=>{ excludedPoints.add(btn.dataset.drop); await buildPlan(); };
-  });
-}
-
 function renderPlan(plan){
   currentPlan = plan;
-  const r = plan.requested || {};
-  const focusList = (r.focus_areas || []).map(f=>`${f.name || f.id} ${f.weight}`).join(' · ');
-  const emphasis = {mostly_concepts:'Mostly concepts', balanced:'Balanced', mostly_code:'Mostly code'}[r.question_emphasis] || r.question_emphasis;
-  $('bpRequested').textContent =
-    `${r.num_questions} questions · difficulty ${r.difficulty_min}–${r.difficulty_max} · ${emphasis}`
-    + ` · code ${r.allow_code ? 'allowed' : 'not allowed'} · Focus: ${focusList}`
-    + (excludedPoints.size ? ` · excluded: ${[...excludedPoints].length}` : '');
   renderPlanPlot(plan);
-  renderPlanTable(plan);
-  const un = plan.unsupported || [];
-  $('bpUnsupportedWrap').classList.toggle('hidden', !un.length);
-  $('bpUnsupported').innerHTML = un.map(u=>
-    `<li>${esc(u.name)} (weight ${u.weight}) — ${esc(u.reason)}</li>`).join('');
-  $('bpWarnings').textContent = (plan.warnings || []).join(' · ');
   $('genCount').textContent = (plan.planned || []).length || 0;
   $('generate').disabled = !(plan.planned || []).length;
   $('blueprint').classList.remove('hidden');
