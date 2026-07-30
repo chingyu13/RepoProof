@@ -13,7 +13,7 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import config, db, generation_runs
+from . import blueprint, config, db, generation_runs
 from .alignment import (
     MAX_FILE_BYTES,
     ContextDocumentError,
@@ -25,9 +25,9 @@ from .alignment import (
 from .analyzer import ANALYSIS_VERSION, analyze_project, prune_non_source
 from .generator import generate_questions
 from .ingest import IngestError, clone_github, delete_project_files, extract_upload, raw_project_files
-from .knowledge import build_chunks
+from .knowledge import EvidenceStore, build_chunks
 from .scoring import score_attempt
-from .assessment_catalog import public_topics
+from .assessment_catalog import ASSESSMENT_POINTS, TEMPLATES, public_topics
 from .validator import normalize_answer, validate_maq
 
 app = FastAPI(title="RepoProof", version="0.1.0")
@@ -88,6 +88,7 @@ def _requires_creator_auth(path: str) -> bool:
         "/api/questions",
         "/api/assessments",
         "/api/generation-runs",
+        "/api/question-plans",
         "/print/",
         "/docs",
         "/redoc",
@@ -300,7 +301,14 @@ class GenerateConfig(BaseModel):
     correct_exact: int = 1
     correct_min: int = 1
     correct_max: int = 3
-    difficulty: int = 3
+    difficulty: int = 3          # legacy single value; superseded by the range below
+    difficulty_min: int = 1
+    difficulty_max: int = 5
+    question_emphasis: str = "balanced"   # mostly_concepts | balanced | mostly_code
+    allow_code: bool = True
+    excluded_assessment_points: list[str] = Field(default_factory=list)
+    seed: int = 42
+    question_plan_id: str = ""   # frozen blueprint to generate from
     focus: str = ""
     focus_areas: list[dict] = Field(default_factory=list)
     provider: str = ""
@@ -564,6 +572,190 @@ def _run_generation(
         )
 
 
+def _validated_focus(cfg: dict) -> list[dict]:
+    """Selected Focus Areas, filtered to catalog ids with a positive weight."""
+    valid = {topic["id"] for topic in public_topics()}
+    out = []
+    for area in cfg.get("focus_areas") or []:
+        try:
+            weight = int(area.get("weight", 0))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if area.get("id") in valid and weight > 0:
+            out.append({**area, "weight": min(5, weight)})
+    return out
+
+
+@app.post("/api/projects/{project_id}/question-plans")
+async def create_question_plan(
+    project_id: int,
+    config_json: str = Form(...),
+    assumed_knowledge: str = Form(""),
+    project_scope: str = Form(""),
+    prior_files: list[UploadFile] | None = File(None),
+    scope_files: list[UploadFile] | None = File(None),
+):
+    """Build a blueprint preview. Deterministic and performs no LLM call.
+
+    Generation is not started here — the creator must confirm the plan first
+    (PRD §6.1, AC 4-5).
+    """
+    project = db.get("projects", project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    try:
+        cfg = GenerateConfig(**json.loads(config_json)).model_dump()
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid question framework.") from exc
+
+    selected_focus = _validated_focus(cfg)
+    if not selected_focus:
+        raise HTTPException(400, "Select at least one Focus Area.")
+    cfg["focus_areas"] = selected_focus
+
+    async def read_uploads(files: list[UploadFile] | None) -> list[dict]:
+        out = []
+        for upload in files or []:
+            name = upload.filename or "context.txt"
+            data = await upload.read(MAX_FILE_BYTES + 1)
+            if len(data) > MAX_FILE_BYTES:
+                raise HTTPException(400, f"{name} exceeds the 12 MB context-file limit.")
+            try:
+                text = extract_document_text(name, data)
+            except ContextDocumentError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            if text:
+                out.append({"name": name, "text": text})
+        return out
+
+    prior_documents = await read_uploads(prior_files)
+    scope_documents = await read_uploads(scope_files)
+    targets = build_assessment_targets(
+        assumed_knowledge, project_scope, prior_documents, scope_documents)
+    aligned = align_assessment_targets(project["chunks"], targets, selected_focus)
+
+    store = EvidenceStore(project["chunks"])
+    preview = blueprint.build_blueprint(
+        store,
+        targets=aligned,
+        focus_areas=selected_focus,
+        snapshot_id=str(project.get("snapshot_id") or ""),
+        num_questions=int(cfg.get("num_questions") or 5),
+        emphasis=str(cfg.get("question_emphasis") or "balanced"),
+        allow_code=bool(cfg.get("allow_code", True)),
+        difficulty_min=int(cfg.get("difficulty_min") or 1),
+        difficulty_max=int(cfg.get("difficulty_max") or 5),
+        excluded_assessment_points=cfg.get("excluded_assessment_points") or [],
+        seed=int(cfg.get("seed") or 42),
+    )
+
+    plan_id = secrets.token_urlsafe(12)
+    db.insert("question_plans", {
+        "id": plan_id,
+        "project_id": project_id,
+        "snapshot_id": preview["snapshot_id"],
+        "catalog_hash": preview["catalog_hash"],
+        "framework_json": {k: v for k, v in cfg.items() if k != "question_plan_id"},
+        "assessment_targets_json": aligned,
+        "distributions_json": {
+            "assessment_point": preview["assessment_point_distribution"],
+            "template": preview["template_distribution"],
+        },
+        "slots_json": preview["planned"],
+        "unsupported_json": preview["unsupported"],
+        "warnings_json": preview["warnings"],
+        "status": "preview",
+    })
+    db.log_event("question_plan_preview", {
+        "plan_id": plan_id,
+        "snapshot_id": preview["snapshot_id"],
+        "catalog_hash": preview["catalog_hash"],
+        "requested_questions": int(cfg.get("num_questions") or 5),
+        "planned_questions": len(preview["planned"]),
+        "assessment_points": sorted({s["assessment_point_id"] for s in preview["planned"]}),
+        "templates": sorted({s["template_id"] for s in preview["planned"]}),
+        "gate_rejections": preview["gate_rejections"],
+        "warnings": preview["warnings"],
+    }, project_id=project_id)
+
+    return {"id": plan_id, **preview,
+            "plot": blueprint.plot_points(preview["planned"]),
+            "catalog": _plan_catalog_labels()}
+
+
+def _plan_catalog_labels() -> dict:
+    """Display names so the preview table/plot need no extra lookups."""
+    return {
+        "assessment_points": {p["id"]: p.get("name", p["id"]) for p in ASSESSMENT_POINTS},
+        "templates": {t["id"]: t.get("name", t["id"]) for t in TEMPLATES},
+        "focus": {t["id"]: t.get("name", t["id"]) for t in public_topics()},
+    }
+
+
+@app.get("/api/question-plans/{plan_id}")
+def get_question_plan(plan_id: str):
+    plan = db.get_where("question_plans", "id=?", (plan_id,))
+    if not plan:
+        raise HTTPException(404, "Question plan not found")
+    return {**plan, "plot": blueprint.plot_points(plan.get("slots") or []),
+            "catalog": _plan_catalog_labels()}
+
+
+@app.post("/api/question-plans/{plan_id}/confirm")
+def confirm_question_plan(plan_id: str):
+    """Freeze a blueprint so generation may use exactly these slots (AC 11)."""
+    plan = db.get_where("question_plans", "id=?", (plan_id,))
+    if not plan:
+        raise HTTPException(404, "Question plan not found")
+    if plan["status"] == "replaced":
+        raise HTTPException(409, "This plan was replaced. Rebuild the preview.")
+    project = db.get("projects", plan["project_id"])
+    if not project:
+        raise HTTPException(404, "Project not found")
+    if str(project.get("snapshot_id") or "") != plan["snapshot_id"]:
+        raise HTTPException(409, "The project changed since this preview. Rebuild the preview.")
+    if blueprint.catalog_hash() != plan["catalog_hash"]:
+        raise HTTPException(409, "The assessment catalog changed. Rebuild the preview.")
+    if not (plan.get("slots") or []):
+        raise HTTPException(400, "This preview has no evidence-supported plans to confirm.")
+
+    with db.connect() as con:
+        con.execute(
+            "UPDATE question_plans SET status='confirmed', confirmed_at=datetime('now') WHERE id=?",
+            (plan_id,))
+        con.execute(
+            "UPDATE question_plans SET status='replaced' "
+            "WHERE project_id=? AND id<>? AND status='preview'",
+            (plan["project_id"], plan_id))
+    db.log_event("question_plan_confirmed", {
+        "plan_id": plan_id,
+        "snapshot_id": plan["snapshot_id"],
+        "catalog_hash": plan["catalog_hash"],
+        "slots": len(plan.get("slots") or []),
+    }, project_id=plan["project_id"])
+    return {"id": plan_id, "status": "confirmed"}
+
+
+def _frozen_plan_for_generation(project_id: int, cfg: dict) -> dict | None:
+    """Validate the referenced frozen blueprint, if generation supplied one."""
+    plan_id = str(cfg.get("question_plan_id") or "").strip()
+    if not plan_id:
+        return None
+    plan = db.get_where("question_plans", "id=?", (plan_id,))
+    if not plan:
+        raise HTTPException(404, "Question plan not found")
+    if plan["project_id"] != project_id:
+        raise HTTPException(400, "This plan belongs to a different project.")
+    if plan["status"] != "confirmed":
+        raise HTTPException(400, "Confirm the question plan before generating.")
+    project = db.get("projects", project_id)
+    if str((project or {}).get("snapshot_id") or "") != plan["snapshot_id"]:
+        raise HTTPException(409, "The project changed since this plan was confirmed.")
+    if blueprint.catalog_hash() != plan["catalog_hash"]:
+        raise HTTPException(409, "The assessment catalog changed since this plan was confirmed.")
+    return plan
+
+
 @app.post("/api/projects/{project_id}/generation-runs")
 async def start_generation(
     project_id: int,
@@ -583,18 +775,15 @@ async def start_generation(
     if config.local_only() and (cfg.get("provider") or "").lower() == "openai":
         raise HTTPException(400, "This server runs in local-only privacy mode; the OpenAI provider is disabled. "
                                  "Use the local model or mock.")
-    valid_topic_ids = {topic["id"] for topic in public_topics()}
-    selected_focus = []
-    for area in cfg["focus_areas"]:
-        try:
-            weight = int(area.get("weight", 0))
-        except (AttributeError, TypeError, ValueError):
-            continue
-        if area.get("id") in valid_topic_ids and weight > 0:
-            selected_focus.append({**area, "weight": min(5, weight)})
+    selected_focus = _validated_focus(cfg)
     if not selected_focus:
         raise HTTPException(400, "Select at least one Focus Area.")
     cfg["focus_areas"] = selected_focus
+    # When the creator generates from a confirmed blueprint, validate it here so
+    # a stale plan fails before any work starts (PRD §9.2).
+    frozen = _frozen_plan_for_generation(project_id, cfg)
+    if frozen:
+        cfg["frozen_slots"] = frozen.get("slots") or []
 
     async def read_uploads(files: list[UploadFile] | None) -> list[tuple[str, bytes]]:
         result = []
