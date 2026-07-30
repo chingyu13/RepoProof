@@ -1,32 +1,5 @@
 {
-  "_readme": "Authoritative Local generation catalog. Templates are reasoning forms with typed slots; assignment targets constrain slot selection but do not create new templates.",
-  "strategies": [
-    {
-      "id": "explain",
-      "name": "Explain",
-      "prefix": "Explain a project-specific use, relationship, or constraint supported by the supplied evidence."
-    },
-    {
-      "id": "execution",
-      "name": "Execution",
-      "prefix": "Trace an evidenced interaction, data path, or code path."
-    },
-    {
-      "id": "prediction",
-      "name": "Prediction",
-      "prefix": "Determine an observable outcome from the shown condition and code."
-    },
-    {
-      "id": "debugging",
-      "name": "Debugging",
-      "prefix": "Reason about one explicit hypothetical change and the behavior it would break."
-    },
-    {
-      "id": "modification",
-      "name": "Modification",
-      "prefix": "Choose a change that meets a concrete requirement while preserving shown behavior."
-    }
-  ],
+  "_readme": "Authoritative Local generation catalog. Templates own their reasoning prompt and typed slots. Assessment points define what may be tested and the difficulty range after variables are bound.",
   "evidence_types": [
     {
       "id": "module_graph",
@@ -79,14 +52,440 @@
       "description": "SQL files, statements, schemas, and persistence operations."
     }
   ],
+  "assessment_points": [
+    {
+      "id": "package_purpose",
+      "name": "Package Purpose",
+      "description": "Why an imported Python package is present and what it contributes to this project.",
+      "difficulty_range": [
+        1,
+        2
+      ],
+      "difficulty_anchors": {
+        "1": "Identify the general purpose of a common package.",
+        "2": "Explain a package's evidenced, project-specific use."
+      },
+      "query": "python package library import dependency purpose project use",
+      "evidence_types": [
+        "dependency_graph",
+        "call_graph",
+        "symbol_table"
+      ]
+    },
+    {
+      "id": "component_responsibility",
+      "name": "Module / Component Responsibility",
+      "description": "The responsibility, boundary, and downstream contribution of a module or component.",
+      "difficulty_range": [
+        1,
+        3
+      ],
+      "difficulty_anchors": {
+        "1": "Identify a named module or component.",
+        "2": "Explain its direct project responsibility.",
+        "3": "Relate its responsibility to another component or downstream effect."
+      },
+      "query": "module component responsibility boundary role downstream",
+      "evidence_types": [
+        "module_graph",
+        "dependency_graph",
+        "call_graph",
+        "symbol_table"
+      ]
+    },
+    {
+      "id": "function_io_contract",
+      "name": "Function Input / Output Contract",
+      "description": "A function's accepted inputs, returned structure, side effects, and caller expectations.",
+      "difficulty_range": [
+        1,
+        3
+      ],
+      "difficulty_anchors": {
+        "1": "Read an explicit parameter or return form.",
+        "2": "Infer the concrete input or output structure from the function body.",
+        "3": "Explain the contract's effect on a caller or downstream stage."
+      },
+      "query": "function parameter input return output type format side effect caller",
+      "evidence_types": [
+        "symbol_table",
+        "data_flow_graph",
+        "call_graph"
+      ]
+    },
+    {
+      "id": "data_source_acquisition",
+      "name": "Data Source / Acquisition",
+      "description": "Where data originates and how Python retrieves, loads, or scrapes it.",
+      "difficulty_range": [
+        1,
+        3
+      ],
+      "difficulty_anchors": {
+        "1": "Identify the source, file, API, or acquisition library.",
+        "2": "Explain request parameters and the retrieved format.",
+        "3": "Trace pagination, batching, quota, or repeated acquisition behavior."
+      },
+      "query": "data source acquire retrieve load scrape api request file pagination batch quota",
+      "evidence_types": [
+        "api_discovery",
+        "dependency_graph",
+        "data_flow_graph",
+        "control_flow_graph"
+      ]
+    },
+    {
+      "id": "external_interface_contract",
+      "name": "External Interface Contract",
+      "description": "API endpoints, MQTT topics, request/response payloads, and producer-consumer expectations.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Identify an endpoint, topic, method, or payload field.",
+        "3": "Trace the contract between producer and consumer.",
+        "4": "Analyse the consequence of a contract or payload change."
+      },
+      "query": "api endpoint mqtt topic request response payload producer consumer contract",
+      "evidence_types": [
+        "api_discovery",
+        "data_flow_graph",
+        "call_graph",
+        "dependency_graph"
+      ]
+    },
+    {
+      "id": "data_format_schema",
+      "name": "Data Format / Structure",
+      "description": "The fields, types, shapes, and conversions of CSV, JSON, DataFrame, and record structures.",
+      "difficulty_range": [
+        1,
+        3
+      ],
+      "difficulty_anchors": {
+        "1": "Identify a data format, field, or basic structure.",
+        "2": "Explain a format or type conversion.",
+        "3": "Trace how a structural mismatch affects a downstream operation."
+      },
+      "query": "csv json dataframe record field column type format schema conversion",
+      "evidence_types": [
+        "symbol_table",
+        "data_flow_graph",
+        "api_discovery",
+        "sql_analysis"
+      ]
+    },
+    {
+      "id": "cleaning_missing_values",
+      "name": "Cleaning / Missing Values",
+      "description": "Deduplication, filtering, null handling, type correction, and consistency rules.",
+      "difficulty_range": [
+        1,
+        4
+      ],
+      "difficulty_anchors": {
+        "1": "Identify a cleaning operation used by the project.",
+        "2": "Explain the rule applied to invalid, duplicate, or missing data.",
+        "3": "Predict the cleaned result for a concrete input.",
+        "4": "Analyse a faulty cleaning policy or an unhandled anomaly."
+      },
+      "query": "clean filter missing null deduplicate duplicate type convert inconsistent invalid",
+      "evidence_types": [
+        "data_flow_graph",
+        "control_flow_graph",
+        "symbol_table",
+        "test_discovery"
+      ]
+    },
+    {
+      "id": "transformation_aggregation",
+      "name": "Transformation / Aggregation",
+      "description": "How records are mapped, grouped, aggregated, reshaped, or reduced to a new grain.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Explain the direct purpose of a transformation.",
+        "3": "Predict the transformed values, shape, or aggregation grain.",
+        "4": "Diagnose an incorrect transformation or aggregation result."
+      },
+      "query": "transform map group aggregate reshape grain calculate dataframe",
+      "evidence_types": [
+        "data_flow_graph",
+        "control_flow_graph",
+        "symbol_table"
+      ]
+    },
+    {
+      "id": "integration_entity_matching",
+      "name": "Integration / Entity Matching",
+      "description": "How datasets are joined and how records, facilities, units, or identifiers are matched.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Identify the join or matching key.",
+        "3": "Explain how two project datasets are integrated.",
+        "4": "Analyse unmatched, duplicated, or wrong-grain integration results."
+      },
+      "query": "integrate join merge match identifier facility unit key grain",
+      "evidence_types": [
+        "data_flow_graph",
+        "symbol_table",
+        "sql_analysis"
+      ]
+    },
+    {
+      "id": "augmentation_enrichment",
+      "name": "Data Augmentation / Enrichment",
+      "description": "How external attributes such as geolocation are acquired, matched, and added to existing records.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Identify the enrichment source and added attribute.",
+        "3": "Trace how enrichment data is matched and attached.",
+        "4": "Analyse incomplete matches, API failures, or enrichment quality."
+      },
+      "query": "augment enrich geocode location coordinates external attribute match",
+      "evidence_types": [
+        "api_discovery",
+        "data_flow_graph",
+        "dependency_graph",
+        "control_flow_graph"
+      ]
+    },
+    {
+      "id": "pipeline_data_flow",
+      "name": "Pipeline / Data Flow",
+      "description": "The order and direction of data movement across acquisition, processing, storage, publishing, and presentation.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Trace one direct source-to-destination step.",
+        "3": "Trace a multi-stage workflow and intermediate forms.",
+        "4": "Analyse a cross-component consequence or broken pipeline path."
+      },
+      "query": "pipeline workflow data flow source destination stage order intermediate",
+      "evidence_types": [
+        "data_flow_graph",
+        "call_graph",
+        "module_graph",
+        "api_discovery"
+      ]
+    },
+    {
+      "id": "persistence_schema_integrity",
+      "name": "Persistence / Schema Integrity",
+      "description": "Tables, keys, relationships, constraints, persistence operations, and stored data grain.",
+      "difficulty_range": [
+        1,
+        4
+      ],
+      "difficulty_anchors": {
+        "1": "Identify a table, column, or persistence technology.",
+        "2": "Explain a table's purpose or a basic key constraint.",
+        "3": "Trace how records are written and related at the intended grain.",
+        "4": "Analyse a schema, constraint, or integrity failure."
+      },
+      "query": "database table column primary key foreign key constraint persist sql grain integrity",
+      "evidence_types": [
+        "sql_analysis",
+        "data_flow_graph",
+        "symbol_table",
+        "dependency_graph"
+      ]
+    },
+    {
+      "id": "cache_materialisation",
+      "name": "Caching / Materialisation",
+      "description": "Why intermediate data is persisted and how caching limits repeated retrieval or processing.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Explain why a cached file or materialised dataset exists.",
+        "3": "Trace when cached versus fresh data is used.",
+        "4": "Analyse stale data, invalidation, or unnecessary repeated work."
+      },
+      "query": "cache materialize csv persist reuse refresh stale invalidation api calls",
+      "evidence_types": [
+        "data_flow_graph",
+        "control_flow_graph",
+        "call_graph",
+        "symbol_table"
+      ]
+    },
+    {
+      "id": "streaming_event_behavior",
+      "name": "Streaming / Event Behaviour",
+      "description": "Publishing, subscribing, event-time order, message delay, delta detection, and continuous execution.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Identify publisher, subscriber, topic, or message direction.",
+        "3": "Trace ordered or delta-only streaming behaviour.",
+        "4": "Analyse duplicate, stale, out-of-order, or continuously repeated events."
+      },
+      "query": "mqtt publish subscribe stream event order delay delta continuous message",
+      "evidence_types": [
+        "api_discovery",
+        "data_flow_graph",
+        "control_flow_graph",
+        "call_graph"
+      ]
+    },
+    {
+      "id": "condition_state_behavior",
+      "name": "Condition / State Behaviour",
+      "description": "Observable branch outcomes, state changes, loop behaviour, and shared runtime state.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Identify the direct outcome of a visible condition.",
+        "3": "Predict multiple assignments, calls, or state changes along a path.",
+        "4": "Analyse state-dependent behaviour across functions or iterations."
+      },
+      "query": "condition branch loop state assignment return side effect outcome",
+      "evidence_types": [
+        "control_flow_graph",
+        "data_flow_graph",
+        "symbol_table",
+        "call_graph"
+      ]
+    },
+    {
+      "id": "failure_recovery",
+      "name": "Failure Handling / Recovery",
+      "description": "Exceptions, retries, timeout handling, fallback paths, cleanup, and recovery behaviour.",
+      "difficulty_range": [
+        2,
+        5
+      ],
+      "difficulty_anchors": {
+        "2": "Identify an exception, guard, retry, or cleanup action.",
+        "3": "Predict the behaviour of an evidenced failure path.",
+        "4": "Diagnose an incomplete or harmful recovery path.",
+        "5": "Evaluate a recovery design across API, storage, or streaming boundaries."
+      },
+      "query": "error exception timeout retry fallback cleanup recovery failure",
+      "evidence_types": [
+        "control_flow_graph",
+        "api_discovery",
+        "data_flow_graph",
+        "call_graph",
+        "test_discovery"
+      ]
+    },
+    {
+      "id": "configuration_security_validation",
+      "name": "Configuration / Security / Validation",
+      "description": "Environment configuration, secrets, input validation, authentication, authorization, and safe handling.",
+      "difficulty_range": [
+        1,
+        4
+      ],
+      "difficulty_anchors": {
+        "1": "Identify a configuration source or protected value.",
+        "2": "Explain how configuration or validation is used by one component.",
+        "3": "Trace a validated or rejected input through the project.",
+        "4": "Analyse the consequence of missing validation, exposed secrets, or incorrect authorization."
+      },
+      "query": "environment config secret token validate authenticate authorize sanitize input",
+      "evidence_types": [
+        "control_flow_graph",
+        "api_discovery",
+        "symbol_table",
+        "data_flow_graph",
+        "dependency_graph"
+      ]
+    },
+    {
+      "id": "testing_quality_verification",
+      "name": "Testing / Data Quality Verification",
+      "description": "Tests, assertions, quality checks, expected behaviour, and uncovered edge cases.",
+      "difficulty_range": [
+        2,
+        4
+      ],
+      "difficulty_anchors": {
+        "2": "Identify what a test or quality check verifies.",
+        "3": "Predict whether a concrete input satisfies the verified behaviour.",
+        "4": "Analyse missing coverage or select a test that exposes a fault."
+      },
+      "query": "test assertion fixture expected quality check edge case coverage",
+      "evidence_types": [
+        "test_discovery",
+        "control_flow_graph",
+        "data_flow_graph",
+        "sql_analysis"
+      ]
+    },
+    {
+      "id": "performance_scalability",
+      "name": "Performance / Scalability",
+      "description": "Repeated work, algorithmic cost, resource use, throughput, and project bottlenecks.",
+      "difficulty_range": [
+        2,
+        5
+      ],
+      "difficulty_anchors": {
+        "2": "Identify repeated work, a loop, or a resource-heavy operation.",
+        "3": "Explain the direct performance effect at the project's expected scale.",
+        "4": "Locate and reason about a measured or evidenced bottleneck.",
+        "5": "Evaluate an optimisation and its correctness or resource trade-off."
+      },
+      "query": "performance complexity scale memory throughput repeated work bottleneck optimize",
+      "evidence_types": [
+        "complexity_analysis",
+        "control_flow_graph",
+        "data_flow_graph",
+        "call_graph"
+      ]
+    },
+    {
+      "id": "design_decision_change_impact",
+      "name": "Design Decision / Change Impact",
+      "description": "Why a design is used, what trade-offs it carries, and how a requirement change affects the system.",
+      "difficulty_range": [
+        3,
+        5
+      ],
+      "difficulty_anchors": {
+        "3": "Explain the project-specific rationale for a local design choice.",
+        "4": "Compare alternatives or trace the impact of a cross-component change.",
+        "5": "Evaluate a system-level trade-off and propose an evidence-consistent design."
+      },
+      "query": "design decision rationale tradeoff alternative requirement change impact architecture",
+      "evidence_types": [
+        "module_graph",
+        "dependency_graph",
+        "call_graph",
+        "data_flow_graph",
+        "sql_analysis",
+        "api_discovery"
+      ]
+    }
+  ],
   "templates": [
     {
       "id": "contextual_use",
       "name": "Contextual Use",
-      "strategy": "explain",
+      "reasoning_prompt": "Explain a project-specific use, relationship, or constraint supported by the supplied evidence.",
       "stem_frames": [
-        "Within {context}, which statement correctly describes the project-specific use of {subject}?",
-        "In {context}, which statement correctly describes what {subject} contributes to the project?"
+        "In {context}, which statement correctly describes what {subject} does in this project?",
+        "In {context}, which statement correctly describes how the project uses {subject}?"
       ],
       "option_task": "Test the subject's evidenced interaction, input/output, side effect, or downstream contribution. Do not test generic library knowledge or repeat what its name suggests.",
       "slots": {
@@ -163,11 +562,11 @@
     {
       "id": "interaction_flow",
       "name": "Interaction / Flow",
-      "strategy": "execution",
+      "reasoning_prompt": "Trace an evidenced interaction, data path, or code path.",
       "stem_frames": [
-        "Which statement correctly describes the evidenced interaction between {subject} and {counterpart}?",
-        "Which statement is consistent with the evidenced dependency from {subject} to {counterpart}?",
-        "Which statement correctly traces what passes from {subject} to {counterpart}?"
+        "Which statement correctly describes how {subject} and {counterpart} work together?",
+        "Which statement correctly describes the link from {subject} to {counterpart}?",
+        "Which statement correctly describes what moves from {subject} to {counterpart}?"
       ],
       "option_task": "Test an evidenced direction, ordering, transferred data, or cross-component consequence. Every option must be a complete relational claim.",
       "slots": {
@@ -243,9 +642,9 @@
     {
       "id": "condition_outcome",
       "name": "Condition / Outcome",
-      "strategy": "prediction",
+      "reasoning_prompt": "Determine an observable outcome from the shown condition and code.",
       "stem_frames": [
-        "For the shown code, if {condition}, which observable behavior occurs?"
+        "In the code below, what happens when {condition}?"
       ],
       "option_task": "State exact calls, assignments, output, exceptions, or return behavior visible in the complete shown branch.",
       "slots": {
@@ -297,9 +696,9 @@
     {
       "id": "code_explain",
       "name": "Code Explain",
-      "strategy": "explain",
+      "reasoning_prompt": "Explain the complete evidenced effect of the shown code.",
       "stem_frames": [
-        "Which statement correctly describes the complete effect of the shown code?"
+        "Which statement correctly describes what the code below does?"
       ],
       "option_task": "Test the complete visible effect, including material calls, transformations, state changes, and return behavior.",
       "slots": {
@@ -348,9 +747,9 @@
     {
       "id": "fault_correction",
       "name": "Fault / Correction",
-      "strategy": "debugging",
+      "reasoning_prompt": "Reason about one explicit hypothetical change and the behavior it would break.",
       "stem_frames": [
-        "A maintainer proposes to {mutation}. For the shown code, which statement correctly identifies the resulting fault and the correction?"
+        "A developer changes the code to {mutation}. Which statement correctly describes the problem this causes and how to fix it?"
       ],
       "option_task": "Exactly one option must pair the observable consequence of the explicit hypothetical mutation with the correction that restores the shown behavior. Do not claim the original code is faulty.",
       "slots": {
@@ -404,9 +803,9 @@
     {
       "id": "requirement_change",
       "name": "Requirement / Change",
-      "strategy": "modification",
+      "reasoning_prompt": "Choose a change that meets a concrete requirement while preserving shown behavior.",
       "stem_frames": [
-        "Requirement: {requirement}. At INSERT HERE in the shown code, which option satisfies it while preserving the existing behavior?"
+        "The code must {requirement}. Which option should be added at INSERT HERE without changing the current behavior?"
       ],
       "option_task": "Each option must be a short syntactically plausible snippet for the marked location. Exactly one must satisfy the stated requirement and preserve the visible control/data flow.",
       "slots": {
@@ -457,10 +856,10 @@
     {
       "id": "constraint_behavior",
       "name": "Constraint / Verification",
-      "strategy": "explain",
+      "reasoning_prompt": "Explain a concrete, evidenced constraint or verified behaviour.",
       "stem_frames": [
-        "Which statement is consistent with the evidenced constraint on {subject}?",
-        "Which statement correctly describes the verified behavior of {subject}?"
+        "Which statement correctly describes the rule for {subject}?",
+        "Which statement correctly describes the checked behavior of {subject}?"
       ],
       "option_task": "Test a concrete schema rule, validation guard, test expectation, security condition, data-quality rule, or measured complexity indicator. Do not ask for an undocumented design preference.",
       "slots": {
@@ -525,6 +924,409 @@
         "max_chunks": 2,
         "chars_per_chunk": 2200
       }
+    },
+    {
+      "id": "approach_classification",
+      "name": "Approach Used",
+      "reasoning_prompt": "Identify the project approach shown by the supplied evidence.",
+      "stem_frames": [
+        "In {context}, which statement correctly describes the approach used for {subject}?"
+      ],
+      "option_task": "Describe the actual project approach, such as batch loading, repeated polling, caching, streaming, or background processing. Do not test only a general definition.",
+      "slots": {
+        "context": {
+          "source": "target_or_topic"
+        },
+        "subject": {
+          "source": "evidence_entity",
+          "types": [
+            "component",
+            "function",
+            "api_method",
+            "data_store",
+            "state"
+          ],
+          "related_to": "context"
+        }
+      },
+      "code_mode": "none",
+      "query": "approach method batch polling cache streaming background process",
+      "evidence": {
+        "required": [
+          {
+            "label": "project approach",
+            "types": [
+              "data_flow_graph",
+              "api_discovery",
+              "call_graph",
+              "dependency_graph",
+              "sql_analysis"
+            ],
+            "kinds": [
+              "flow",
+              "callgraph",
+              "api_discovery",
+              "function",
+              "source",
+              "sql_analysis",
+              "imports"
+            ],
+            "count": 1,
+            "query": "load fetch poll cache publish subscribe save process"
+          }
+        ],
+        "optional": [
+          {
+            "label": "supporting project context",
+            "types": [
+              "module_graph",
+              "data_flow_graph",
+              "control_flow_graph"
+            ],
+            "kinds": [
+              "module_graph",
+              "flow",
+              "function",
+              "source",
+              "notebook_cell"
+            ],
+            "count": 2
+          }
+        ],
+        "max_chunks": 3,
+        "chars_per_chunk": 2000
+      }
+    },
+    {
+      "id": "data_flow_selection",
+      "name": "Data Flow Selection",
+      "reasoning_prompt": "Choose the project data flow that matches the supplied evidence.",
+      "stem_frames": [
+        "Which flow correctly shows how data moves from {source} to {destination}?"
+      ],
+      "option_task": "Each option must be a complete ordered flow. Use clear arrows and include only stages supported by the evidence.",
+      "slots": {
+        "source": {
+          "source": "relation_source",
+          "types": [
+            "component",
+            "function",
+            "api_method",
+            "data_store"
+          ]
+        },
+        "destination": {
+          "source": "relation_target",
+          "types": [
+            "component",
+            "function",
+            "api_method",
+            "data_store"
+          ],
+          "related_to": "source"
+        }
+      },
+      "code_mode": "none",
+      "query": "data flow source stage destination order pipeline",
+      "evidence": {
+        "required": [
+          {
+            "label": "ordered data flow",
+            "types": [
+              "data_flow_graph",
+              "call_graph",
+              "module_graph",
+              "api_discovery"
+            ],
+            "kinds": [
+              "flow",
+              "callgraph",
+              "module_graph",
+              "api_discovery"
+            ],
+            "count": 1,
+            "query": "source destination stage order data moves"
+          }
+        ],
+        "optional": [
+          {
+            "label": "stage details",
+            "types": [
+              "data_flow_graph",
+              "symbol_table",
+              "api_discovery"
+            ],
+            "kinds": [
+              "function",
+              "source",
+              "notebook_cell",
+              "api_discovery"
+            ],
+            "count": 2
+          }
+        ],
+        "max_chunks": 3,
+        "chars_per_chunk": 1800
+      }
+    },
+    {
+      "id": "source_method_mapping",
+      "name": "Source and Method",
+      "reasoning_prompt": "Match a project data source or service with the way the project uses it.",
+      "stem_frames": [
+        "Which statement correctly matches {subject} with the way it gets or sends data?"
+      ],
+      "option_task": "Match the named source, service, or component with its real method, such as an API request, file load, database query, publish, or subscribe action.",
+      "slots": {
+        "subject": {
+          "source": "evidence_entity",
+          "types": [
+            "imported_library",
+            "api_method",
+            "component",
+            "function",
+            "data_store"
+          ]
+        }
+      },
+      "code_mode": "none",
+      "query": "source method api request file load query publish subscribe",
+      "evidence": {
+        "required": [
+          {
+            "label": "source and method",
+            "types": [
+              "api_discovery",
+              "dependency_graph",
+              "data_flow_graph",
+              "sql_analysis"
+            ],
+            "kinds": [
+              "api_discovery",
+              "imports",
+              "dependencies",
+              "flow",
+              "function",
+              "source",
+              "sql_analysis"
+            ],
+            "count": 1,
+            "query": "request read load query publish subscribe"
+          }
+        ],
+        "optional": [
+          {
+            "label": "usage details",
+            "types": [
+              "call_graph",
+              "symbol_table",
+              "data_flow_graph"
+            ],
+            "kinds": [
+              "callgraph",
+              "function",
+              "module_var",
+              "flow"
+            ],
+            "count": 2
+          }
+        ],
+        "max_chunks": 3,
+        "chars_per_chunk": 1800
+      }
+    },
+    {
+      "id": "stage_responsibility",
+      "name": "Stage Responsibility",
+      "reasoning_prompt": "Identify the job of a project stage or component from the supplied evidence.",
+      "stem_frames": [
+        "Which statement correctly describes the job of {subject} in the data process?"
+      ],
+      "option_task": "Describe what the stage receives, does, and passes on. Keep each option focused on one clear project responsibility.",
+      "slots": {
+        "subject": {
+          "source": "evidence_entity",
+          "types": [
+            "component",
+            "function",
+            "data_store",
+            "api_method"
+          ]
+        }
+      },
+      "code_mode": "none",
+      "query": "stage component responsibility input process output pipeline",
+      "evidence": {
+        "required": [
+          {
+            "label": "stage responsibility",
+            "types": [
+              "module_graph",
+              "data_flow_graph",
+              "call_graph",
+              "api_discovery",
+              "sql_analysis"
+            ],
+            "kinds": [
+              "module_graph",
+              "flow",
+              "callgraph",
+              "function",
+              "api_discovery",
+              "sql_analysis"
+            ],
+            "count": 1,
+            "query": "input process output stage role"
+          }
+        ],
+        "optional": [
+          {
+            "label": "nearby stages",
+            "types": [
+              "data_flow_graph",
+              "dependency_graph",
+              "symbol_table"
+            ],
+            "kinds": [
+              "flow",
+              "imports",
+              "function",
+              "source"
+            ],
+            "count": 2
+          }
+        ],
+        "max_chunks": 3,
+        "chars_per_chunk": 1900
+      }
+    },
+    {
+      "id": "processing_mode",
+      "name": "Processing Mode",
+      "reasoning_prompt": "Identify how the project processes data over time.",
+      "stem_frames": [
+        "Which statement correctly describes how {subject} processes data?"
+      ],
+      "option_task": "Describe the evidenced mode in simple terms, such as one-time batch work, repeated polling, cached replay, continuous messages, or background updates.",
+      "slots": {
+        "subject": {
+          "source": "evidence_entity",
+          "types": [
+            "component",
+            "function",
+            "api_method",
+            "state"
+          ]
+        }
+      },
+      "code_mode": "none",
+      "query": "batch repeated polling continuous stream replay background loop delay",
+      "evidence": {
+        "required": [
+          {
+            "label": "processing mode",
+            "types": [
+              "control_flow_graph",
+              "data_flow_graph",
+              "api_discovery",
+              "call_graph"
+            ],
+            "kinds": [
+              "flow",
+              "function",
+              "source",
+              "notebook_cell",
+              "api_discovery",
+              "callgraph"
+            ],
+            "count": 1,
+            "query": "loop repeat delay batch stream publish subscribe"
+          }
+        ],
+        "optional": [
+          {
+            "label": "runtime context",
+            "types": [
+              "symbol_table",
+              "module_graph",
+              "dependency_graph"
+            ],
+            "kinds": [
+              "module_var",
+              "module_graph",
+              "imports",
+              "function"
+            ],
+            "count": 2
+          }
+        ],
+        "max_chunks": 3,
+        "chars_per_chunk": 2000
+      }
+    },
+    {
+      "id": "data_grain",
+      "name": "Data Grain",
+      "reasoning_prompt": "Identify what one project record or message represents.",
+      "stem_frames": [
+        "Which statement correctly describes what one record in {subject} represents?"
+      ],
+      "option_task": "State the unit represented by one row, record, or message, including keys such as facility, unit, region, or time when the evidence supports them.",
+      "slots": {
+        "subject": {
+          "source": "evidence_entity",
+          "types": [
+            "data_store",
+            "component",
+            "api_method",
+            "state"
+          ]
+        }
+      },
+      "code_mode": "none",
+      "query": "record row message grain facility unit region timestamp key",
+      "evidence": {
+        "required": [
+          {
+            "label": "record structure",
+            "types": [
+              "sql_analysis",
+              "data_flow_graph",
+              "api_discovery",
+              "symbol_table"
+            ],
+            "kinds": [
+              "sql_analysis",
+              "flow",
+              "api_discovery",
+              "function",
+              "source",
+              "module_var"
+            ],
+            "count": 1,
+            "query": "record row field key facility unit region time"
+          }
+        ],
+        "optional": [
+          {
+            "label": "grain context",
+            "types": [
+              "data_flow_graph",
+              "call_graph",
+              "dependency_graph"
+            ],
+            "kinds": [
+              "flow",
+              "callgraph",
+              "imports",
+              "function"
+            ],
+            "count": 2
+          }
+        ],
+        "max_chunks": 3,
+        "chars_per_chunk": 2000
+      }
     }
   ],
   "topics": [
@@ -547,7 +1349,13 @@
         "code_explain": 0,
         "fault_correction": 0,
         "requirement_change": 0,
-        "constraint_behavior": 0
+        "constraint_behavior": 0,
+        "approach_classification": 0.7,
+        "data_flow_selection": 1.0,
+        "source_method_mapping": 0.4,
+        "stage_responsibility": 0.9,
+        "processing_mode": 0.6,
+        "data_grain": 0.4
       }
     },
     {
@@ -569,7 +1377,13 @@
         "code_explain": 0.1,
         "fault_correction": 0.55,
         "requirement_change": 0.6,
-        "constraint_behavior": 0.7
+        "constraint_behavior": 0.7,
+        "approach_classification": 0.9,
+        "data_flow_selection": 0.9,
+        "source_method_mapping": 1.0,
+        "stage_responsibility": 0.6,
+        "processing_mode": 0.8,
+        "data_grain": 0.7
       }
     },
     {
@@ -590,7 +1404,13 @@
         "code_explain": 0.2,
         "fault_correction": 0.3,
         "requirement_change": 0.5,
-        "constraint_behavior": 0.65
+        "constraint_behavior": 0.65,
+        "approach_classification": 0.8,
+        "data_flow_selection": 1.0,
+        "source_method_mapping": 0.8,
+        "stage_responsibility": 0.9,
+        "processing_mode": 1.0,
+        "data_grain": 0.8
       }
     },
     {
@@ -611,7 +1431,13 @@
         "code_explain": 1.0,
         "fault_correction": 1.0,
         "requirement_change": 1.0,
-        "constraint_behavior": 0.75
+        "constraint_behavior": 0.75,
+        "approach_classification": 0.3,
+        "data_flow_selection": 0.5,
+        "source_method_mapping": 0.2,
+        "stage_responsibility": 0.7,
+        "processing_mode": 0.7,
+        "data_grain": 0.5
       }
     },
     {
@@ -632,7 +1458,13 @@
         "code_explain": 0.15,
         "fault_correction": 0.5,
         "requirement_change": 0.65,
-        "constraint_behavior": 1.0
+        "constraint_behavior": 1.0,
+        "approach_classification": 0.7,
+        "data_flow_selection": 0.5,
+        "source_method_mapping": 0.3,
+        "stage_responsibility": 0.7,
+        "processing_mode": 0.5,
+        "data_grain": 1.0
       }
     },
     {
@@ -653,7 +1485,13 @@
         "code_explain": 0.25,
         "fault_correction": 1.0,
         "requirement_change": 0.9,
-        "constraint_behavior": 1.0
+        "constraint_behavior": 1.0,
+        "approach_classification": 0.4,
+        "data_flow_selection": 0.5,
+        "source_method_mapping": 0.4,
+        "stage_responsibility": 0.4,
+        "processing_mode": 0.4,
+        "data_grain": 0.3
       }
     },
     {
@@ -673,7 +1511,13 @@
         "code_explain": 0.5,
         "fault_correction": 0.9,
         "requirement_change": 0.7,
-        "constraint_behavior": 1.0
+        "constraint_behavior": 1.0,
+        "approach_classification": 0.2,
+        "data_flow_selection": 0.3,
+        "source_method_mapping": 0.2,
+        "stage_responsibility": 0.4,
+        "processing_mode": 0.4,
+        "data_grain": 0.5
       }
     },
     {
@@ -693,7 +1537,13 @@
         "code_explain": 0.6,
         "fault_correction": 0.65,
         "requirement_change": 1.0,
-        "constraint_behavior": 1.0
+        "constraint_behavior": 1.0,
+        "approach_classification": 0.5,
+        "data_flow_selection": 0.4,
+        "source_method_mapping": 0.2,
+        "stage_responsibility": 0.4,
+        "processing_mode": 0.8,
+        "data_grain": 0.4
       }
     },
     {
@@ -713,8 +1563,247 @@
         "code_explain": 0.5,
         "fault_correction": 0.6,
         "requirement_change": 0.9,
-        "constraint_behavior": 0.6
+        "constraint_behavior": 0.6,
+        "approach_classification": 0.4,
+        "data_flow_selection": 0.6,
+        "source_method_mapping": 0.2,
+        "stage_responsibility": 0.8,
+        "processing_mode": 0.5,
+        "data_grain": 0.3
       }
     }
-  ]
+  ],
+  "focus_point_weights": {
+    "architecture": {
+      "component_responsibility": 1.0,
+      "design_decision_change_impact": 0.9,
+      "pipeline_data_flow": 0.7,
+      "package_purpose": 0.5,
+      "cache_materialisation": 0.5,
+      "performance_scalability": 0.5,
+      "persistence_schema_integrity": 0.4
+    },
+    "api": {
+      "external_interface_contract": 1.0,
+      "data_source_acquisition": 0.9,
+      "data_format_schema": 0.6,
+      "integration_entity_matching": 0.6,
+      "failure_recovery": 0.5,
+      "augmentation_enrichment": 0.5,
+      "configuration_security_validation": 0.4
+    },
+    "data_flow": {
+      "pipeline_data_flow": 1.0,
+      "streaming_event_behavior": 0.8,
+      "transformation_aggregation": 0.8,
+      "data_source_acquisition": 0.7,
+      "cache_materialisation": 0.7,
+      "cleaning_missing_values": 0.6,
+      "integration_entity_matching": 0.6,
+      "augmentation_enrichment": 0.5,
+      "persistence_schema_integrity": 0.5
+    },
+    "project_logic": {
+      "function_io_contract": 1.0,
+      "condition_state_behavior": 0.9,
+      "cleaning_missing_values": 0.7,
+      "transformation_aggregation": 0.6,
+      "failure_recovery": 0.6,
+      "component_responsibility": 0.5,
+      "design_decision_change_impact": 0.4
+    },
+    "database": {
+      "persistence_schema_integrity": 1.0,
+      "data_format_schema": 0.8,
+      "integration_entity_matching": 0.7,
+      "transformation_aggregation": 0.6,
+      "cache_materialisation": 0.5,
+      "data_source_acquisition": 0.4
+    },
+    "security": {
+      "configuration_security_validation": 1.0,
+      "failure_recovery": 0.6,
+      "external_interface_contract": 0.5,
+      "persistence_schema_integrity": 0.4
+    },
+    "testing": {
+      "testing_quality_verification": 1.0,
+      "cleaning_missing_values": 0.6,
+      "failure_recovery": 0.6,
+      "function_io_contract": 0.5,
+      "condition_state_behavior": 0.4
+    },
+    "complexity": {
+      "performance_scalability": 1.0,
+      "cache_materialisation": 0.6,
+      "design_decision_change_impact": 0.6,
+      "transformation_aggregation": 0.5,
+      "pipeline_data_flow": 0.4
+    },
+    "oop": {
+      "component_responsibility": 0.9,
+      "function_io_contract": 0.7,
+      "design_decision_change_impact": 0.5,
+      "condition_state_behavior": 0.4
+    }
+  },
+  "point_template_weights": {
+    "package_purpose": {
+      "contextual_use": 1.0,
+      "approach_classification": 0.6,
+      "source_method_mapping": 0.5
+    },
+    "component_responsibility": {
+      "stage_responsibility": 1.0,
+      "interaction_flow": 0.8,
+      "contextual_use": 0.6,
+      "code_explain": 0.5,
+      "approach_classification": 0.4
+    },
+    "function_io_contract": {
+      "code_explain": 1.0,
+      "condition_outcome": 0.7,
+      "constraint_behavior": 0.6,
+      "data_grain": 0.4,
+      "contextual_use": 0.4
+    },
+    "data_source_acquisition": {
+      "source_method_mapping": 1.0,
+      "approach_classification": 0.9,
+      "contextual_use": 0.6,
+      "data_flow_selection": 0.6,
+      "interaction_flow": 0.5
+    },
+    "external_interface_contract": {
+      "contextual_use": 0.9,
+      "source_method_mapping": 0.9,
+      "constraint_behavior": 0.7,
+      "interaction_flow": 0.6,
+      "approach_classification": 0.5
+    },
+    "data_format_schema": {
+      "data_grain": 1.0,
+      "constraint_behavior": 0.7,
+      "code_explain": 0.5,
+      "approach_classification": 0.5
+    },
+    "cleaning_missing_values": {
+      "approach_classification": 1.0,
+      "code_explain": 0.8,
+      "fault_correction": 0.7,
+      "condition_outcome": 0.6,
+      "constraint_behavior": 0.5
+    },
+    "transformation_aggregation": {
+      "data_grain": 0.9,
+      "approach_classification": 0.9,
+      "code_explain": 0.7,
+      "processing_mode": 0.6,
+      "stage_responsibility": 0.5
+    },
+    "integration_entity_matching": {
+      "data_grain": 0.9,
+      "approach_classification": 0.8,
+      "interaction_flow": 0.6,
+      "code_explain": 0.5,
+      "source_method_mapping": 0.5
+    },
+    "augmentation_enrichment": {
+      "approach_classification": 0.9,
+      "data_flow_selection": 0.7,
+      "data_grain": 0.6,
+      "interaction_flow": 0.5,
+      "code_explain": 0.4
+    },
+    "pipeline_data_flow": {
+      "data_flow_selection": 1.0,
+      "stage_responsibility": 0.9,
+      "interaction_flow": 0.8,
+      "processing_mode": 0.5,
+      "approach_classification": 0.4
+    },
+    "persistence_schema_integrity": {
+      "constraint_behavior": 0.9,
+      "data_grain": 0.8,
+      "stage_responsibility": 0.6,
+      "approach_classification": 0.5,
+      "code_explain": 0.4
+    },
+    "cache_materialisation": {
+      "stage_responsibility": 0.9,
+      "data_flow_selection": 0.8,
+      "approach_classification": 0.7,
+      "processing_mode": 0.6,
+      "contextual_use": 0.4
+    },
+    "streaming_event_behavior": {
+      "processing_mode": 1.0,
+      "interaction_flow": 0.8,
+      "data_flow_selection": 0.7,
+      "condition_outcome": 0.5,
+      "stage_responsibility": 0.5
+    },
+    "condition_state_behavior": {
+      "condition_outcome": 1.0,
+      "code_explain": 0.8,
+      "constraint_behavior": 0.6,
+      "fault_correction": 0.5,
+      "processing_mode": 0.4
+    },
+    "failure_recovery": {
+      "fault_correction": 1.0,
+      "condition_outcome": 0.8,
+      "constraint_behavior": 0.6,
+      "code_explain": 0.5,
+      "interaction_flow": 0.4
+    },
+    "configuration_security_validation": {
+      "constraint_behavior": 1.0,
+      "contextual_use": 0.7,
+      "fault_correction": 0.6,
+      "condition_outcome": 0.5,
+      "approach_classification": 0.4
+    },
+    "testing_quality_verification": {
+      "constraint_behavior": 1.0,
+      "fault_correction": 0.8,
+      "approach_classification": 0.6,
+      "code_explain": 0.5,
+      "data_grain": 0.4
+    },
+    "performance_scalability": {
+      "processing_mode": 0.9,
+      "approach_classification": 0.7,
+      "stage_responsibility": 0.6,
+      "data_flow_selection": 0.5,
+      "requirement_change": 0.5
+    },
+    "design_decision_change_impact": {
+      "requirement_change": 1.0,
+      "approach_classification": 0.7,
+      "interaction_flow": 0.6,
+      "stage_responsibility": 0.5,
+      "contextual_use": 0.5
+    }
+  },
+  "framework_template_policy": {
+    "emphasis_fit": {
+      "mostly_concepts": {
+        "none": 1.0,
+        "required": 0.25,
+        "insertion": 0.3
+      },
+      "balanced": {
+        "none": 1.0,
+        "required": 0.8,
+        "insertion": 0.8
+      },
+      "mostly_code": {
+        "none": 0.45,
+        "required": 1.0,
+        "insertion": 0.9
+      }
+    },
+    "notes": "code_mode != 'none' is hard-gated off when allow_code is false (PRD 7.4, AC 9)."
+  }
 }

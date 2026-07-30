@@ -1,6 +1,7 @@
 """Validated assessment catalog for focus-driven Local LLM generation."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import string
@@ -11,13 +12,6 @@ _ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_PATH = _ROOT / "assessment_catalog.json"
 _CATALOG_PATH = Path(os.environ.get("REPOPROOF_ASSESSMENT_CATALOG", str(_DEFAULT_PATH)))
 
-BUILT_IN_STRATEGY_IDS = (
-    "explain",
-    "execution",
-    "prediction",
-    "debugging",
-    "modification",
-)
 SLOT_SOURCES = frozenset({
     "target_or_topic",
     "evidence_entity",
@@ -76,15 +70,6 @@ def _normalize_weights(raw: object, ids: tuple[str, ...], *, owner: str) -> dict
     return weights
 
 
-def _normalize_strategy(raw: dict) -> dict:
-    _required(raw, ("id", "name", "prefix"), "strategy")
-    return {
-        "id": _clean_id(raw["id"], "strategy"),
-        "name": str(raw["name"]).strip(),
-        "prefix": str(raw["prefix"]).strip(),
-    }
-
-
 def _normalize_evidence_type(raw: dict) -> dict:
     _required(raw, ("id", "name", "description"), "evidence type")
     return {
@@ -138,19 +123,76 @@ def _normalize_slot(raw: object, *, owner: str) -> dict:
     }
 
 
-def _normalize_template(raw: dict, strategy_ids: tuple[str, ...],
-                        evidence_ids: tuple[str, ...]) -> dict:
+def _normalize_assessment_point(raw: dict, evidence_ids: tuple[str, ...]) -> dict:
     _required(
         raw,
         (
-            "id", "name", "strategy", "stem_frames", "option_task",
+            "id", "name", "description", "difficulty_range",
+            "difficulty_anchors", "query", "evidence_types",
+        ),
+        "assessment point",
+    )
+    difficulty_range = raw["difficulty_range"]
+    if (
+        not isinstance(difficulty_range, list)
+        or len(difficulty_range) != 2
+        or not all(isinstance(value, int) for value in difficulty_range)
+    ):
+        raise ValueError(
+            f"assessment point {raw['id']!r} difficulty_range must be [min, max]"
+        )
+    minimum, maximum = difficulty_range
+    if not 1 <= minimum <= maximum <= 5:
+        raise ValueError(
+            f"assessment point {raw['id']!r} difficulty_range must stay within 1-5"
+        )
+    anchors = raw["difficulty_anchors"]
+    if not isinstance(anchors, dict):
+        raise ValueError(
+            f"assessment point {raw['id']!r} difficulty_anchors must be an object"
+        )
+    expected_levels = {str(level) for level in range(minimum, maximum + 1)}
+    if set(anchors) != expected_levels:
+        raise ValueError(
+            f"assessment point {raw['id']!r} difficulty_anchors must define "
+            f"exactly levels {sorted(expected_levels)}"
+        )
+    requested = [
+        _clean_id(value, "assessment point evidence type")
+        for value in raw["evidence_types"]
+    ]
+    if not requested:
+        raise ValueError(
+            f"assessment point {raw['id']!r} needs at least one evidence type"
+        )
+    unknown = sorted(set(requested) - set(evidence_ids))
+    if unknown:
+        raise ValueError(
+            f"assessment point {raw['id']!r} references unknown evidence types: {unknown}"
+        )
+    return {
+        "id": _clean_id(raw["id"], "assessment point"),
+        "name": str(raw["name"]).strip(),
+        "description": str(raw["description"]).strip(),
+        "difficulty_range": [minimum, maximum],
+        "difficulty_anchors": {
+            str(level): str(anchors[str(level)]).strip()
+            for level in range(minimum, maximum + 1)
+        },
+        "query": str(raw["query"]).strip(),
+        "evidence_types": list(dict.fromkeys(requested)),
+    }
+
+
+def _normalize_template(raw: dict, evidence_ids: tuple[str, ...]) -> dict:
+    _required(
+        raw,
+        (
+            "id", "name", "reasoning_prompt", "stem_frames", "option_task",
             "slots", "code_mode", "query", "evidence",
         ),
         "template",
     )
-    strategy_id = _clean_id(raw["strategy"], "template strategy")
-    if strategy_id not in strategy_ids:
-        raise ValueError(f"template {raw['id']!r} references unknown strategy {strategy_id!r}")
     frames = [
         str(frame).strip()
         for frame in raw["stem_frames"]
@@ -212,7 +254,7 @@ def _normalize_template(raw: dict, strategy_ids: tuple[str, ...],
     return {
         "id": _clean_id(raw["id"], "template"),
         "name": str(raw["name"]).strip(),
-        "strategy": strategy_id,
+        "reasoning_prompt": str(raw["reasoning_prompt"]).strip(),
         "stem_frames": frames,
         "option_task": str(raw["option_task"]).strip(),
         "slots": slots,
@@ -257,35 +299,31 @@ def _unique(items: list[dict], kind: str) -> None:
 def load_catalog(path: Path | None = None) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
     catalog = path or _catalog_path()
     data = json.loads(catalog.read_text(encoding="utf-8"))
-    raw_strategies = data.get("strategies")
     raw_templates = data.get("templates")
     raw_evidence_types = data.get("evidence_types")
+    raw_assessment_points = data.get("assessment_points")
     raw_topics = data.get("topics")
-    if not isinstance(raw_strategies, list):
-        raise ValueError(f"{catalog} must contain a 'strategies' list")
     if not isinstance(raw_templates, list) or not raw_templates:
         raise ValueError(f"{catalog} must contain a non-empty 'templates' list")
     if not isinstance(raw_evidence_types, list) or not raw_evidence_types:
         raise ValueError(f"{catalog} must contain a non-empty 'evidence_types' list")
+    if not isinstance(raw_assessment_points, list) or not raw_assessment_points:
+        raise ValueError(f"{catalog} must contain a non-empty 'assessment_points' list")
     if not isinstance(raw_topics, list) or not raw_topics:
         raise ValueError(f"{catalog} must contain a non-empty 'topics' list")
-
-    strategies = [_normalize_strategy(item) for item in raw_strategies]
-    _unique(strategies, "strategy")
-    strategy_ids = tuple(item["id"] for item in strategies)
-    if set(strategy_ids) != set(BUILT_IN_STRATEGY_IDS):
-        raise ValueError(
-            "catalog strategies must contain exactly: " + ", ".join(BUILT_IN_STRATEGY_IDS)
-        )
-    by_strategy_id = {item["id"]: item for item in strategies}
-    strategies = [by_strategy_id[strategy_id] for strategy_id in BUILT_IN_STRATEGY_IDS]
 
     evidence_types = [_normalize_evidence_type(item) for item in raw_evidence_types]
     _unique(evidence_types, "evidence type")
     evidence_ids = tuple(item["id"] for item in evidence_types)
 
+    assessment_points = [
+        _normalize_assessment_point(item, evidence_ids)
+        for item in raw_assessment_points
+    ]
+    _unique(assessment_points, "assessment point")
+
     templates = [
-        _normalize_template(item, strategy_ids, evidence_ids) for item in raw_templates
+        _normalize_template(item, evidence_ids) for item in raw_templates
     ]
     _unique(templates, "template")
     template_ids = tuple(item["id"] for item in templates)
@@ -294,14 +332,136 @@ def load_catalog(path: Path | None = None) -> tuple[list[dict], list[dict], list
         _normalize_topic(item, evidence_ids, template_ids) for item in raw_topics
     ]
     _unique(topics, "topic")
-    return strategies, templates, evidence_types, topics
+
+    point_ids = tuple(item["id"] for item in assessment_points)
+    topic_ids = tuple(item["id"] for item in topics)
+    focus_point = _normalize_matrix(
+        data.get("focus_point_weights"), topic_ids, point_ids,
+        owner="focus_point_weights", row_kind="focus", col_kind="assessment point")
+    point_template = _normalize_matrix(
+        data.get("point_template_weights"), point_ids, template_ids,
+        owner="point_template_weights", row_kind="assessment point", col_kind="template")
+    policy = _normalize_framework_policy(data.get("framework_template_policy"))
+    return (templates, evidence_types, assessment_points, topics,
+            focus_point, point_template, policy)
 
 
-STRATEGIES, TEMPLATES, EVIDENCE_TYPES, TOPICS = load_catalog()
-STRATEGY_BY_ID = {item["id"]: item for item in STRATEGIES}
+def _normalize_matrix(raw: object, row_ids: tuple[str, ...], col_ids: tuple[str, ...],
+                      *, owner: str, row_kind: str, col_kind: str) -> dict[str, dict[str, float]]:
+    """Validate a sparse compatibility matrix.
+
+    Unknown row/column IDs fail startup (PRD AC 3). Missing entries are simply
+    absent and are read as 0.0 by the accessors below — 0.0 means "prohibited",
+    not "low score" (PRD 7.5).
+    """
+    if raw is None:
+        raise ValueError(f"catalog must contain '{owner}'")
+    if not isinstance(raw, dict):
+        raise ValueError(f"'{owner}' must be an object")
+    rows, cols = set(row_ids), set(col_ids)
+    out: dict[str, dict[str, float]] = {}
+    for row_id, row in raw.items():
+        if row_id not in rows:
+            raise ValueError(f"'{owner}' has unknown {row_kind} id {row_id!r}")
+        if not isinstance(row, dict):
+            raise ValueError(f"'{owner}[{row_id}]' must be an object")
+        clean: dict[str, float] = {}
+        for col_id, weight in row.items():
+            if col_id not in cols:
+                raise ValueError(f"'{owner}[{row_id}]' has unknown {col_kind} id {col_id!r}")
+            try:
+                value = float(weight)
+            except (TypeError, ValueError):
+                raise ValueError(f"'{owner}[{row_id}][{col_id}]' must be a number") from None
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"'{owner}[{row_id}][{col_id}]' must be within 0.0-1.0")
+            if value > 0:
+                clean[col_id] = value
+        out[row_id] = clean
+    return out
+
+
+def _normalize_framework_policy(raw: object) -> dict:
+    """Validate the Framework x Template emphasis policy (PRD 5.1)."""
+    if not isinstance(raw, dict):
+        raise ValueError("catalog must contain 'framework_template_policy'")
+    fit = raw.get("emphasis_fit")
+    if not isinstance(fit, dict) or not fit:
+        raise ValueError("'framework_template_policy.emphasis_fit' must be a non-empty object")
+    out: dict[str, dict[str, float]] = {}
+    for emphasis, modes in fit.items():
+        if not isinstance(modes, dict):
+            raise ValueError(f"emphasis_fit[{emphasis!r}] must be an object")
+        clean: dict[str, float] = {}
+        for mode, weight in modes.items():
+            if mode not in CODE_MODES:
+                raise ValueError(f"emphasis_fit[{emphasis!r}] has unknown code mode {mode!r}")
+            value = float(weight)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"emphasis_fit[{emphasis!r}][{mode!r}] must be within 0.0-1.0")
+            clean[mode] = value
+        missing = CODE_MODES - set(clean)
+        if missing:
+            raise ValueError(f"emphasis_fit[{emphasis!r}] missing code modes {sorted(missing)}")
+        out[emphasis] = clean
+    return {"emphasis_fit": out}
+
+
+(TEMPLATES, EVIDENCE_TYPES, ASSESSMENT_POINTS, TOPICS,
+ FOCUS_POINT_WEIGHTS, POINT_TEMPLATE_WEIGHTS, FRAMEWORK_TEMPLATE_POLICY) = load_catalog()
 TEMPLATE_BY_ID = {item["id"]: item for item in TEMPLATES}
 EVIDENCE_TYPE_BY_ID = {item["id"]: item for item in EVIDENCE_TYPES}
+ASSESSMENT_POINT_BY_ID = {item["id"]: item for item in ASSESSMENT_POINTS}
 TOPIC_BY_ID = {item["id"]: item for item in TOPICS}
+EMPHASIS_MODES = tuple(FRAMEWORK_TEMPLATE_POLICY["emphasis_fit"])
+
+
+def focus_point_fit(focus_id: str, point_id: str) -> float:
+    """Focus x Assessment Point compatibility. 0.0 = not part of this Focus."""
+    return FOCUS_POINT_WEIGHTS.get(focus_id, {}).get(point_id, 0.0)
+
+
+def point_template_fit(point_id: str, template_id: str) -> float:
+    """Assessment Point x Template compatibility. 0.0 = must not be used."""
+    return POINT_TEMPLATE_WEIGHTS.get(point_id, {}).get(template_id, 0.0)
+
+
+def framework_template_fit(template: dict, *, emphasis: str = "balanced",
+                           allow_code: bool = True) -> float:
+    """Framework x Template fit.
+
+    Returns 0.0 (a hard prohibition) when the template needs code but the
+    framework disallows it — AC 9. Otherwise scores the emphasis preference.
+    """
+    mode = template.get("code_mode", "none")
+    if not allow_code and mode != "none":
+        return 0.0
+    table = FRAMEWORK_TEMPLATE_POLICY["emphasis_fit"]
+    return table.get(emphasis, table.get("balanced", {})).get(mode, 0.0)
+
+
+def catalog_hash() -> str:
+    """Stable hash of the planning-relevant catalog, for freezing blueprints.
+
+    A change here must invalidate an unconfirmed preview (PRD 10.4).
+    """
+    payload = {
+        "templates": [
+            {"id": t["id"], "code_mode": t.get("code_mode", "none")} for t in TEMPLATES
+        ],
+        "evidence_types": [e["id"] for e in EVIDENCE_TYPES],
+        "assessment_points": [
+            {"id": p["id"], "difficulty_range": p.get("difficulty_range"),
+             "evidence_types": p.get("evidence_types")}
+            for p in ASSESSMENT_POINTS
+        ],
+        "topics": [t["id"] for t in TOPICS],
+        "focus_point_weights": FOCUS_POINT_WEIGHTS,
+        "point_template_weights": POINT_TEMPLATE_WEIGHTS,
+        "framework_template_policy": FRAMEWORK_TEMPLATE_POLICY,
+    }
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def weighted_template_schedule(topic: dict, count: int,
