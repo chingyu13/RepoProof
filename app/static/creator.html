@@ -39,6 +39,23 @@ header h1{font-size:1.15rem;margin:0;font-weight:600}
 .step-back:hover{background:var(--card);color:var(--ink)}
 .step-back svg{width:22px;height:22px;display:block;stroke:currentColor}
 .card{background:var(--card);border:3px solid var(--card-border);border-radius:10px;padding:1.4rem 1.6rem;box-shadow:var(--shadow);position:relative}
+/* blueprint preview (Step 2): plot + accessible table + unsupported list */
+.bp-h{font-size:.95rem;font-weight:600;color:var(--heading);margin:1.1rem 0 .3rem}
+.bp-plot-wrap{background:var(--input-bg);border:2px solid var(--input-border);border-radius:5px;padding:.5rem;overflow-x:auto}
+#bpPlot{width:100%;min-width:520px;height:250px;display:block}
+#bpPlot .axis{stroke:var(--chip-strong);stroke-width:1}
+#bpPlot .grid{stroke:var(--line);stroke-width:1}
+#bpPlot text{fill:var(--muted);font-size:10px}
+#bpPlot .band{stroke-width:3;stroke-linecap:round;opacity:.55}
+.bp-legend{display:flex;flex-wrap:wrap;gap:.5rem;margin:.45rem 0 .2rem;font-size:.78rem;color:var(--muted)}
+.bp-legend span{display:flex;align-items:center;gap:.3rem}
+.bp-legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.bp-table{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:.7rem;table-layout:fixed}
+.bp-table caption{text-align:left;margin-bottom:.35rem}
+.bp-table th,.bp-table td{border-bottom:1px solid var(--line);padding:.35rem .4rem;text-align:left;vertical-align:top;word-break:break-word}
+.bp-table th{color:var(--heading);font-weight:600}
+.bp-table tr.dropped{opacity:.45;text-decoration:line-through}
+.bp-drop{background:transparent;border:1px solid var(--input-border);color:var(--muted);border-radius:3px;padding:.1rem .35rem;font-size:.72rem;cursor:pointer}
 .gen-overlay{position:absolute;inset:0;background:rgba(255,255,255,.5);backdrop-filter:blur(1.5px);border-radius:16px;
   display:flex;flex-direction:column;gap:.9rem;align-items:center;justify-content:center;z-index:5}
 [data-theme="dark"] .gen-overlay{background:rgba(22,22,24,.5)}
@@ -310,7 +327,22 @@ a{color:var(--accent)}
     <div id="gExactWrap"><label>Exact correct</label><input type="number" id="gExact" value="1" min="1"></div>
     <div id="gRangeWrap" class="hidden"><label>Range (min–max)</label>
       <div style="display:flex;gap:.3rem"><input type="number" id="gMin" value="1" min="1"><input type="number" id="gMax" value="3" min="1"></div></div>
-    <div><label>Difficulty (1–5)</label><input type="number" id="gDiff" value="3" min="1" max="5"></div>
+    <div><label>Target difficulty (min–max)</label>
+      <div style="display:flex;gap:.3rem">
+        <input type="number" id="gDiffMin" value="1" min="1" max="5" aria-label="Minimum target difficulty">
+        <input type="number" id="gDiffMax" value="4" min="1" max="5" aria-label="Maximum target difficulty">
+      </div></div>
+    <div><label>Question emphasis</label>
+      <select id="gEmphasis">
+        <option value="mostly_concepts">Mostly concepts</option>
+        <option value="balanced" selected>Balanced</option>
+        <option value="mostly_code">Mostly code</option>
+      </select></div>
+    <div><label>Show code in questions</label>
+      <select id="gAllowCode">
+        <option value="1" selected>Allowed</option>
+        <option value="0">Not allowed</option>
+      </select></div>
     <div><label>LLM model</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
   <p class="small" id="providerNote"></p>
@@ -327,8 +359,48 @@ a{color:var(--accent)}
   </div>
   <label>Extra instructions (optional — e.g. "recursion, testing; don't ask about deployment")</label>
   <input type="text" id="gFocus">
-  <p style="margin-top:.8rem"><button id="generate">Generate questions</button> <span class="small" id="genStatus"></span></p>
-  <p class="err" id="genErr"></p>
+  <p style="margin-top:.8rem">
+    <button id="previewPlan">Preview question plan</button>
+    <span class="small" id="planStatus"></span>
+  </p>
+  <p class="err" id="planErr"></p>
+
+  <div id="blueprint" class="hidden">
+    <h3 class="bp-h">Requested</h3>
+    <p class="small" id="bpRequested"></p>
+
+    <h3 class="bp-h">Planned coverage</h3>
+    <p class="small">Assessment Point (x) against expected difficulty (y). One mark per planned
+      question; colour shows the Template. Nothing has been generated yet.</p>
+    <div class="bp-plot-wrap"><svg id="bpPlot" role="img" aria-label="Planned questions by assessment point and expected difficulty"></svg></div>
+    <div id="bpLegend" class="bp-legend"></div>
+
+    <table class="bp-table" id="bpTable">
+      <caption class="small">Every planned question, with the evidence and reason it was selected.</caption>
+      <thead><tr>
+        <th scope="col">#</th><th scope="col">Assessment Point</th>
+        <th scope="col">Expected difficulty</th><th scope="col">Template</th>
+        <th scope="col">Focus</th><th scope="col">Planned subject</th>
+        <th scope="col">Evidence</th><th scope="col">Reason selected</th><th scope="col"></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="bpUnsupportedWrap" class="hidden">
+      <h3 class="bp-h">Unsupported</h3>
+      <p class="small">High-weight Assessment Points with no valid Template, variable binding, or
+        project evidence. These will not be tested.</p>
+      <ul class="small" id="bpUnsupported"></ul>
+    </div>
+
+    <p class="small" id="bpWarnings"></p>
+    <p style="margin-top:.8rem">
+      <button id="generate">Generate <span id="genCount">5</span> questions</button>
+      <button class="secondary" id="rebuildPlan" type="button">Rebuild preview</button>
+      <span class="small" id="genStatus"></span>
+    </p>
+    <p class="err" id="genErr"></p>
+  </div>
 </div>
 </section>
 
@@ -903,29 +975,153 @@ async function waitForGeneration(runId){
   }
 }
 
+// --- Step 2 blueprint preview -------------------------------------------
+// The framework never generates directly any more: the creator previews a
+// deterministic plan (no LLM), optionally drops assessment points, then
+// confirms. Generation runs from the frozen slots.
+let currentPlan = null;
+const excludedPoints = new Set();
+
+function frameworkConfig(){
+  return {
+    num_questions:+$('gNum').value, choice_count:+$('gChoices').value,
+    correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
+    correct_min:+$('gMin').value, correct_max:+$('gMax').value,
+    difficulty_min:+$('gDiffMin').value, difficulty_max:+$('gDiffMax').value,
+    question_emphasis:$('gEmphasis').value,
+    allow_code:$('gAllowCode').value === '1',
+    excluded_assessment_points:[...excludedPoints],
+    focus:$('gFocus').value,
+    focus_areas: areas.filter(area=>area.w > 0).map(area=>({
+      id:area.id, name:(topicById(area.id)||{}).name || area.id, weight:area.w})),
+    ...selectedLlm()
+  };
+}
+
+function contextForm(cfg){
+  const form = new FormData();
+  form.append('config_json', JSON.stringify(cfg));
+  form.append('assumed_knowledge', $('assumedKnowledge').value);
+  form.append('project_scope', $('projectScope').value);
+  priorContextFiles.forEach(file=>form.append('prior_files', file));
+  scopeContextFiles.forEach(file=>form.append('scope_files', file));
+  return form;
+}
+
+const BP_COLORS = ['#626262','#2E6F8E','#7a5ea8','#a8683c','#3f7a5a','#8a4a63','#4a5b8a','#7a7a3c'];
+
+function renderPlanPlot(plan){
+  const svg = $('bpPlot'), marks = plan.plot || [];
+  const W = 720, H = 250, L = 46, R = 14, T = 14, B = 74;
+  const points = [...new Set(marks.map(m=>m.assessment_point_id))];
+  const templates = [...new Set(marks.map(m=>m.template_id))];
+  const colorOf = id => BP_COLORS[templates.indexOf(id) % BP_COLORS.length];
+  const xOf = i => L + (points.length === 1 ? (W-L-R)/2 : i * (W-L-R)/(points.length-1));
+  const yOf = d => H - B - ((d-1)/4) * (H-T-B);
+  let out = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"></svg>`;
+  let g = '';
+  for (let d=1; d<=5; d++){
+    g += `<line class="grid" x1="${L}" y1="${yOf(d)}" x2="${W-R}" y2="${yOf(d)}"/>`
+       + `<text x="${L-8}" y="${yOf(d)+3}" text-anchor="end">${d}</text>`;
+  }
+  g += `<line class="axis" x1="${L}" y1="${T}" x2="${L}" y2="${H-B}"/>`
+     + `<line class="axis" x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}"/>`;
+  points.forEach((pid, i)=>{
+    const label = (plan.catalog?.assessment_points || {})[pid] || pid;
+    const words = label.split(/[\s/]+/).slice(0,3);
+    g += words.map((w, k)=>
+      `<text x="${xOf(i)}" y="${H-B+14+k*11}" text-anchor="middle">${esc(w)}</text>`).join('');
+  });
+  marks.forEach(m=>{
+    const i = points.indexOf(m.assessment_point_id), c = colorOf(m.template_id);
+    const lo = yOf(m.y_min), hi = yOf(m.y_max);
+    const jitter = (marks.filter(o=>o.assessment_point_id===m.assessment_point_id)
+      .indexOf(m)) * 7;
+    const x = xOf(i) + jitter;
+    g += `<line class="band" x1="${x}" y1="${lo}" x2="${x}" y2="${hi}" stroke="${c}"/>`
+       + `<circle cx="${x}" cy="${hi}" r="4.5" fill="${c}"><title>Q${m.index+1}: `
+       + `${esc(m.assessment_point)} · ${esc(m.template)} · difficulty ${m.y_min}–${m.y_max}</title></circle>`;
+  });
+  svg.innerHTML = g;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  $('bpLegend').innerHTML = templates.map(t=>
+    `<span><i style="background:${colorOf(t)}"></i>${esc((plan.catalog?.templates||{})[t]||t)}</span>`
+  ).join('');
+}
+
+function renderPlanTable(plan){
+  const body = $('bpTable').querySelector('tbody');
+  const focusName = id => (plan.catalog?.focus || {})[id] || id;
+  body.innerHTML = (plan.planned || []).map(s=>{
+    const d = s.expected_difficulty || {};
+    const secondary = (s.secondary_focus_ids || []).map(focusName).join(', ');
+    return `<tr>
+      <td>${s.index + 1}</td>
+      <td>${esc((plan.catalog?.assessment_points||{})[s.assessment_point_id] || s.assessment_point_id)}</td>
+      <td>${d.min === d.max ? d.min : `${d.min}–${d.max}`}</td>
+      <td>${esc((plan.catalog?.templates||{})[s.template_id] || s.template_id)}</td>
+      <td>${esc(focusName(s.primary_focus_id))}${secondary ? `<br><span class="small">+ ${esc(secondary)}</span>` : ''}</td>
+      <td>${esc(s.subject || '—')}</td>
+      <td>Ready, ${(s.evidence_ids||[]).length} chunk(s)</td>
+      <td>${esc(s.reason_selected || '')}</td>
+      <td><button class="bp-drop" type="button" data-drop="${esc(s.assessment_point_id)}"
+            title="Exclude this Assessment Point and rebuild">exclude</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="9">No evidence-supported plans.</td></tr>';
+  body.querySelectorAll('[data-drop]').forEach(btn=>{
+    btn.onclick = async ()=>{ excludedPoints.add(btn.dataset.drop); await buildPlan(); };
+  });
+}
+
+function renderPlan(plan){
+  currentPlan = plan;
+  const r = plan.requested || {};
+  const focusList = (r.focus_areas || []).map(f=>`${f.name || f.id} ${f.weight}`).join(' · ');
+  const emphasis = {mostly_concepts:'Mostly concepts', balanced:'Balanced', mostly_code:'Mostly code'}[r.question_emphasis] || r.question_emphasis;
+  $('bpRequested').textContent =
+    `${r.num_questions} questions · difficulty ${r.difficulty_min}–${r.difficulty_max} · ${emphasis}`
+    + ` · code ${r.allow_code ? 'allowed' : 'not allowed'} · Focus: ${focusList}`
+    + (excludedPoints.size ? ` · excluded: ${[...excludedPoints].length}` : '');
+  renderPlanPlot(plan);
+  renderPlanTable(plan);
+  const un = plan.unsupported || [];
+  $('bpUnsupportedWrap').classList.toggle('hidden', !un.length);
+  $('bpUnsupported').innerHTML = un.map(u=>
+    `<li>${esc(u.name)} (weight ${u.weight}) — ${esc(u.reason)}</li>`).join('');
+  $('bpWarnings').textContent = (plan.warnings || []).join(' · ');
+  $('genCount').textContent = (plan.planned || []).length || 0;
+  $('generate').disabled = !(plan.planned || []).length;
+  $('blueprint').classList.remove('hidden');
+}
+
+async function buildPlan(){
+  $('planErr').textContent = ''; $('planStatus').textContent = 'Planning…';
+  $('previewPlan').disabled = true;
+  try {
+    const plan = await api(`/api/projects/${currentProject}/question-plans`, {
+      method:'POST', body:contextForm(frameworkConfig())});
+    renderPlan(plan);
+    $('planStatus').textContent =
+      `Planned ${(plan.planned||[]).length} question(s) — no model calls yet.`;
+  } catch(e){ $('planErr').textContent = e.message; $('planStatus').textContent = ''; }
+  $('previewPlan').disabled = false;
+}
+
+$('previewPlan').onclick = ()=>{ excludedPoints.clear(); return buildPlan(); };
+$('rebuildPlan').onclick = ()=>{ excludedPoints.clear(); return buildPlan(); };
+
 $('generate').onclick = async ()=>{
   $('genErr').textContent=''; $('genStatus').textContent='Generating…';
   $('generate').disabled = true;
   $('genStage').textContent = 'Preparing generation';
-  $('genProgress').textContent = 'Submitting the question framework.';
+  $('genProgress').textContent = 'Confirming the question plan.';
   $('genAlignment').textContent = '';
   $('genOverlay').classList.remove('hidden');
   try {
-    const cfg = {
-      num_questions:+$('gNum').value, choice_count:+$('gChoices').value,
-      correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
-      correct_min:+$('gMin').value, correct_max:+$('gMax').value,
-      difficulty:+$('gDiff').value, focus:$('gFocus').value,
-      focus_areas: areas.filter(area=>area.w > 0).map(area=>({
-        id:area.id, name:(topicById(area.id)||{}).name || area.id, weight:area.w})),
-      ...selectedLlm()
-    };
-    const form = new FormData();
-    form.append('config_json', JSON.stringify(cfg));
-    form.append('assumed_knowledge', $('assumedKnowledge').value);
-    form.append('project_scope', $('projectScope').value);
-    priorContextFiles.forEach(file=>form.append('prior_files', file));
-    scopeContextFiles.forEach(file=>form.append('scope_files', file));
+    if (!currentPlan) throw new Error('Preview a question plan first.');
+    await api(`/api/question-plans/${currentPlan.id}/confirm`, {method:'POST'});
+    const cfg = {...frameworkConfig(), question_plan_id: currentPlan.id};
+    const form = contextForm(cfg);
     const started = await api(`/api/projects/${currentProject}/generation-runs`, {
       method:'POST', body:form
     });
@@ -1091,7 +1287,11 @@ $('publish').onclick = async ()=>{
                               num_questions:+$('gNum').value, choice_count:+$('gChoices').value,
                               correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
                               correct_min:+$('gMin').value, correct_max:+$('gMax').value,
-                              difficulty:+$('gDiff').value, focus:$('gFocus').value,
+                              difficulty_min:+$('gDiffMin').value,
+                              difficulty_max:+$('gDiffMax').value,
+                              question_emphasis:$('gEmphasis').value,
+                              allow_code:$('gAllowCode').value === '1',
+                              focus:$('gFocus').value,
                               ...selectedLlm(),
                               assumed_knowledge:$('assumedKnowledge').value,
                               project_scope:$('projectScope').value,
@@ -1133,7 +1333,15 @@ function frameworkSummary(fw){
     ? `exact ${fw.correct_exact} correct`
     : `dynamic ${fw.correct_min}–${fw.correct_max} correct`;
   const areas = (fw.focus_areas || []).map(area=>`${area.name || area.id} ${area.weight}`).join(', ') || '—';
-  return `${fw.num_questions} questions · ${fw.choice_count} options · ${cc} · difficulty ${fw.difficulty}`
+  // Older snapshots stored a single `difficulty`; newer ones store a range.
+  const diff = fw.difficulty_min != null
+    ? `difficulty ${fw.difficulty_min}–${fw.difficulty_max}`
+    : `difficulty ${fw.difficulty}`;
+  const emphasis = fw.question_emphasis
+    ? ` · ${ {mostly_concepts:'mostly concepts', balanced:'balanced', mostly_code:'mostly code'}[fw.question_emphasis] || fw.question_emphasis }`
+    : '';
+  return `${fw.num_questions} questions · ${fw.choice_count} options · ${cc} · ${diff}${emphasis}`
+    + (fw.allow_code === false ? ' · no code shown' : '')
     + ` · provider: ${fw.model || fw.provider || 'default'}`
     + `\nFocus areas: ${areas}`
     + (fw.assumed_knowledge ? `\nAssumed prior knowledge: ${fw.assumed_knowledge}` : '')
