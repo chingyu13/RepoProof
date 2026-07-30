@@ -12,7 +12,6 @@ from .question_planner import (
     template_bundle,
 )
 from .assessment_catalog import (
-    STRATEGY_BY_ID,
     TEMPLATE_BY_ID,
     TOPIC_BY_ID,
     weighted_template_schedule,
@@ -197,7 +196,7 @@ OPTION TASK:
 {slot['option_task']}
 
 REASONING:
-{slot['strategy_prefix']}
+{slot['reasoning_prompt']}
 
 FRAMEWORK:
 - difficulty {difficulty}/5;
@@ -1049,8 +1048,14 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
 
     schedules: dict[str, list[dict]] = {}
     for topic, _ in available_focus_topics:
+        # A low-weight Focus can be allocated zero slots by the proportional
+        # schedule, so it never appears in topic_seq/topic_counts. Read the count
+        # defensively and skip scheduling for those topics.
+        count = topic_counts.get(topic["id"], 0)
+        if count <= 0:
+            continue
         schedules[topic["id"]] = weighted_template_schedule(
-            topic, topic_counts[topic["id"]], set(availability[topic["id"]])
+            topic, count, set(availability.get(topic["id"], []))
         )
 
     tasks = []
@@ -1122,8 +1127,6 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
         template, start, (plan, evidence), candidates = chosen
         pair_occurrences[(topic["id"], template["id"])] = start + 1
         used_plan_keys.add(plan["plan_key"])
-        strategy = STRATEGY_BY_ID[template["strategy"]]
-
         slot_variants = []
         usable_evidence_variants = []
         for variant_plan, variant_evidence in candidates:
@@ -1134,7 +1137,7 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
             slot_variants.append({
                 "slot": f"{topic['id']}:{template['id']}",
                 "focus": topic["name"],
-                "strategy_prefix": strategy["prefix"],
+                "reasoning_prompt": template["reasoning_prompt"],
                 "template_id": template["id"],
                 "template_name": template["name"],
                 "option_task": template["option_task"],

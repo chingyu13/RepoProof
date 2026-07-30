@@ -10,6 +10,7 @@ from app.generator import (
 )
 from app.knowledge import EvidenceStore
 from app.assessment_catalog import (
+    ASSESSMENT_POINTS,
     TEMPLATES,
     TEMPLATE_BY_ID,
     TOPIC_BY_ID,
@@ -123,13 +124,28 @@ class LocalGenerationTests(unittest.TestCase):
             for template in weighted_template_schedule(TOPIC_BY_ID["architecture"], 5)
         ]
         self.assertEqual(architecture[0], "interaction_flow")
-        self.assertEqual(set(architecture), {"interaction_flow"})
+        self.assertTrue({
+            "data_flow_selection",
+            "stage_responsibility",
+        }.issubset(architecture))
         self.assertNotIn("code_explain", architecture)
 
     def test_catalog_uses_reusable_reasoning_templates_with_typed_slots(self):
-        self.assertEqual(len(TEMPLATES), 7)
+        self.assertEqual(len(TEMPLATES), 13)
         self.assertTrue(all(template["slots"] for template in TEMPLATES))
+        self.assertTrue(all(template["reasoning_prompt"] for template in TEMPLATES))
+        self.assertTrue(all("strategy" not in template for template in TEMPLATES))
         self.assertTrue(all("pattern" not in template for template in TEMPLATES))
+
+    def test_catalog_defines_difficulty_anchored_assessment_points(self):
+        self.assertEqual(len(ASSESSMENT_POINTS), 20)
+        for point in ASSESSMENT_POINTS:
+            minimum, maximum = point["difficulty_range"]
+            self.assertEqual(
+                set(point["difficulty_anchors"]),
+                {str(level) for level in range(minimum, maximum + 1)},
+            )
+            self.assertTrue(point["evidence_types"])
 
     def test_template_bundle_uses_required_evidence(self):
         store = EvidenceStore(CHUNKS)
@@ -164,6 +180,31 @@ class LocalGenerationTests(unittest.TestCase):
                 for item in evidence
             )
         )
+
+    def test_concept_templates_build_no_code_question_plans(self):
+        cases = (
+            ("approach_classification", "api"),
+            ("data_flow_selection", "architecture"),
+            ("source_method_mapping", "api"),
+            ("stage_responsibility", "data_flow"),
+            ("processing_mode", "data_flow"),
+            ("data_grain", "database"),
+        )
+        store = EvidenceStore(CHUNKS)
+        for template_id, topic_id in cases:
+            with self.subTest(template=template_id):
+                template = TEMPLATE_BY_ID[template_id]
+                evidence, missing = template_bundle(
+                    store, TOPIC_BY_ID[topic_id], template, ""
+                )
+                self.assertFalse(missing)
+                plan, problem = render_question_plan(
+                    template, TOPIC_BY_ID[topic_id], None, evidence
+                )
+                self.assertFalse(problem)
+                self.assertTrue(plan["rendered_stem"])
+                self.assertEqual(plan["code_mode"], "none")
+                self.assertNotIn("display_code", plan)
 
     def test_condition_outcome_injects_the_cited_condition_branch(self):
         evidence, missing = template_bundle(
@@ -240,7 +281,7 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertIn("MQTT acquisition", plan["rendered_stem"])
         self.assertRegex(plan["rendered_stem"], r"`[^`]+`")
 
-    def test_only_contextual_use_displays_a_compact_target_context(self):
+    def test_only_context_templates_display_a_compact_target_context(self):
         noisy_targets = [
             {
                 "label": (
@@ -269,7 +310,7 @@ class LocalGenerationTests(unittest.TestCase):
         )
         for template in TEMPLATES:
             frames = " ".join(template["stem_frames"])
-            if template["id"] == "contextual_use":
+            if template["id"] in {"contextual_use", "approach_classification"}:
                 self.assertIn("{context}", frames)
             else:
                 self.assertNotIn("{context}", frames, template["id"])
@@ -293,7 +334,7 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertFalse(problem)
         self.assertEqual(
             code_plan["rendered_stem"],
-            "Which statement correctly describes the complete effect of the shown code?",
+            "Which statement correctly describes what the code below does?",
         )
         self.assertNotIn("25 points", code_plan["rendered_stem"])
 
@@ -323,8 +364,7 @@ class LocalGenerationTests(unittest.TestCase):
             random.Random(42),
         )
         self.assertEqual(len(tasks), 1, warnings)
-        self.assertEqual(tasks[0]["slot"]["template_id"], "contextual_use")
-        self.assertIn("MQTT acquisition", tasks[0]["slot"]["rendered_stem"])
+        self.assertEqual(tasks[0]["slot"]["template_id"], "source_method_mapping")
         self.assertIn("publish", tasks[0]["slot"]["rendered_stem"])
 
     def test_focus_weights_allocate_question_topics(self):
@@ -345,7 +385,7 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertEqual(focuses.count("Architecture"), 4)
         self.assertEqual(focuses.count("Implementation / Code Logic"), 2)
 
-    def test_architecture_rotates_relationships_and_frames_before_inference(self):
+    def test_architecture_uses_distinct_concept_plans_before_inference(self):
         tasks, warnings = _catalog_tasks(
             EvidenceStore(CHUNKS),
             {
@@ -360,8 +400,18 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertEqual(len(tasks), 5, warnings)
         stems = [task["slot"]["rendered_stem"] for task in tasks]
         self.assertEqual(len(set(stems)), 5)
+        self.assertGreaterEqual(
+            len({task["slot"]["template_id"] for task in tasks}),
+            4,
+        )
         self.assertTrue(all(
-            task["slot"]["template_id"] == "interaction_flow"
+            task["slot"]["template_id"] in {
+                "interaction_flow",
+                "data_flow_selection",
+                "stage_responsibility",
+                "approach_classification",
+                "processing_mode",
+            }
             for task in tasks
         ))
 

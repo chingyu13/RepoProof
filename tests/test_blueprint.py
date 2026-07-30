@@ -221,3 +221,26 @@ def test_plot_series_has_axes(store):
     for mark in blueprint.plot_points(bp["planned"]):
         assert mark["assessment_point"] and mark["template"]
         assert mark["y_min"] is not None and mark["y_max"] is not None
+
+
+# --- regression: a zero-slot Focus must not crash catalog scheduling ---------
+
+def test_low_weight_focus_allocated_zero_slots_does_not_crash(store):
+    """A low-weight Focus can receive zero slots from the proportional
+    schedule, so it never enters topic_counts. Scheduling must skip it rather
+    than KeyError on the topic id (regression: KeyError 'project_logic')."""
+    import random
+
+    from app.assessment_catalog import TOPIC_BY_ID
+    from app.generator import _catalog_tasks, _proportional_schedule
+
+    weights = [("architecture", 4), ("api", 3), ("data_flow", 5),
+               ("database", 3), ("testing", 3), ("project_logic", 2)]
+    items = [(TOPIC_BY_ID[i], w) for i, w in weights]
+    allocated = {t["id"] for t in _proportional_schedule(items, 5)}
+    assert {i["id"] for i, _ in items} - allocated, "fixture must leave a Focus unallocated"
+
+    cfg = {"focus_areas": [{"id": i, "weight": w} for i, w in weights],
+           "assessment_targets": []}
+    tasks, _warnings = _catalog_tasks(store, cfg, 5, random.Random(1))
+    assert isinstance(tasks, list)
