@@ -1,11 +1,7 @@
 """Phase-2 tests for evidence-based blueprint planning (PRD §13 AC 4-13, 16-17)."""
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
-
-os.environ.setdefault("REPOPROOF_WORK_DIR", tempfile.mkdtemp())
 
 from app import analyzer, blueprint, knowledge          # noqa: E402
 from app.assessment_catalog import TEMPLATE_BY_ID       # noqa: E402

@@ -1,12 +1,8 @@
 """Tests for model question confidence (ERD_QUESTION_CONFIDENCE §7)."""
 import json
-import os
 import sqlite3
-import tempfile
 
 import pytest
-
-os.environ.setdefault("REPOPROOF_WORK_DIR", tempfile.mkdtemp())
 
 from fastapi.testclient import TestClient          # noqa: E402
 
@@ -95,7 +91,7 @@ def test_clean_confidence(value, expected):
 
 
 def test_invalid_confidence_is_not_defaulted():
-    """AC 3/§3: never invent a score the model did not give."""
+    """Invalid advisory metadata stays absent; it never invents a score."""
     assert _clean_confidence("nonsense") is None
     assert _clean_confidence(99) is None
 

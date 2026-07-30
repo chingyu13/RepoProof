@@ -868,9 +868,25 @@ class LocalGenerationTests(unittest.TestCase):
         self.assertEqual(len(questions), 1, warnings)
         self.assertEqual(call.call_count, 2)
         self.assertEqual(questions[0]["difficulty"], 4)
+        self.assertIsNone(questions[0]["confidence"])
         self.assertEqual(cfg["_generation_metrics"]["validation_failures"], 1)
         self.assertEqual(cfg["_generation_metrics"]["repair_calls"], 1)
         self.assertEqual(cfg["_generation_metrics"]["accepted_after_repair"], 1)
+
+        # Confidence is advisory metadata. A valid question that omits it must
+        # not spend another Local LLM call rewriting otherwise valid content.
+        confidence_only_cfg = {**cfg}
+        confidence_only_cfg.pop("_generation_metrics", None)
+        with (
+            patch("app.generator.config.local_llm_available", return_value=True),
+            patch("app.generator._call_llm", return_value=draft(1)) as call,
+        ):
+            questions, warnings = generate_questions(CHUNKS, confidence_only_cfg)
+
+        self.assertEqual(len(questions), 1, warnings)
+        self.assertEqual(call.call_count, 1)
+        self.assertIsNone(questions[0]["confidence"])
+        self.assertEqual(confidence_only_cfg["_generation_metrics"]["repair_calls"], 0)
 
     def test_mock_code_logic_keeps_requested_question_count(self):
         questions, warnings = generate_questions(

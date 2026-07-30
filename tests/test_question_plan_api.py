@@ -1,11 +1,9 @@
 """Phase-3 tests: blueprint preview API and plan freezing (PRD §9, AC 4-8, 11-12)."""
 import json
 import os
-import tempfile
 
 import pytest
 
-os.environ.setdefault("REPOPROOF_WORK_DIR", tempfile.mkdtemp())
 os.environ.setdefault("REPOPROOF_ACCESS_PASSWORD", "test-password-for-plan-api")
 
 from fastapi.testclient import TestClient      # noqa: E402

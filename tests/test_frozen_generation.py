@@ -1,11 +1,7 @@
 """Phase-4 tests: generation runs from the confirmed blueprint (PRD §8, AC 12-13)."""
-import os
 import random
-import tempfile
 
 import pytest
-
-os.environ.setdefault("REPOPROOF_WORK_DIR", tempfile.mkdtemp())
 
 from app import blueprint, knowledge                       # noqa: E402
 from app.generator import _band_midpoint, _frozen_tasks, generate_questions  # noqa: E402

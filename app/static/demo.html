@@ -247,11 +247,11 @@ header .tagline{font-size:.72rem;color:var(--muted)}
 const $ = id => document.getElementById(id);
 let currentStep = 1, unlocked = 1, modalAction = null, selectedForPublish = new Set();
 const seedQuestions = [
-  {id:1,slot:'comprehension',stem:"Which statement about the notebook's extract step is correct?",options:["It downloads the raw consumption CSV before transformation.","It writes directly to the warehouse without staging.","Missing readings are replaced with random values.","It trains the forecasting model."],answer:['A'],difficulty:2,explanation:"The extract step fetches raw consumption data before downstream transformations run.",evidence:"energy-etl-pipeline.ipynb — cell 12"},
-  {id:2,slot:'flow',stem:"What happens to records with missing meter identifiers?",options:["They are uploaded unchanged.","They are removed before aggregation.","They are assigned the previous meter identifier.","They stop the entire pipeline."],answer:['B'],difficulty:2,explanation:"Rows without meter identifiers are filtered before the aggregation phase.",evidence:"energy-etl-pipeline.ipynb — cell 18"},
-  {id:3,slot:'structure',stem:"Which component coordinates the extract, transform, and load stages?",options:["run_pipeline()","plot_forecast()","MeterSchema","pytest.ini"],answer:['A'],difficulty:2,explanation:"The pipeline runner coordinates the ETL stages in sequence.",evidence:"energy-etl-pipeline.ipynb — cell 27"},
-  {id:4,slot:'storage',stem:"Where are transformed hourly usage records written?",options:["A browser local-storage cache","The staged warehouse table","A Markdown report","The source CSV file"],answer:['B'],difficulty:2,explanation:"The transformed usage records are loaded into a staged warehouse table.",evidence:"energy-etl-pipeline.ipynb — cell 31"},
-  {id:5,slot:'testing',stem:"Which behavior is checked by the data-cleaning test?",options:["Null readings are handled before aggregation.","Every reading is converted to Fahrenheit.","The source repository has no branches.","The notebook contains exactly ten cells."],answer:['A'],difficulty:2,explanation:"The test verifies missing or null readings are cleaned before aggregation.",evidence:"tests/test_transform.py — lines 14-29"}
+  {id:1,confidence:8,stem:"Which statement about the notebook's extract step is correct?",options:["It downloads the raw consumption CSV before transformation.","It writes directly to the warehouse without staging.","Missing readings are replaced with random values.","It trains the forecasting model."],answer:['A'],difficulty:2,explanation:"The extract step fetches raw consumption data before downstream transformations run.",evidence:"energy-etl-pipeline.ipynb — cell 12"},
+  {id:2,confidence:8,stem:"What happens to records with missing meter identifiers?",options:["They are uploaded unchanged.","They are removed before aggregation.","They are assigned the previous meter identifier.","They stop the entire pipeline."],answer:['B'],difficulty:2,explanation:"Rows without meter identifiers are filtered before the aggregation phase.",evidence:"energy-etl-pipeline.ipynb — cell 18"},
+  {id:3,confidence:9,stem:"Which component coordinates the extract, transform, and load stages?",options:["run_pipeline()","plot_forecast()","MeterSchema","pytest.ini"],answer:['A'],difficulty:2,explanation:"The pipeline runner coordinates the ETL stages in sequence.",evidence:"energy-etl-pipeline.ipynb — cell 27"},
+  {id:4,confidence:8,stem:"Where are transformed hourly usage records written?",options:["A browser local-storage cache","The staged warehouse table","A Markdown report","The source CSV file"],answer:['B'],difficulty:2,explanation:"The transformed usage records are loaded into a staged warehouse table.",evidence:"energy-etl-pipeline.ipynb — cell 31"},
+  {id:5,confidence:7,stem:"Which behavior is checked by the data-cleaning test?",options:["Null readings are handled before aggregation.","Every reading is converted to Fahrenheit.","The source repository has no branches.","The notebook contains exactly ten cells."],answer:['A'],difficulty:2,explanation:"The test verifies missing or null readings are cleaned before aggregation.",evidence:"tests/test_transform.py — lines 14-29"}
 ];
 
 function setTheme(theme){
@@ -371,7 +371,9 @@ function renderQuestions(){
   const wrap=$('questions');wrap.innerHTML='';selectedForPublish.clear();
   seedQuestions.forEach((q,index)=>{
     const card=document.createElement('article');card.className='question';card.dataset.index=index;
-    card.innerHTML=`<div class="qhead"><span>#${q.id} · slot: ${q.slot} · by demo generator</span><span class="status draft">draft</span></div>
+    card.innerHTML=`<div class="qhead"><span>Q${index + 1} · ref #${q.id} · <span
+      title="The model's confidence that the answer key and explanation are correct based on the available project evidence."
+      >confidence: ${q.confidence == null ? '-' : q.confidence}</span></span><span class="status draft">draft</span></div>
       <textarea class="stem"></textarea><div class="options"></div>
       <div class="grid" style="grid-template-columns:1fr 3fr;margin-top:.4rem">
         <div><label>Difficulty</label><input type="number" class="diff" value="${q.difficulty}" min="1" max="5"></div>

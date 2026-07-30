@@ -1429,11 +1429,6 @@ def generate_questions(
                 # quality flags for the reviewer instead of burning LLM calls.
                 errs, soft_flags = validate_maq_split(q, choice_count, correct_count)
                 errs.extend(_specific_evidence_errors(q, slot, chunk_by_id))
-                # A model-generated question must carry a usable 1-10 confidence;
-                # a missing or malformed one goes through the existing bounded
-                # repair flow rather than being defaulted (ERD §3, AC 2).
-                if not mock and q.get("confidence") is None:
-                    errs.append("confidence must be an integer from 1 to 10")
                 if not errs:
                     if soft_flags:
                         q["quality_flags"] = soft_flags
