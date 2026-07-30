@@ -69,6 +69,24 @@ CREATE TABLE IF NOT EXISTS generation_runs (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Frozen assessment blueprints. A preview is planned deterministically and
+-- must be confirmed before generation; generation may only use these slots.
+CREATE TABLE IF NOT EXISTS question_plans (
+    id TEXT PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    snapshot_id TEXT NOT NULL DEFAULT '',
+    catalog_hash TEXT NOT NULL DEFAULT '',
+    framework_json TEXT NOT NULL DEFAULT '{}',
+    assessment_targets_json TEXT NOT NULL DEFAULT '[]',
+    distributions_json TEXT NOT NULL DEFAULT '{}',
+    slots_json TEXT NOT NULL DEFAULT '[]',
+    unsupported_json TEXT NOT NULL DEFAULT '[]',
+    warnings_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'preview',   -- preview | confirmed | replaced
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    confirmed_at TEXT NOT NULL DEFAULT ''
+);
+
 -- Operational telemetry for the MLOps loop. Holds derived metadata only
 -- (model/config, human review actions, outcomes) — never raw project code.
 CREATE TABLE IF NOT EXISTS events (
