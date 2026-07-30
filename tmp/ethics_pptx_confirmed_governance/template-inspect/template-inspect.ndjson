@@ -1,0 +1,131 @@
+{"kind":"slide","id":"sl/y90nupkv","slide":1,"title":"RepoProof","textShapes":4}
+{"kind":"textbox","id":"sh/547294r6","slide":1,"textChars":9,"textLines":1}
+{"kind":"textbox","id":"sh/k3yl0zql","slide":1,"textChars":31,"textLines":1}
+{"kind":"textbox","id":"sh/7qp4be9c","slide":1,"textChars":45,"textLines":1}
+{"kind":"textbox","id":"sh/65g3298r","slide":1,"textChars":96,"textLines":1}
+{"kind":"slide","id":"sl/hwbqtkby","slide":2,"title":"Tutor QA","textShapes":18}
+{"kind":"shape","id":"sh/yxkfi9wz","slide":2,"name":"Rounded Rectangle 69","bbox":[119.04,424.86,1044.48,176.43]}
+{"kind":"textbox","id":"sh/p0vy54na","slide":2,"textChars":23,"textLines":2}
+{"kind":"textbox","id":"sh/hcvy14ne","slide":2,"textChars":21,"textLines":2}
+{"kind":"textbox","id":"sh/9072xkry","slide":2,"textChars":41,"textLines":1}
+{"kind":"textbox","id":"sh/gbmxszmt","slide":2,"textChars":59,"textLines":4}
+{"kind":"textbox","id":"sh/mlgvq147","slide":2,"textChars":50,"textLines":3}
+{"kind":"shape","id":"sh/nmpcj6ls","slide":2,"name":"Right Arrow 30","bbox":[321.5,211.85,23.04,32.45]}
+{"kind":"shape","id":"sh/onydsbmd","slide":2,"name":"Right Arrow 31","bbox":[701.53,199.35,23.04,32.45]}
+{"kind":"shape","id":"sh/9o7ulg3y","slide":2,"name":"Right Arrow 32","bbox":[701.53,301.7,23.04,32.45]}
+{"kind":"textbox","id":"sh/ru5cbqd4","slide":2,"textChars":30,"textLines":2}
+{"kind":"textbox","id":"sh/69wbilcj","slide":2,"textChars":43,"textLines":2}
+{"kind":"textbox","id":"sh/tw7ud0va","slide":2,"textChars":34,"textLines":2}
+{"kind":"textbox","id":"sh/svedkvup","slide":2,"textChars":35,"textLines":2}
+{"kind":"textbox","id":"sh/fypcfqdg","slide":2,"textChars":36,"textLines":2}
+{"kind":"textbox","id":"sh/exgvmlcv","slide":2,"textChars":31,"textLines":2}
+{"kind":"shape","id":"sh/y9wbepcv","slide":2,"name":"Straight Arrow Connector 46","bbox":[199.52,490.91,31.55,0]}
+{"kind":"shape","id":"sh/1g3ax0b2","slide":2,"name":"Straight Arrow Connector 50","bbox":[411.65,490.91,31.55,0]}
+{"kind":"shape","id":"sh/0fut4vuh","slide":2,"name":"Straight Arrow Connector 53","bbox":[640,490.91,31.55,0]}
+{"kind":"shape","id":"sh/qlsry1sf","slide":2,"name":"Straight Arrow Connector 54","bbox":[838.31,490.91,31.55,0]}
+{"kind":"shape","id":"sh/rm187690","slide":2,"name":"Straight Arrow Connector 55","bbox":[1037.76,490.91,31.55,0]}
+{"kind":"textbox","id":"sh/ved0jihs","slide":2,"textChars":64,"textLines":1}
+{"kind":"textbox","id":"sh/ad4zadg7","slide":2,"textChars":67,"textLines":1}
+{"kind":"textbox","id":"sh/8rmh83y1","slide":2,"textChars":54,"textLines":1}
+{"kind":"shape","id":"sh/qt0fepw3","slide":2,"name":"Straight Connector 73","bbox":[892.5,367.55,0,57.31]}
+{"kind":"textbox","id":"sh/bu9w7uxo","slide":2,"textChars":9,"textLines":1}
+{"kind":"shape","id":"sh/b29kza94","slide":2,"name":"Straight Connector 3","bbox":[750.65,169.24,302.89,82.29]}
+{"kind":"textbox","id":"sh/a10jqpsj","slide":2,"textChars":19,"textLines":1}
+{"kind":"textbox","id":"sh/x4r21kru","slide":2,"textChars":12,"textLines":1}
+{"kind":"textbox","id":"sh/w3i1sfa9","slide":2,"textChars":17,"textLines":1}
+{"kind":"image","id":"im/lsr29k36","slide":2,"name":"Picture 22","bbox":[212.55,186.54,77.61,77.61]}
+{"kind":"image","id":"im/kri10f2l","slide":2,"name":"Picture 25","bbox":[354.75,228.08,28.91,28.91]}
+{"kind":"image","id":"im/b2pk3al4","slide":2,"name":"Picture 26","bbox":[354.75,258.22,28.91,28.91]}
+{"kind":"image","id":"im/a1gju5kj","slide":2,"name":"Picture 19","bbox":[565.77,169.24,98.23,98.23]}
+{"kind":"image","id":"im/xo725k3u","slide":2,"name":"Picture 28","bbox":[739.22,201.12,28.91,28.91]}
+{"kind":"image","id":"im/c3y1wf29","slide":2,"name":"Picture 21","bbox":[944.48,176.26,101.64,75.27]}
+{"kind":"image","id":"im/vy9kful8","slide":2,"name":"Picture 33","bbox":[984.72,293.28,66.5,66.5]}
+{"kind":"slide","id":"sl/ofy9wn61","slide":3,"title":"Proposed use in COMP5339","textShapes":14}
+{"kind":"textbox","id":"sh/cza94vmx","slide":3,"textChars":24,"textLines":1}
+{"kind":"textbox","id":"sh/d0jax03i","slide":3,"textChars":48,"textLines":1}
+{"kind":"textbox","id":"sh/298ryl4v","slide":3,"textChars":21,"textLines":1}
+{"kind":"textbox","id":"sh/obq90bml","slide":3,"textChars":34,"textLines":1}
+{"kind":"textbox","id":"sh/pcjqtg36","slide":3,"textChars":34,"textLines":2}
+{"kind":"textbox","id":"sh/n6ls3alk","slide":3,"textChars":29,"textLines":1}
+{"kind":"textbox","id":"sh/n2l4fq98","slide":3,"textChars":10,"textLines":1}
+{"kind":"textbox","id":"sh/943mhgre","slide":3,"textChars":53,"textLines":2}
+{"kind":"textbox","id":"sh/83ulovat","slide":3,"textChars":29,"textLines":1}
+{"kind":"textbox","id":"sh/a5c3ql8z","slide":3,"textChars":48,"textLines":1}
+{"kind":"textbox","id":"sh/x8nml0ra","slide":3,"textChars":39,"textLines":1}
+{"kind":"textbox","id":"sh/ja54na9g","slide":3,"textChars":79,"textLines":2}
+{"kind":"textbox","id":"sh/i9w3u58v","slide":3,"textChars":24,"textLines":1}
+{"kind":"textbox","id":"sh/f29gbyx0","slide":3,"textChars":94,"textLines":1}
+{"kind":"shape","id":"sh/tgry9ofu","slide":3,"name":"Down Arrow 26","bbox":[296.8,225.6,67.21,34.59]}
+{"kind":"shape","id":"sh/a9kfadwn","slide":3,"name":"Down Arrow 27","bbox":[296.8,380.02,67.21,34.59]}
+{"kind":"shape","id":"sh/batgjixs","slide":3,"name":"Down Arrow 28","bbox":[296.8,540.71,67.21,34.59]}
+{"kind":"shape","id":"sh/k3m1g7yp","slide":3,"name":"Left-right Arrow 30","bbox":[615.68,165.93,48,30.11]}
+{"kind":"shape","id":"sh/z2d07mh4","slide":3,"name":"Left-right Arrow 31","bbox":[615.68,378.97,48,30.11]}
+{"kind":"image","id":"im/547at4zi","slide":3,"name":"Picture 21","geometry":"roundRect","bbox":[673.1,328.63,385.14,201.21]}
+{"kind":"image","id":"im/udwrup0v","slide":3,"name":"Picture 22","geometry":"roundRect","bbox":[263.86,261.51,353,113.48]}
+{"kind":"image","id":"im/ve5sna1g","slide":3,"name":"Picture 23","geometry":"roundRect","bbox":[268.69,415.52,348.17,121.12]}
+{"kind":"slide","id":"sl/jyx0ra1s","slide":4,"title":"RepoProof","textShapes":20}
+{"kind":"textbox","id":"sh/w72947yt","slide":4,"textChars":9,"textLines":1}
+{"kind":"textbox","id":"sh/1cj2d8b6","slide":4,"textChars":19,"textLines":1}
+{"kind":"textbox","id":"sh/0ba143al","slide":4,"textChars":69,"textLines":1}
+{"kind":"shape","id":"sh/kbm987y5","slide":4,"name":"Shape 8","bbox":[332.03,181.45,268.13,4.07]}
+{"kind":"shape","id":"sh/5cva1cfq","slide":4,"name":"Text 9","bbox":[59.54,116.01,272.62,218.31]}
+{"kind":"textbox","id":"sh/i94r6xgz","slide":4,"textChars":14,"textLines":1}
+{"kind":"textbox","id":"sh/h4fa9wfy","slide":4,"textChars":11,"textLines":1}
+{"kind":"textbox","id":"sh/p0batw72","slide":4,"textChars":9,"textLines":1}
+{"kind":"textbox","id":"sh/oz29krqh","slide":4,"textChars":15,"textLines":1}
+{"kind":"textbox","id":"sh/mtcfypkn","slide":4,"textChars":10,"textLines":1}
+{"kind":"shape","id":"sh/vy5gbe14","slide":4,"name":"Rectangle 34","bbox":[57.26,511.92,294.8,81.46]}
+{"kind":"shape","id":"sh/wzex4z2p","slide":4,"name":"Rectangle 35","bbox":[69.06,476.27,281.86,35.65]}
+{"kind":"textbox","id":"sh/ilwf69kv","slide":4,"textChars":29,"textLines":1}
+{"kind":"textbox","id":"sh/jm5gze1g","slide":4,"textChars":6,"textLines":1}
+{"kind":"textbox","id":"sh/knex8j21","slide":4,"textChars":13,"textLines":1}
+{"kind":"textbox","id":"sh/5ony1oj6","slide":4,"textChars":61,"textLines":2}
+{"kind":"shape","id":"sh/fm5c3q54","slide":4,"name":"Rounded Rectangle 39","bbox":[73.04,537.77,179.91,15.85]}
+{"kind":"textbox","id":"sh/dknu10ny","slide":4,"textChars":17,"textLines":1}
+{"kind":"textbox","id":"sh/sjut8vmd","slide":4,"textChars":21,"textLines":1}
+{"kind":"textbox","id":"sh/3elcv65w","slide":4,"textChars":11,"textLines":1}
+{"kind":"shape","id":"sh/ih8ju9sn","slide":4,"name":"Shape 7","bbox":[219.76,553.61,405.7,110.33]}
+{"kind":"shape","id":"sh/rm1k7yt4","slide":4,"name":"Shape 2","bbox":[303.92,205.34,358.8,291.78]}
+{"kind":"textbox","id":"sh/tkjq5c3e","slide":4,"textChars":76,"textLines":1}
+{"kind":"textbox","id":"sh/7ih83mlo","slide":4,"textChars":66,"textLines":1}
+{"kind":"shape","id":"sh/hoja9w3q","slide":4,"name":"Text 9","bbox":[1033.41,511.92,242.89,218.31]}
+{"kind":"textbox","id":"sh/vm1s7mlk","slide":4,"textChars":17,"textLines":1}
+{"kind":"textbox","id":"sh/xsfqxs36","slide":4,"textChars":29,"textLines":1}
+{"kind":"textbox","id":"sh/qhcb6l47","slide":4,"textChars":22,"textLines":1}
+{"kind":"table","id":"tb/ju1grixg","slide":4,"name":"Table 26","rows":6,"cols":3,"preview":"SID | folder | RepoID","bbox":[84.4,175,222.91,140.24]}
+{"kind":"table","id":"tb/b61gnyx4","slide":4,"name":"Table 43","rows":4,"cols":2,"preview":"folder | RepoID","bbox":[391.29,147.61,163.53,69.69]}
+{"kind":"table","id":"tb/wrahg3ep","slide":4,"name":"Table 53","rows":5,"cols":3,"preview":"RepoID | folder | answers","bbox":[1050.23,573.4,224.24,128]}
+{"kind":"image","id":"im/yt4ra9wf","slide":4,"name":"Picture 48","bbox":[633.94,625.07,448.55,64.77]}
+{"kind":"image","id":"im/kv69cze5","slide":4,"name":"Picture 33","bbox":[57.26,392.36,294.8,167.5]}
+{"kind":"image","id":"im/lwfq54fq","slide":4,"name":"Picture 38","bbox":[57.26,372.55,294.8,25.12]}
+{"kind":"image","id":"im/ap4r6pw3","slide":4,"name":"Picture 42","bbox":[633.94,154.66,448.55,470.41]}
+{"kind":"slide","id":"sl/i107q5of","slide":5,"title":"What RepoProof retains","textShapes":3}
+{"kind":"textbox","id":"sh/dgbulwnm","slide":5,"textChars":22,"textLines":1}
+{"kind":"textbox","id":"sh/cf2tcr61","slide":5,"textChars":135,"textLines":1}
+{"kind":"textbox","id":"sh/yhkbe1o7","slide":5,"textChars":166,"textLines":1}
+{"kind":"table","id":"tb/8bm5cnad","slide":5,"name":"Table 3","rows":6,"cols":5,"preview":"Data | Purpose | Retention | Consent | Identifiability","bbox":[31.02,118.15,1170.71,500.31]}
+{"kind":"slide","id":"sl/x8f69ofe","slide":6,"title":"Operational source data vs five-year research data","textShapes":9}
+{"kind":"shape","id":"sh/qpwnet0b","slide":6,"name":"Rectangle 21","bbox":[464,72.86,788.8,624.58]}
+{"kind":"textbox","id":"sh/87ipkzal","slide":6,"textChars":50,"textLines":1}
+{"kind":"shape","id":"sh/98rqt4r6","slide":6,"name":"Rectangle 4","bbox":[19.2,72.86,435.2,624.58]}
+{"kind":"textbox","id":"sh/oryp8fah","slide":6,"textChars":455,"textLines":13}
+{"kind":"textbox","id":"sh/u1kbu1ov","slide":6,"textChars":22,"textLines":1}
+{"kind":"textbox","id":"sh/47mt0b6x","slide":6,"textChars":108,"textLines":2}
+{"kind":"textbox","id":"sh/j6dcr65c","slide":6,"textChars":23,"textLines":1}
+{"kind":"textbox","id":"sh/i54bylor","slide":6,"textChars":17,"textLines":1}
+{"kind":"textbox","id":"sh/cbe5g3ih","slide":6,"textChars":16,"textLines":1}
+{"kind":"textbox","id":"sh/dcnm98zm","slide":6,"textChars":79,"textLines":4}
+{"kind":"textbox","id":"sh/yhg7epsj","slide":6,"textChars":602,"textLines":20}
+{"kind":"shape","id":"sh/zi98nu94","slide":6,"name":"Rectangle 2","bbox":[500.6,219.43,449.14,18.97]}
+{"kind":"shape","id":"sh/tcn2dk3a","slide":6,"name":"Straight Arrow Connector 6","bbox":[529.94,238.4,0,171.61]}
+{"kind":"table","id":"tb/43qd43m9","slide":6,"name":"Table 18","rows":6,"cols":2,"preview":"RepoID | answers","bbox":[982.4,151.55,251.2,233.6]}
+{"kind":"image","id":"im/3m5gra98","slide":6,"name":"Picture 10","bbox":[36.8,242.85,350.4,438.54]}
+{"kind":"slide","id":"sl/gnmp4jqx","slide":7,"title":"How it fits CARE — and what's left to confirm","textShapes":16}
+{"kind":"textbox","id":"sh/cb2tkvap","slide":7,"textChars":45,"textLines":1}
+{"kind":"textbox","id":"sh/dcbud0ra","slide":7,"textChars":86,"textLines":1}
+{"kind":"shape","id":"sh/ydkbm5sv","slide":7,"name":"Shape 2","bbox":[40.32,115.2,1200,63.36]}
+{"kind":"textbox","id":"sh/zedcfa9g","slide":7,"textChars":176,"textLines":1}
+{"kind":"shape","id":"sh/kzmdova1","slide":7,"name":"Shape 4","bbox":[40.32,190.08,1200,63.36]}
+{"kind":"textbox","id":"sh/l0vuh0rm","slide":7,"textChars":157,"textLines":1}
+{"kind":"shape","id":"sh/eh0ba1sr","slide":7,"name":"Shape 6","bbox":[40.32,274.56,1200,88.32]}
+{"kind":"notice","message":"Truncated: omitted 38 lines. Increase maxChars or narrow target."}

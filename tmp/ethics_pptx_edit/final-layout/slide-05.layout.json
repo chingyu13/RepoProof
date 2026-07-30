@@ -1,0 +1,1233 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/i107q5of",
+    "id": "i107q5of",
+    "slide": 5,
+    "layoutId": "/ppt/slideLayouts/slideLayout1.xml",
+    "layoutName": "DEFAULT",
+    "masterLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+    "backgroundColor": "#FFFFFF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "Rainbow",
+    "colors": {
+      "accent1": "#FA3A48",
+      "accent2": "#FDB80F",
+      "accent3": "#1EA24E",
+      "accent4": "#21A5A5",
+      "accent5": "#248EFD",
+      "accent6": "#675DEC",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#FE8429",
+      "lt2": "#24A57F",
+      "hlink": "#AB5EEB",
+      "folHlink": "#E263EB"
+    },
+    "fontScheme": {
+      "name": "Office",
+      "majorFont": {
+        "latinTypeface": "Calibri Light"
+      },
+      "minorFont": {
+        "latinTypeface": "Calibri"
+      }
+    },
+    "typefaces": [
+      "Calibri",
+      "Calibri Light"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "/ppt/slideLayouts/slideLayout1.xml",
+      "name": "DEFAULT",
+      "parentLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "/ppt/slideMasters/slideMaster1.xml",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dgbulwnm",
+      "id": "2",
+      "name": "Text 0",
+      "bbox": [
+        40.32,
+        26.88,
+        1200,
+        40.32
+      ],
+      "geometry": "rect",
+      "text": "What RepoProof retains",
+      "textPreview": "What RepoProof retains",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "What RepoProof retains"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "What RepoProof retains",
+          "runs": [
+            {
+              "index": 1,
+              "text": "What RepoProof retains",
+              "fontSize": 32,
+              "color": "#1B2430",
+              "bold": true
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cf2tcr61",
+      "id": "3",
+      "name": "Text 1",
+      "bbox": [
+        40.32,
+        71.04,
+        1200,
+        32.64
+      ],
+      "geometry": "rect",
+      "text": "Original submissions are deleted after 1 month. Opt-in research records are then de-identified and retained on RDS for 5 years.",
+      "textPreview": "Original submissions are deleted after 1 month. Opt-in research records are then de-identified and retained on RDS for 5 years.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Original submissions are deleted after 1 month. Opt-in research records are then de-identified and retained on RDS for 5 years."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Original submissions are deleted after 1 month. Opt-in research records are then de-identified and retained on RDS for 5 years.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Original submissions are deleted after 1 month. Opt-in research records are then de-identified and retained on RDS for 5 years.",
+              "fontSize": 16,
+              "color": "#6B7785"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/yhkbe1o7",
+      "id": "5",
+      "name": "Text 2",
+      "bbox": [
+        40.32,
+        628.8,
+        1200,
+        38.4
+      ],
+      "geometry": "rect",
+      "text": "Operational = required for teaching and deleted after 1 month.   Research retained = explicit opt-in, de-identified at cutoff, 5 years on RDS.",
+      "textPreview": "Operational = required for teaching and deleted after 1 month.   Research retained = explicit opt-in, de-identified at cutoff, 5 years on...",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Operational = required for teaching and deleted after 1 month.   Research retained = explicit opt-in, de-identified at cutoff, 5 years on RDS."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Operational = required for teaching and deleted after 1 month.   Research retained = explicit opt-in, de-identified at cutoff, 5 years on RDS.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Operational = required for teaching and deleted after 1 month.   Research retained = explicit opt-in, de-identified at cutoff, 5 years on RDS.",
+              "fontSize": 13.33,
+              "color": "#2C7A4B",
+              "bold": true
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "kind": "table",
+      "scope": "slide",
+      "aid": "tb/8bm5cnad",
+      "id": "6",
+      "name": "Table 3",
+      "bbox": [
+        31.02,
+        118.15,
+        1170.71,
+        456.84
+      ],
+      "text": "Data | Purpose | Retention | Consent | Identifiability\nOriginal submission\n(notebook / project files) | Generate questions\nHandle quiz enquiries | Delete 1 month after deadline, including backups | Required for teaching; excluded from research without opt-in | RepoID\n(pseudonymous)\nExtracted structural features\n(no code text in 5-year set) | Reproduce generation\nEvaluate COMP5339 tool | Opt-in only: de-identify at 1 month; retain 5 years on RDS | Explicit opt-in; withdraw before 1-month cutoff | De-identified; remove IDs, filenames and student-defined symbols\nQuiz answers\n(no mark impact) | Immediate feedback\nDe-identified understanding analysis | Operational: 1 month\nOpt-in research set: 5 years | Teaching use required; research retention requires opt-in | RepoID operationally; de-identified before analysis\nDe-identified learning analytics\n(reported in aggregate) | Topic distributions\nTiming/performance and cross-semester trends | Operational: 1 month\nOpt-in research set: 5 years | Explicit opt-in for research retention | Semester, topic, duration and completion-period bands; report groups ≥ 5\nOptional Qualtrics survey | Evaluate the learning experience | Anonymous responses retained 5 years on RDS | Explicit opt-in; withdraw before submission only | Anonymous; never linked to RepoID",
+      "textPreview": "Data | Purpose | Retention | Consent | Identifiability | Original submission | (notebook / project files) | Generate questions | Handle q...",
+      "rows": 6,
+      "cols": 5,
+      "cells": [
+        {
+          "index": 1,
+          "row": 1,
+          "column": 1,
+          "bbox": [
+            31.02,
+            118.15,
+            255.82,
+            30.46
+          ],
+          "text": "Data",
+          "textPreview": "Data",
+          "fillColor": {
+            "type": "theme",
+            "value": "accent5",
+            "transform": {
+              "darken": 0.25
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Data",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Data",
+                  "fontSize": 18.67,
+                  "color": "bg1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "row": 1,
+          "column": 2,
+          "bbox": [
+            286.84,
+            118.15,
+            247.52,
+            30.46
+          ],
+          "text": "Purpose",
+          "textPreview": "Purpose",
+          "fillColor": {
+            "type": "theme",
+            "value": "accent5",
+            "transform": {
+              "darken": 0.25
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Purpose",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Purpose",
+                  "fontSize": 18.67,
+                  "color": "bg1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "row": 1,
+          "column": 3,
+          "bbox": [
+            534.36,
+            118.15,
+            250.99,
+            30.46
+          ],
+          "text": "Retention",
+          "textPreview": "Retention",
+          "fillColor": {
+            "type": "theme",
+            "value": "accent5",
+            "transform": {
+              "darken": 0.25
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Retention",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Retention",
+                  "fontSize": 18.67,
+                  "color": "bg1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "row": 1,
+          "column": 4,
+          "bbox": [
+            785.35,
+            118.15,
+            232.48,
+            30.46
+          ],
+          "text": "Consent",
+          "textPreview": "Consent",
+          "fillColor": {
+            "type": "theme",
+            "value": "accent5",
+            "transform": {
+              "darken": 0.25
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Consent",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Consent",
+                  "fontSize": 18.67,
+                  "color": "bg1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "row": 1,
+          "column": 5,
+          "bbox": [
+            1017.83,
+            118.15,
+            183.9,
+            30.46
+          ],
+          "text": "Identifiability",
+          "textPreview": "Identifiability",
+          "fillColor": {
+            "type": "theme",
+            "value": "accent5",
+            "transform": {
+              "darken": 0.25
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Identifiability",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Identifiability",
+                  "fontSize": 18.67,
+                  "color": "bg1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "row": 2,
+          "column": 1,
+          "bbox": [
+            31.02,
+            148.6,
+            255.82,
+            76.14
+          ],
+          "text": "Original submission\n(notebook / project files)",
+          "textPreview": "Original submission | (notebook / project files)",
+          "fillColor": "rgba(254, 216, 218, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Original submission",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Original submission",
+                  "fontSize": 18.67,
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "(notebook / project files)",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "(notebook / project files)",
+                  "fontSize": 18.67,
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "row": 2,
+          "column": 2,
+          "bbox": [
+            286.84,
+            148.6,
+            247.52,
+            76.14
+          ],
+          "text": "Generate questions\nHandle quiz enquiries",
+          "textPreview": "Generate questions | Handle quiz enquiries",
+          "fillColor": "rgba(254, 216, 218, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Generate questions",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Generate questions",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "Handle quiz enquiries",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Handle quiz enquiries",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "row": 2,
+          "column": 3,
+          "bbox": [
+            534.36,
+            148.6,
+            250.99,
+            76.14
+          ],
+          "text": "Delete 1 month after deadline, including backups",
+          "textPreview": "Delete 1 month after deadline, including backups",
+          "fillColor": "rgba(254, 216, 218, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Delete 1 month after deadline, including backups",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Delete 1 month after deadline, including backups",
+                  "fontSize": 18.67,
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "row": 2,
+          "column": 4,
+          "bbox": [
+            785.35,
+            148.6,
+            232.48,
+            76.14
+          ],
+          "text": "Required for teaching; excluded from research without opt-in",
+          "textPreview": "Required for teaching; excluded from research without opt-in",
+          "fillColor": "rgba(254, 216, 218, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Required for teaching; excluded from research without opt-in",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Required for teaching; excluded from research without opt-in",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 10,
+          "row": 2,
+          "column": 5,
+          "bbox": [
+            1017.83,
+            148.6,
+            183.9,
+            76.14
+          ],
+          "text": "RepoID\n(pseudonymous)",
+          "textPreview": "RepoID | (pseudonymous)",
+          "fillColor": "rgba(254, 216, 218, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "RepoID",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "RepoID",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "(pseudonymous)",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "(pseudonymous)",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 11,
+          "row": 3,
+          "column": 1,
+          "bbox": [
+            31.02,
+            224.74,
+            255.82,
+            121.82
+          ],
+          "text": "Extracted structural features\n(no code text in 5-year set)",
+          "textPreview": "Extracted structural features | (no code text in 5-year set)",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Extracted structural features",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Extracted structural features",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "(no code text in 5-year set)",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "(no code text in 5-year set)",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 12,
+          "row": 3,
+          "column": 2,
+          "bbox": [
+            286.84,
+            224.74,
+            247.52,
+            121.82
+          ],
+          "text": "Reproduce generation\nEvaluate COMP5339 tool",
+          "textPreview": "Reproduce generation | Evaluate COMP5339 tool",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Reproduce generation",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Reproduce generation",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "Evaluate COMP5339 tool",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Evaluate COMP5339 tool",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 13,
+          "row": 3,
+          "column": 3,
+          "bbox": [
+            534.36,
+            224.74,
+            250.99,
+            121.82
+          ],
+          "text": "Opt-in only: de-identify at 1 month; retain 5 years on RDS",
+          "textPreview": "Opt-in only: de-identify at 1 month; retain 5 years on RDS",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Opt-in only: de-identify at 1 month; retain 5 years on RDS",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Opt-in only: de-identify at 1 month; retain 5 years on RDS",
+                  "fontSize": 18.67,
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 14,
+          "row": 3,
+          "column": 4,
+          "bbox": [
+            785.35,
+            224.74,
+            232.48,
+            121.82
+          ],
+          "text": "Explicit opt-in; withdraw before 1-month cutoff",
+          "textPreview": "Explicit opt-in; withdraw before 1-month cutoff",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Explicit opt-in; withdraw before 1-month cutoff",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Explicit opt-in; withdraw before 1-month cutoff",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 15,
+          "row": 3,
+          "column": 5,
+          "bbox": [
+            1017.83,
+            224.74,
+            183.9,
+            121.82
+          ],
+          "text": "De-identified; remove IDs, filenames and student-defined symbols",
+          "textPreview": "De-identified; remove IDs, filenames and student-defined symbols",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "De-identified; remove IDs, filenames and student-defined symbols",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "De-identified; remove IDs, filenames and student-defined symbols",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 16,
+          "row": 4,
+          "column": 1,
+          "bbox": [
+            31.02,
+            346.57,
+            255.82,
+            98.98
+          ],
+          "text": "Quiz answers\n(no mark impact)",
+          "textPreview": "Quiz answers | (no mark impact)",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Quiz answers",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Quiz answers",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "(no mark impact)",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "(no mark impact)",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 17,
+          "row": 4,
+          "column": 2,
+          "bbox": [
+            286.84,
+            346.57,
+            247.52,
+            98.98
+          ],
+          "text": "Immediate feedback\nDe-identified understanding analysis",
+          "textPreview": "Immediate feedback | De-identified understanding analysis",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Immediate feedback",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Immediate feedback",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "De-identified understanding analysis",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "De-identified understanding analysis",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 18,
+          "row": 4,
+          "column": 3,
+          "bbox": [
+            534.36,
+            346.57,
+            250.99,
+            98.98
+          ],
+          "text": "Operational: 1 month\nOpt-in research set: 5 years",
+          "textPreview": "Operational: 1 month | Opt-in research set: 5 years",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Operational: 1 month",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Operational: 1 month",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "Opt-in research set: 5 years",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Opt-in research set: 5 years",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 19,
+          "row": 4,
+          "column": 4,
+          "bbox": [
+            785.35,
+            346.57,
+            232.48,
+            98.98
+          ],
+          "text": "Teaching use required; research retention requires opt-in",
+          "textPreview": "Teaching use required; research retention requires opt-in",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Teaching use required; research retention requires opt-in",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Teaching use required; research retention requires opt-in",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 20,
+          "row": 4,
+          "column": 5,
+          "bbox": [
+            1017.83,
+            346.57,
+            183.9,
+            98.98
+          ],
+          "text": "RepoID operationally; de-identified before analysis",
+          "textPreview": "RepoID operationally; de-identified before analysis",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "RepoID operationally; de-identified before analysis",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "RepoID operationally; de-identified before analysis",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 21,
+          "row": 5,
+          "column": 1,
+          "bbox": [
+            31.02,
+            445.55,
+            255.82,
+            76.14
+          ],
+          "text": "De-identified learning analytics\n(reported in aggregate)",
+          "textPreview": "De-identified learning analytics | (reported in aggregate)",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "De-identified learning analytics",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "De-identified learning analytics",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "(reported in aggregate)",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "(reported in aggregate)",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 22,
+          "row": 5,
+          "column": 2,
+          "bbox": [
+            286.84,
+            445.55,
+            247.52,
+            76.14
+          ],
+          "text": "Topic distributions\nTiming/performance and cross-semester trends",
+          "textPreview": "Topic distributions | Timing/performance and cross-semester trends",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Topic distributions",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Topic distributions",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "Timing/performance and cross-semester trends",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Timing/performance and cross-semester trends",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 23,
+          "row": 5,
+          "column": 3,
+          "bbox": [
+            534.36,
+            445.55,
+            250.99,
+            76.14
+          ],
+          "text": "Operational: 1 month\nOpt-in research set: 5 years",
+          "textPreview": "Operational: 1 month | Opt-in research set: 5 years",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Operational: 1 month",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Operational: 1 month",
+                  "fontSize": 18.67
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "Opt-in research set: 5 years",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Opt-in research set: 5 years",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 24,
+          "row": 5,
+          "column": 4,
+          "bbox": [
+            785.35,
+            445.55,
+            232.48,
+            76.14
+          ],
+          "text": "Explicit opt-in for research retention",
+          "textPreview": "Explicit opt-in for research retention",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Explicit opt-in for research retention",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Explicit opt-in for research retention",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 25,
+          "row": 5,
+          "column": 5,
+          "bbox": [
+            1017.83,
+            445.55,
+            183.9,
+            76.14
+          ],
+          "text": "Semester, topic, duration and completion-period bands; report groups ≥ 5",
+          "textPreview": "Semester, topic, duration and completion-period bands; report groups ≥ 5",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Semester, topic, duration and completion-period bands; report groups ≥ 5",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Semester, topic, duration and completion-period bands; report groups ≥ 5",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 26,
+          "row": 6,
+          "column": 1,
+          "bbox": [
+            31.02,
+            521.69,
+            255.82,
+            53.3
+          ],
+          "text": "Optional Qualtrics survey",
+          "textPreview": "Optional Qualtrics survey",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Optional Qualtrics survey",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Optional Qualtrics survey",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 27,
+          "row": 6,
+          "column": 2,
+          "bbox": [
+            286.84,
+            521.69,
+            247.52,
+            53.3
+          ],
+          "text": "Evaluate the learning experience",
+          "textPreview": "Evaluate the learning experience",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Evaluate the learning experience",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Evaluate the learning experience",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 28,
+          "row": 6,
+          "column": 3,
+          "bbox": [
+            534.36,
+            521.69,
+            250.99,
+            53.3
+          ],
+          "text": "Anonymous responses retained 5 years on RDS",
+          "textPreview": "Anonymous responses retained 5 years on RDS",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Anonymous responses retained 5 years on RDS",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Anonymous responses retained 5 years on RDS",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 29,
+          "row": 6,
+          "column": 4,
+          "bbox": [
+            785.35,
+            521.69,
+            232.48,
+            53.3
+          ],
+          "text": "Explicit opt-in; withdraw before submission only",
+          "textPreview": "Explicit opt-in; withdraw before submission only",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Explicit opt-in; withdraw before submission only",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Explicit opt-in; withdraw before submission only",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 30,
+          "row": 6,
+          "column": 5,
+          "bbox": [
+            1017.83,
+            521.69,
+            183.9,
+            53.3
+          ],
+          "text": "Anonymous; never linked to RepoID",
+          "textPreview": "Anonymous; never linked to RepoID",
+          "fillColor": "rgba(211, 232, 255, 0.50196)",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Anonymous; never linked to RepoID",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Anonymous; never linked to RepoID",
+                  "fontSize": 18.67
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "composeRuns": []
+}

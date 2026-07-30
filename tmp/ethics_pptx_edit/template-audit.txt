@@ -1,0 +1,6 @@
+Source deck: RepoProof_Ethics_COMP5339.pptx, seven slides, 16:9.
+The deck uses flat PowerPoint shapes, editable tables, and embedded screenshots.
+All seven slides are retained in their existing order and visual system.
+Edits are limited to inherited text boxes and table cells on slides 3-7.
+No master, layout, image, or geometry changes are planned.
+No empty inherited placeholders are introduced.

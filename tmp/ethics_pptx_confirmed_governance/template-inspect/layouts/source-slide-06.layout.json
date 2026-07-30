@@ -1,0 +1,1887 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/x8f69ofe",
+    "id": "x8f69ofe",
+    "slide": 6,
+    "layoutId": "/ppt/slideLayouts/slideLayout2.xml",
+    "layoutName": "Title and Content",
+    "layoutType": "obj",
+    "masterLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "Rainbow",
+    "colors": {
+      "accent1": "#FA3A48",
+      "accent2": "#FDB80F",
+      "accent3": "#1EA24E",
+      "accent4": "#21A5A5",
+      "accent5": "#248EFD",
+      "accent6": "#675DEC",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#FE8429",
+      "lt2": "#24A57F",
+      "hlink": "#AB5EEB",
+      "folHlink": "#E263EB"
+    },
+    "fontScheme": {
+      "name": "Office",
+      "majorFont": {
+        "latinTypeface": "Calibri Light"
+      },
+      "minorFont": {
+        "latinTypeface": "Calibri"
+      }
+    },
+    "typefaces": [
+      "Calibri",
+      "Calibri Light",
+      "Menlo"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "/ppt/slideLayouts/slideLayout2.xml",
+      "name": "Title and Content",
+      "type": "obj",
+      "parentLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout2.xml/2",
+          "id": "2",
+          "name": "Title 1",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text": "Click to edit Master title style",
+          "textPreview": "Click to edit Master title style",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Click to edit Master title style",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Click to edit Master title style"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "order": 2,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout2.xml/3",
+          "id": "3",
+          "name": "Content Placeholder 2",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text": "Click to edit Master text styles\nSecond level\nThird level\nFourth level\nFifth level",
+          "textPreview": "Click to edit Master text styles | Second level | Third level | Fourth level | Fifth level",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Click to edit Master text styles",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Click to edit Master text styles"
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "Second level",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Second level"
+                }
+              ]
+            },
+            {
+              "index": 3,
+              "text": "Third level",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Third level"
+                }
+              ]
+            },
+            {
+              "index": 4,
+              "text": "Fourth level",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Fourth level"
+                }
+              ]
+            },
+            {
+              "index": 5,
+              "text": "Fifth level",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Fifth level"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "order": 3,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout2.xml/4",
+          "id": "4",
+          "name": "Date Placeholder 3",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text": "7/29/26",
+          "textPreview": "7/29/26",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "7/29/26",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "7/29/26"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "order": 4,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout2.xml/5",
+          "id": "5",
+          "name": "Footer Placeholder 4",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "order": 5,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout2.xml/6",
+          "id": "6",
+          "name": "Slide Number Placeholder 5",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "text": "‹#›",
+          "textPreview": "‹#›",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "‹#›",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "‹#›"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scope": "master",
+      "id": "/ppt/slideMasters/slideMaster1.xml",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qpwnet0b",
+      "id": "22",
+      "name": "Rectangle 21",
+      "bbox": [
+        464,
+        72.86,
+        788.8,
+        624.58
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "opacity": 0.50196,
+          "lighten": 0.8
+        }
+      },
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/87ipkzal",
+      "id": "4",
+      "name": "Rectangle 3",
+      "bbox": [
+        0,
+        8.16,
+        640,
+        38.78
+      ],
+      "geometry": "rect",
+      "text": "Operational source data vs five-year research data",
+      "textPreview": "Operational source data vs five-year research data",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Operational source data vs five-year research data"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Operational source data vs five-year research data",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Operational source data vs five-year research data"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": {
+        "type": "theme",
+        "value": "bg1",
+        "transform": {
+          "darken": 0.35
+        }
+      },
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/98rqt4r6",
+      "id": "5",
+      "name": "Rectangle 4",
+      "bbox": [
+        19.2,
+        72.86,
+        435.2,
+        624.58
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": {
+        "type": "theme",
+        "value": "accent1",
+        "transform": {
+          "opacity": 0.50196,
+          "lighten": 0.8
+        }
+      },
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/oryp8fah",
+      "id": "8",
+      "name": "TextBox 7",
+      "bbox": [
+        480.74,
+        151.73,
+        488.86,
+        224.57
+      ],
+      "geometry": "rect",
+      "text": "FIVE-YEAR DE-IDENTIFIED FEATURE SET\n\n• semester and assignment\n• question topic and response/correctness\n• broad duration band\n• early / middle / late completion-period band\n• project-structure and complexity counts\n• question-review outcomes\n\nSupports topic distributions, timing/performance analysis and comparisons across semesters.\n\nRemoved before research analysis:\nSID · RepoID · exact timestamp · filenames · symbols · comments · URLs · source text",
+      "textPreview": "FIVE-YEAR DE-IDENTIFIED FEATURE SET |  | • semester and assignment | • question topic and response/correctness | • broad duration band | ...",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "wrap": "square",
+        "autoFit": "resizeShapeToFitText",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 15,
+        "lines": [
+          {
+            "index": 1,
+            "text": "FIVE-YEAR DE-IDENTIFIED FEATURE SET"
+          },
+          {
+            "index": 2,
+            "text": ""
+          },
+          {
+            "index": 3,
+            "text": "• semester and assignment"
+          },
+          {
+            "index": 4,
+            "text": "• question topic and response/correctness"
+          },
+          {
+            "index": 5,
+            "text": "• broad duration band"
+          },
+          {
+            "index": 6,
+            "text": "• early / middle / late completion-period band"
+          },
+          {
+            "index": 7,
+            "text": "• project-structure and complexity counts"
+          },
+          {
+            "index": 8,
+            "text": "• question-review outcomes"
+          },
+          {
+            "index": 9,
+            "text": ""
+          },
+          {
+            "index": 10,
+            "text": "Supports topic distributions, timing/performance analysis and comparisons across"
+          },
+          {
+            "index": 11,
+            "text": "semesters."
+          },
+          {
+            "index": 12,
+            "text": ""
+          },
+          {
+            "index": 13,
+            "text": "Removed before research analysis:"
+          },
+          {
+            "index": 14,
+            "text": "SID · RepoID · exact timestamp · filenames · symbols · comments · URLs · source"
+          },
+          {
+            "index": 15,
+            "text": "text"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "FIVE-YEAR DE-IDENTIFIED FEATURE SET",
+          "runs": [
+            {
+              "index": 1,
+              "text": "FIVE-YEAR DE-IDENTIFIED FEATURE SET",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 3,
+          "text": "• semester and assignment",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• semester and assignment",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 4,
+          "text": "• question topic and response/correctness",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• question topic and response/correctness",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 5,
+          "text": "• broad duration band",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• broad duration band",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 6,
+          "text": "• early / middle / late completion-period band",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• early / middle / late completion-period band",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 7,
+          "text": "• project-structure and complexity counts",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• project-structure and complexity counts",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 8,
+          "text": "• question-review outcomes",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• question-review outcomes",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 10,
+          "text": "Supports topic distributions, timing/performance analysis and comparisons across semesters.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Supports topic distributions, timing/performance analysis and comparisons across semesters.",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 12,
+          "text": "Removed before research analysis:",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Removed before research analysis:",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 13,
+          "text": "SID · RepoID · exact timestamp · filenames · symbols · comments · URLs · source text",
+          "runs": [
+            {
+              "index": 1,
+              "text": "SID · RepoID · exact timestamp · filenames · symbols · comments · URLs · source text",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.8
+        }
+      }
+    },
+    {
+      "order": 5,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/3m5gra98",
+      "id": "91",
+      "name": "Picture 10",
+      "bbox": [
+        36.8,
+        242.85,
+        350.4,
+        438.54
+      ],
+      "contentType": "image/png",
+      "asset": {
+        "assetId": "/ppt/media/image12.png",
+        "contentType": "image/png",
+        "byteLength": 873458
+      },
+      "fillImage": {
+        "assetId": "/ppt/media/image12.png",
+        "contentType": "image/png",
+        "byteLength": 873458
+      }
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/u1kbu1ov",
+      "id": "13",
+      "name": "Rectangle 12",
+      "bbox": [
+        27.2,
+        90.31,
+        415.64,
+        41.6
+      ],
+      "geometry": "rect",
+      "text": "Operational submission",
+      "textPreview": "Operational submission",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Operational submission"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Operational submission",
+          "resolvedTextStyle": {
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Operational submission",
+              "alignment": "center"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "accent1",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/47mt0b6x",
+      "id": "15",
+      "name": "Rectangle 14",
+      "bbox": [
+        27.2,
+        133.15,
+        453.54,
+        105.25
+      ],
+      "geometry": "rect",
+      "text": "Purpose: generate questions and resolve enquiries\nDelete: 1 month after the quiz deadline, including backups",
+      "textPreview": "Purpose: generate questions and resolve enquiries | Delete: 1 month after the quiz deadline, including backups",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": "•Purpose: generate questions and"
+          },
+          {
+            "index": 2,
+            "text": "resolve enquiries"
+          },
+          {
+            "index": 3,
+            "text": "•Delete: 1 month after the quiz"
+          },
+          {
+            "index": 4,
+            "text": "deadline, including backups"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Purpose: generate questions and resolve enquiries",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Purpose: generate questions and resolve enquiries",
+              "color": "tx1"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "Delete: 1 month after the quiz deadline, including backups",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Delete: 1 month after the quiz deadline, including backups",
+              "color": "accent1"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/j6dcr65c",
+      "id": "16",
+      "name": "Rectangle 15",
+      "bbox": [
+        480,
+        90.31,
+        415.64,
+        41.6
+      ],
+      "geometry": "rect",
+      "text": "Operational code chunks",
+      "textPreview": "Operational code chunks",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Operational code chunks"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Operational code chunks",
+          "resolvedTextStyle": {
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Operational code chunks",
+              "alignment": "center"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "accent5",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/i54bylor",
+      "id": "17",
+      "name": "Rectangle 16",
+      "bbox": [
+        982.4,
+        90.31,
+        251.2,
+        41.6
+      ],
+      "geometry": "rect",
+      "text": "Answers at cutoff",
+      "textPreview": "Answers at cutoff",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Answers at cutoff"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Answers at cutoff",
+          "resolvedTextStyle": {
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Answers at cutoff",
+              "alignment": "center"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "accent5",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "table",
+      "scope": "slide",
+      "aid": "tb/43qd43m9",
+      "id": "92",
+      "name": "Table 18",
+      "bbox": [
+        982.4,
+        151.55,
+        251.2,
+        233.59
+      ],
+      "text": "RepoID | answers\nsjdivn | [A, B, C, B, A]\nejhud | [D, B, C, C, A]\ncjudfc | [A, B, D, B, B]\nwjdui | [B, B, C, B, D]\n… | …",
+      "textPreview": "RepoID | answers | sjdivn | [A, B, C, B, A] | ejhud | [D, B, C, C, A] | cjudfc | [A, B, D, B, B] | wjdui | [B, B, C, B, D] | … | …",
+      "rows": 6,
+      "cols": 2,
+      "cells": [
+        {
+          "index": 1,
+          "row": 1,
+          "column": 1,
+          "bbox": [
+            982.4,
+            151.55,
+            100.88,
+            38.93
+          ],
+          "text": "RepoID",
+          "textPreview": "RepoID",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "RepoID",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "RepoID",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "row": 1,
+          "column": 2,
+          "bbox": [
+            1083.28,
+            151.55,
+            150.32,
+            38.93
+          ],
+          "text": "answers",
+          "textPreview": "answers",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "answers",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "answers",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "row": 2,
+          "column": 1,
+          "bbox": [
+            982.4,
+            190.48,
+            100.88,
+            38.93
+          ],
+          "text": "sjdivn",
+          "textPreview": "sjdivn",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "sjdivn",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "sjdivn",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "row": 2,
+          "column": 2,
+          "bbox": [
+            1083.28,
+            190.48,
+            150.32,
+            38.93
+          ],
+          "text": "[A, B, C, B, A]",
+          "textPreview": "[A, B, C, B, A]",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "[A, B, C, B, A]",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "[A, B, C, B, A]",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "row": 3,
+          "column": 1,
+          "bbox": [
+            982.4,
+            229.41,
+            100.88,
+            38.93
+          ],
+          "text": "ejhud",
+          "textPreview": "ejhud",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "ejhud",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "ejhud",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "row": 3,
+          "column": 2,
+          "bbox": [
+            1083.28,
+            229.41,
+            150.32,
+            38.93
+          ],
+          "text": "[D, B, C, C, A]",
+          "textPreview": "[D, B, C, C, A]",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "[D, B, C, C, A]",
+              "lineSpacingPercent": 100000,
+              "resolvedTextStyle": {
+                "alignment": "left"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "[D, B, C, C, A]",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "row": 4,
+          "column": 1,
+          "bbox": [
+            982.4,
+            268.35,
+            100.88,
+            38.93
+          ],
+          "text": "cjudfc",
+          "textPreview": "cjudfc",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "cjudfc",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "cjudfc",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "row": 4,
+          "column": 2,
+          "bbox": [
+            1083.28,
+            268.35,
+            150.32,
+            38.93
+          ],
+          "text": "[A, B, D, B, B]",
+          "textPreview": "[A, B, D, B, B]",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "[A, B, D, B, B]",
+              "lineSpacingPercent": 100000,
+              "resolvedTextStyle": {
+                "alignment": "left"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "[A, B, D, B, B]",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "row": 5,
+          "column": 1,
+          "bbox": [
+            982.4,
+            307.28,
+            100.88,
+            38.93
+          ],
+          "text": "wjdui",
+          "textPreview": "wjdui",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "wjdui",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "wjdui",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 10,
+          "row": 5,
+          "column": 2,
+          "bbox": [
+            1083.28,
+            307.28,
+            150.32,
+            38.93
+          ],
+          "text": "[B, B, C, B, D]",
+          "textPreview": "[B, B, C, B, D]",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "[B, B, C, B, D]",
+              "lineSpacingPercent": 100000,
+              "resolvedTextStyle": {
+                "alignment": "left"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "[B, B, C, B, D]",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 11,
+          "row": 6,
+          "column": 1,
+          "bbox": [
+            982.4,
+            346.21,
+            100.88,
+            38.93
+          ],
+          "text": "…",
+          "textPreview": "…",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "…",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "…",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 12,
+          "row": 6,
+          "column": 2,
+          "bbox": [
+            1083.28,
+            346.21,
+            150.32,
+            38.93
+          ],
+          "text": "…",
+          "textPreview": "…",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "…",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "…",
+                  "fontSize": 21.33
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cbe5g3ih",
+      "id": "20",
+      "name": "Rectangle 19",
+      "bbox": [
+        982.4,
+        423.11,
+        251.2,
+        41.6
+      ],
+      "geometry": "rect",
+      "text": "Anonymous survey",
+      "textPreview": "Anonymous survey",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Anonymous survey"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Anonymous survey",
+          "resolvedTextStyle": {
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Anonymous survey",
+              "alignment": "center"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "accent5",
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dcnm98zm",
+      "id": "21",
+      "name": "Rectangle 20",
+      "bbox": [
+        982.4,
+        483.2,
+        251.2,
+        171.76
+      ],
+      "geometry": "rect",
+      "text": "Explicit opt-in\nNo RepoID link\nWithdraw before submission\nRetain 5 years on RDS",
+      "textPreview": "Explicit opt-in | No RepoID link | Withdraw before submission | Retain 5 years on RDS",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 6,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Explicit opt-in"
+          },
+          {
+            "index": 2,
+            "text": "No RepoID link"
+          },
+          {
+            "index": 3,
+            "text": "Withdraw before"
+          },
+          {
+            "index": 4,
+            "text": "submission"
+          },
+          {
+            "index": 5,
+            "text": "Retain 5 years on"
+          },
+          {
+            "index": 6,
+            "text": "RDS"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Explicit opt-in\nNo RepoID link\nWithdraw before submission\nRetain 5 years on RDS",
+          "resolvedTextStyle": {
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Explicit opt-in\nNo RepoID link\nWithdraw before submission\nRetain 5 years on RDS",
+              "color": "#273541"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": {
+        "type": "theme",
+        "value": "accent4",
+        "transform": {
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/yhg7epsj",
+      "id": "2",
+      "name": "TextBox 1",
+      "bbox": [
+        480.74,
+        410.01,
+        488.86,
+        269.81
+      ],
+      "geometry": "rect",
+      "text": "{\n  \"study_record_id\": \"random-study-code\",\n  \"semester\": \"2026-S2\",\n  \"assignment\": \"A1\",\n  \"question_topic\": \"control flow\",\n  \"response\": \"B\",\n  \"correct\": true,\n  \"duration_band\": \"2–3 minutes\",\n  \"completion_period\": \"middle\",\n  \"complexity_band\": \"moderate\"\n}\n\nLecturer reporting only:\n• topic-level response/correctness distributions\n• duration-band vs correctness distributions\n• early/middle/late group comparisons\n• semester trends and teaching-change comparisons\n• suppress or combine every subgroup with n < 5\n\nNo SID, RepoID, exact timestamp, filename, symbol, comment, URL or source text.",
+      "textPreview": "{ |   \"study_record_id\": \"random-study-code\", |   \"semester\": \"2026-S2\", |   \"assignment\": \"A1\", |   \"question_topic\": \"control flow\", | ...",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "wrap": "square",
+        "autoFit": "resizeShapeToFitText",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 20,
+        "lines": [
+          {
+            "index": 1,
+            "text": "{"
+          },
+          {
+            "index": 2,
+            "text": "  \"study_record_id\": \"random-study-code\","
+          },
+          {
+            "index": 3,
+            "text": "  \"semester\": \"2026-S2\","
+          },
+          {
+            "index": 4,
+            "text": "  \"assignment\": \"A1\","
+          },
+          {
+            "index": 5,
+            "text": "  \"question_topic\": \"control flow\","
+          },
+          {
+            "index": 6,
+            "text": "  \"response\": \"B\","
+          },
+          {
+            "index": 7,
+            "text": "  \"correct\": true,"
+          },
+          {
+            "index": 8,
+            "text": "  \"duration_band\": \"2–3 minutes\","
+          },
+          {
+            "index": 9,
+            "text": "  \"completion_period\": \"middle\","
+          },
+          {
+            "index": 10,
+            "text": "  \"complexity_band\": \"moderate\""
+          },
+          {
+            "index": 11,
+            "text": "}"
+          },
+          {
+            "index": 12,
+            "text": ""
+          },
+          {
+            "index": 13,
+            "text": "Lecturer reporting only:"
+          },
+          {
+            "index": 14,
+            "text": "• topic-level response/correctness distributions"
+          },
+          {
+            "index": 15,
+            "text": "• duration-band vs correctness distributions"
+          },
+          {
+            "index": 16,
+            "text": "• early/middle/late group comparisons"
+          },
+          {
+            "index": 17,
+            "text": "• semester trends and teaching-change comparisons"
+          },
+          {
+            "index": 18,
+            "text": "• suppress or combine every subgroup with n < 5"
+          },
+          {
+            "index": 19,
+            "text": ""
+          },
+          {
+            "index": 20,
+            "text": "No SID, RepoID, exact timestamp, filename, symbol, comment, URL or source text."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "{",
+          "runs": [
+            {
+              "index": 1,
+              "text": "{",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "  \"study_record_id\": \"random-study-code\",",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"study_record_id\": \"random-study-code\",",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 3,
+          "text": "  \"semester\": \"2026-S2\",",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"semester\": \"2026-S2\",",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 4,
+          "text": "  \"assignment\": \"A1\",",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"assignment\": \"A1\",",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 5,
+          "text": "  \"question_topic\": \"control flow\",",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"question_topic\": \"control flow\",",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 6,
+          "text": "  \"response\": \"B\",",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"response\": \"B\",",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 7,
+          "text": "  \"correct\": true,",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"correct\": true,",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 8,
+          "text": "  \"duration_band\": \"2–3 minutes\",",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"duration_band\": \"2–3 minutes\",",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 9,
+          "text": "  \"completion_period\": \"middle\",",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"completion_period\": \"middle\",",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 10,
+          "text": "  \"complexity_band\": \"moderate\"",
+          "runs": [
+            {
+              "index": 1,
+              "text": "  \"complexity_band\": \"moderate\"",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 11,
+          "text": "}",
+          "runs": [
+            {
+              "index": 1,
+              "text": "}",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 13,
+          "text": "Lecturer reporting only:",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Lecturer reporting only:",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 14,
+          "text": "• topic-level response/correctness distributions",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• topic-level response/correctness distributions",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 15,
+          "text": "• duration-band vs correctness distributions",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• duration-band vs correctness distributions",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 16,
+          "text": "• early/middle/late group comparisons",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• early/middle/late group comparisons",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 17,
+          "text": "• semester trends and teaching-change comparisons",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• semester trends and teaching-change comparisons",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 18,
+          "text": "• suppress or combine every subgroup with n < 5",
+          "runs": [
+            {
+              "index": 1,
+              "text": "• suppress or combine every subgroup with n < 5",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 20,
+          "text": "No SID, RepoID, exact timestamp, filename, symbol, comment, URL or source text.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "No SID, RepoID, exact timestamp, filename, symbol, comment, URL or source text.",
+              "fontSize": 9.33,
+              "typeface": "Menlo",
+              "color": "#000000"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.6
+        }
+      }
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zi98nu94",
+      "id": "3",
+      "name": "Rectangle 2",
+      "bbox": [
+        500.6,
+        219.43,
+        449.14,
+        18.97
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "lineColor": "accent5",
+      "lineWidth": 3
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tcn2dk3a",
+      "id": "90",
+      "name": "Straight Arrow Connector 6",
+      "bbox": [
+        529.94,
+        238.4,
+        0,
+        171.61
+      ],
+      "geometry": "straightConnector1",
+      "lineColor": "accent5",
+      "lineWidth": 3
+    }
+  ],
+  "composeRuns": []
+}

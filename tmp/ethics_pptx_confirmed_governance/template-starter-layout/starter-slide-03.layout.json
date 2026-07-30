@@ -1,0 +1,1380 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/0muvfb",
+    "id": "0muvfb",
+    "slide": 3,
+    "layoutId": "/ppt/slideLayouts/slideLayout1.xml",
+    "layoutName": "DEFAULT",
+    "masterLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+    "backgroundColor": "#FFFFFF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "Rainbow",
+    "colors": {
+      "accent1": "#FA3A48",
+      "accent2": "#FDB80F",
+      "accent3": "#1EA24E",
+      "accent4": "#21A5A5",
+      "accent5": "#248EFD",
+      "accent6": "#675DEC",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#FE8429",
+      "lt2": "#24A57F",
+      "hlink": "#AB5EEB",
+      "folHlink": "#E263EB"
+    },
+    "fontScheme": {
+      "name": "Office",
+      "majorFont": {
+        "latinTypeface": "Calibri Light"
+      },
+      "minorFont": {
+        "latinTypeface": "Calibri"
+      }
+    },
+    "typefaces": [
+      "Calibri",
+      "Calibri Light"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "/ppt/slideLayouts/slideLayout1.xml",
+      "name": "DEFAULT",
+      "parentLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "/ppt/slideMasters/slideMaster1.xml",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/p83qdcv6",
+      "id": "2",
+      "name": "Text 0",
+      "bbox": [
+        40.32,
+        26.88,
+        1200,
+        40.32
+      ],
+      "geometry": "rect",
+      "text": "Proposed use in COMP5339",
+      "textPreview": "Proposed use in COMP5339",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Proposed use in COMP5339"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Proposed use in COMP5339",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Proposed use in COMP5339",
+              "fontSize": 32,
+              "color": "#1B2430",
+              "bold": true
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/47u947el",
+      "id": "3",
+      "name": "Text 1",
+      "bbox": [
+        40.32,
+        71.04,
+        492.16,
+        32.64
+      ],
+      "geometry": "rect",
+      "text": "Low-stakes, formative, and instructor-controlled",
+      "textPreview": "Low-stakes, formative, and instructor-controlled",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Low-stakes, formative, and instructor-controlled"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Low-stakes, formative, and instructor-controlled",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Low-stakes, formative, and instructor-controlled",
+              "fontSize": 21.33,
+              "color": "#6B7785"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ral8fmdc",
+      "id": "4",
+      "name": "Shape 2",
+      "bbox": [
+        40.32,
+        129.6,
+        580.16,
+        96
+      ],
+      "geometry": "roundRect",
+      "text": "2% participation mark",
+      "textPreview": "2% participation mark",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "2% participation mark"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "2% participation mark",
+          "runs": [
+            {
+              "index": 1,
+              "text": "2% participation mark",
+              "color": {
+                "type": "theme",
+                "value": "accent5",
+                "transform": {
+                  "darken": 0.25
+                }
+              },
+              "bold": true
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(211, 233, 255, 0.5)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dc3qhwv2",
+      "id": "6",
+      "name": "Text 4",
+      "bbox": [
+        51.84,
+        179.52,
+        233.78,
+        32
+      ],
+      "geometry": "rect",
+      "text": "Credit is for completing the quiz.",
+      "textPreview": "Credit is for completing the quiz.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Credit is for completing the quiz."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Credit is for completing the quiz.",
+          "lineSpacingPercent": 105000,
+          "runs": [
+            {
+              "index": 1,
+              "text": "Credit is for completing the quiz.",
+              "fontSize": 14.67,
+              "color": "#1B2430"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cbu98reh",
+      "id": "7",
+      "name": "Shape 5",
+      "bbox": [
+        38.08,
+        414.13,
+        582.4,
+        125.19
+      ],
+      "geometry": "roundRect",
+      "text": "Immediate feedback \n+ explanations",
+      "textPreview": "Immediate feedback  | + explanations",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Immediate feedback"
+          },
+          {
+            "index": 2,
+            "text": "+ explanations"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Immediate feedback \n+ explanations",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Immediate feedback ",
+              "color": {
+                "type": "theme",
+                "value": "accent5",
+                "transform": {
+                  "darken": 0.25
+                }
+              },
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "\n"
+            },
+            {
+              "index": 3,
+              "text": "+ explanations",
+              "color": {
+                "type": "theme",
+                "value": "accent5",
+                "transform": {
+                  "darken": 0.25
+                }
+              },
+              "bold": true
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(211, 233, 255, 0.5)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6d87uxw7",
+      "id": "9",
+      "name": "Text 7",
+      "bbox": [
+        51.84,
+        492.74,
+        183.5,
+        28.85
+      ],
+      "geometry": "rect",
+      "text": "Positioned as a learning aid.",
+      "textPreview": "Positioned as a learning aid.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Positioned as a learning"
+          },
+          {
+            "index": 2,
+            "text": "aid."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Positioned as a learning aid.",
+          "lineSpacingPercent": 105000,
+          "runs": [
+            {
+              "index": 1,
+              "text": "Positioned as a learning aid.",
+              "fontSize": 14.67,
+              "color": "#1B2430"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4r65c765",
+      "id": "10",
+      "name": "Shape 8",
+      "bbox": [
+        40.32,
+        259.14,
+        580.16,
+        120.9
+      ],
+      "geometry": "roundRect",
+      "text": "Short quiz",
+      "textPreview": "Short quiz",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Short quiz"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Short quiz",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Short quiz",
+              "color": {
+                "type": "theme",
+                "value": "accent5",
+                "transform": {
+                  "darken": 0.25
+                }
+              },
+              "bold": true
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(211, 233, 255, 0.5)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/2ponax8f",
+      "id": "12",
+      "name": "Text 10",
+      "bbox": [
+        51.84,
+        309.06,
+        183.5,
+        61.44
+      ],
+      "geometry": "rect",
+      "text": "5 MCQ, under ~3 minutes;\nlittle incentive to game it.",
+      "textPreview": "5 MCQ, under ~3 minutes; | little incentive to game it.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "5 MCQ, under ~3 minutes;"
+          },
+          {
+            "index": 2,
+            "text": "little incentive to game it."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "5 MCQ, under ~3 minutes;",
+          "lineSpacingPercent": 105000,
+          "runs": [
+            {
+              "index": 1,
+              "text": "5 MCQ, under ~3 minutes;",
+              "fontSize": 14.67,
+              "color": "#1B2430"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "little incentive to game it.",
+          "lineSpacingPercent": 105000,
+          "runs": [
+            {
+              "index": 1,
+              "text": "little incentive to game it.",
+              "fontSize": 14.67,
+              "color": "#1B2430"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3qxoj2p0",
+      "id": "13",
+      "name": "Shape 11",
+      "bbox": [
+        659.52,
+        259.14,
+        426.8,
+        276.34
+      ],
+      "geometry": "roundRect",
+      "text": "Instructor-approved questions",
+      "textPreview": "Instructor-approved questions",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Instructor-approved questions"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Instructor-approved questions",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Instructor-approved questions",
+              "color": "accent5",
+              "bold": true
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(211, 233, 255, 0.3)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "opacity": 0.7,
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dwz6pc72",
+      "id": "15",
+      "name": "Text 13",
+      "bbox": [
+        673.1,
+        306.36,
+        318.23,
+        61.44
+      ],
+      "geometry": "rect",
+      "text": "Every question is human-reviewed before release.",
+      "textPreview": "Every question is human-reviewed before release.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Every question is human-reviewed before"
+          },
+          {
+            "index": 2,
+            "text": "release."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Every question is human-reviewed before release.",
+          "lineSpacingPercent": 105000,
+          "runs": [
+            {
+              "index": 1,
+              "text": "Every question is human-reviewed before release.",
+              "fontSize": 14.67,
+              "color": "#1B2430"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qto7ehob",
+      "id": "16",
+      "name": "Shape 14",
+      "bbox": [
+        38.08,
+        576.68,
+        580.8,
+        115.78
+      ],
+      "geometry": "roundRect",
+      "text": "Optional student survey (via Qualtrics)",
+      "textPreview": "Optional student survey (via Qualtrics)",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Optional student survey (via Qualtrics)"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Optional student survey (via Qualtrics)",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Optional student survey ",
+              "color": {
+                "type": "theme",
+                "value": "accent5",
+                "transform": {
+                  "darken": 0.25
+                }
+              },
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "(via Qualtrics)",
+              "color": {
+                "type": "theme",
+                "value": "accent5",
+                "transform": {
+                  "darken": 0.25
+                }
+              }
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(211, 233, 255, 0.5)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/szm54nqd",
+      "id": "18",
+      "name": "Text 16",
+      "bbox": [
+        51.84,
+        624.96,
+        256.8,
+        48
+      ],
+      "geometry": "rect",
+      "text": "Voluntary feedback on the experience; \nnot required and not linked to the mark.",
+      "textPreview": "Voluntary feedback on the experience;  | not required and not linked to the mark.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Voluntary feedback on the experience;"
+          },
+          {
+            "index": 2,
+            "text": "not required and not linked to the"
+          },
+          {
+            "index": 3,
+            "text": "mark."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Voluntary feedback on the experience; ",
+          "lineSpacingPercent": 105000,
+          "runs": [
+            {
+              "index": 1,
+              "text": "Voluntary feedback on the experience; ",
+              "fontSize": 14.67,
+              "color": "#1B2430"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "not required and not linked to the mark.",
+          "lineSpacingPercent": 105000,
+          "runs": [
+            {
+              "index": 1,
+              "text": "not required and not linked to the mark.",
+              "fontSize": 14.67,
+              "color": "#1B2430"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/t0v6ds7i",
+      "id": "19",
+      "name": "Shape 17",
+      "bbox": [
+        658.88,
+        128.55,
+        426.8,
+        96
+      ],
+      "geometry": "roundRect",
+      "text": "No academic disadvantage",
+      "textPreview": "No academic disadvantage",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "No academic disadvantage"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "No academic disadvantage",
+          "runs": [
+            {
+              "index": 1,
+              "text": "No academic disadvantage",
+              "color": "accent5",
+              "bold": true
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(211, 233, 255, 0.3)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "opacity": 0.7,
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8vel8ji1",
+      "id": "21",
+      "name": "Text 19",
+      "bbox": [
+        673.1,
+        170.34,
+        303.11,
+        36.04
+      ],
+      "geometry": "rect",
+      "text": "Students may opt out of cohort aggregate analytics; the 2% participation credit is unaffected.",
+      "textPreview": "Students may opt out of cohort aggregate analytics; the 2% participation credit is unaffected.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Students may opt out of cohort aggregate"
+          },
+          {
+            "index": 2,
+            "text": "analytics; the 2% participation credit is"
+          },
+          {
+            "index": 3,
+            "text": "unaffected."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Students may opt out of cohort aggregate analytics; the 2% participation credit is unaffected.",
+          "lineSpacingPercent": 105000,
+          "runs": [
+            {
+              "index": 1,
+              "text": "Students may opt out of cohort aggregate analytics; the 2% participation credit is unaffected.",
+              "fontSize": 14.67,
+              "color": "#1B2430"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 15,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/6xgze58r",
+      "id": "33",
+      "name": "Picture 21",
+      "bbox": [
+        673.1,
+        328.63,
+        385.14,
+        201.21
+      ],
+      "geometry": "roundRect",
+      "contentType": "image/png",
+      "imageMask": {
+        "geometry": "roundRect",
+        "adjustmentList": [
+          {
+            "name": "adj",
+            "formula": "val 10640"
+          }
+        ]
+      },
+      "asset": {
+        "assetId": "/ppt/media/image6.png",
+        "contentType": "image/png",
+        "byteLength": 383532
+      },
+      "fillImage": {
+        "assetId": "/ppt/media/image6.png",
+        "contentType": "image/png",
+        "byteLength": 383532
+      }
+    },
+    {
+      "order": 16,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/1oritk7e",
+      "id": "34",
+      "name": "Picture 22",
+      "bbox": [
+        263.86,
+        261.51,
+        353,
+        113.48
+      ],
+      "geometry": "roundRect",
+      "contentType": "image/png",
+      "imageCrop": {
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0.34774
+      },
+      "imageMask": {
+        "geometry": "roundRect"
+      },
+      "asset": {
+        "assetId": "/ppt/media/image7.png",
+        "contentType": "image/png",
+        "byteLength": 289203
+      },
+      "fillImage": {
+        "assetId": "/ppt/media/image7.png",
+        "contentType": "image/png",
+        "byteLength": 289203
+      }
+    },
+    {
+      "order": 17,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/g3i1kzqt",
+      "id": "35",
+      "name": "Picture 23",
+      "bbox": [
+        268.69,
+        415.52,
+        348.17,
+        121.12
+      ],
+      "geometry": "roundRect",
+      "contentType": "image/png",
+      "imageCrop": {
+        "left": 0,
+        "top": 0.39349,
+        "right": 0,
+        "bottom": 0.01245
+      },
+      "imageMask": {
+        "geometry": "roundRect",
+        "adjustmentList": [
+          {
+            "name": "adj",
+            "formula": "val 17575"
+          }
+        ]
+      },
+      "asset": {
+        "assetId": "/ppt/media/image8.png",
+        "contentType": "image/png",
+        "byteLength": 369142
+      },
+      "fillImage": {
+        "assetId": "/ppt/media/image8.png",
+        "contentType": "image/png",
+        "byteLength": 369142
+      }
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/uhw3a907",
+      "id": "27",
+      "name": "Down Arrow 26",
+      "bbox": [
+        296.8,
+        225.6,
+        67.21,
+        34.59
+      ],
+      "geometry": "downArrow",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "rgba(211, 233, 255, 0.5)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5o7mp8zu",
+      "id": "28",
+      "name": "Down Arrow 27",
+      "bbox": [
+        296.8,
+        380.02,
+        67.21,
+        34.59
+      ],
+      "geometry": "downArrow",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "rgba(211, 233, 255, 0.5)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4ny5g3i9",
+      "id": "29",
+      "name": "Down Arrow 28",
+      "bbox": [
+        296.8,
+        540.71,
+        67.21,
+        34.59
+      ],
+      "geometry": "downArrow",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "tx1",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "rgba(211, 233, 255, 0.5)",
+      "lineColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.6
+        }
+      },
+      "lineWidth": 1.33
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3ihsn6t0",
+      "id": "31",
+      "name": "Left-right Arrow 30",
+      "bbox": [
+        615.68,
+        165.93,
+        48,
+        30.11
+      ],
+      "geometry": "leftRightArrow",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.8
+        }
+      },
+      "lineWidth": 0
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4jq9wbul",
+      "id": "32",
+      "name": "Left-right Arrow 31",
+      "bbox": [
+        615.68,
+        378.97,
+        48,
+        30.11
+      ],
+      "geometry": "leftRightArrow",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 24,
+        "typeface": "Calibri",
+        "color": "lt1",
+        "alignment": "left",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": {
+        "type": "theme",
+        "value": "accent5",
+        "transform": {
+          "lighten": 0.8
+        }
+      },
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

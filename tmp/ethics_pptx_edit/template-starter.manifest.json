@@ -1,0 +1,89 @@
+{
+  "sourcePptx": "/Users/chingyu/Projects/RepoProof/docs/ethics/RepoProof_Ethics_COMP5339.pptx",
+  "mapPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-frame-map.json",
+  "output": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter.pptx",
+  "outputBytes": 3027400,
+  "sourceSlideCount": 7,
+  "slideCount": 7,
+  "previewDir": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-preview",
+  "layoutDir": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-layout",
+  "slides": [
+    {
+      "outputSlide": 1,
+      "sourceSlide": 1,
+      "narrativeRole": "title",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-preview/starter-slide-01.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-01.png",
+      "layoutPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-layout/starter-slide-01.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-01.layout.json"
+    },
+    {
+      "outputSlide": 2,
+      "sourceSlide": 2,
+      "narrativeRole": "product overview",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-preview/starter-slide-02.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-02.png",
+      "layoutPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-layout/starter-slide-02.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-02.layout.json"
+    },
+    {
+      "outputSlide": 3,
+      "sourceSlide": 3,
+      "narrativeRole": "proposed teaching use",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 2,
+      "previewPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-preview/starter-slide-03.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-03.png",
+      "layoutPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-layout/starter-slide-03.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-03.layout.json"
+    },
+    {
+      "outputSlide": 4,
+      "sourceSlide": 4,
+      "narrativeRole": "identity separation",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 1,
+      "previewPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-preview/starter-slide-04.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-04.png",
+      "layoutPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-layout/starter-slide-04.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-04.layout.json"
+    },
+    {
+      "outputSlide": 5,
+      "sourceSlide": 5,
+      "narrativeRole": "data lifecycle",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 3,
+      "previewPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-preview/starter-slide-05.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-05.png",
+      "layoutPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-layout/starter-slide-05.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-05.layout.json"
+    },
+    {
+      "outputSlide": 6,
+      "sourceSlide": 6,
+      "narrativeRole": "data examples",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 9,
+      "previewPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-preview/starter-slide-06.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-06.png",
+      "layoutPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-layout/starter-slide-06.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-06.layout.json"
+    },
+    {
+      "outputSlide": 7,
+      "sourceSlide": 7,
+      "narrativeRole": "CARE fit and decisions",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 4,
+      "previewPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-preview/starter-slide-07.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-07.png",
+      "layoutPath": "/Users/chingyu/Projects/RepoProof/tmp/ethics_pptx_edit/template-starter-layout/starter-slide-07.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-07.layout.json"
+    }
+  ]
+}

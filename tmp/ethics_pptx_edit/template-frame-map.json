@@ -1,0 +1,80 @@
+{
+  "outputSlides": [
+    {
+      "outputSlide": 1,
+      "sourceSlide": 1,
+      "narrativeRole": "title",
+      "reuseMode": "duplicate-slide",
+      "editTargets": []
+    },
+    {
+      "outputSlide": 2,
+      "sourceSlide": 2,
+      "narrativeRole": "product overview",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {"action": "rewrite", "shapeId": "sh/bu9w7uxo"}
+      ]
+    },
+    {
+      "outputSlide": 3,
+      "sourceSlide": 3,
+      "narrativeRole": "proposed teaching use",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {"action": "rewrite", "shapeId": "sh/i9w3u58v"},
+        {"action": "rewrite", "shapeId": "sh/f29gbyx0"}
+      ]
+    },
+    {
+      "outputSlide": 4,
+      "sourceSlide": 4,
+      "narrativeRole": "identity separation",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {"action": "rewrite", "shapeId": "tb/ju1grixg"}
+      ]
+    },
+    {
+      "outputSlide": 5,
+      "sourceSlide": 5,
+      "narrativeRole": "data lifecycle",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {"action": "rewrite", "shapeId": "sh/cf2tcr61"},
+        {"action": "rewrite", "shapeId": "sh/yhkbe1o7"},
+        {"action": "rewrite", "shapeId": "tb/8bm5cnad"}
+      ]
+    },
+    {
+      "outputSlide": 6,
+      "sourceSlide": 6,
+      "narrativeRole": "data examples",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {"action": "rewrite", "shapeId": "sh/87ipkzal"},
+        {"action": "rewrite", "shapeId": "sh/u1kbu1ov"},
+        {"action": "rewrite", "shapeId": "sh/47mt0b6x"},
+        {"action": "rewrite", "shapeId": "sh/j6dcr65c"},
+        {"action": "rewrite", "shapeId": "sh/i54bylor"},
+        {"action": "rewrite", "shapeId": "sh/cbe5g3ih"},
+        {"action": "rewrite", "shapeId": "sh/dcnm98zm"},
+        {"action": "rewrite", "shapeId": "sh/oryp8fah"},
+        {"action": "rewrite", "shapeId": "sh/yhg7epsj"}
+      ]
+    },
+    {
+      "outputSlide": 7,
+      "sourceSlide": 7,
+      "narrativeRole": "CARE fit and decisions",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        {"action": "rewrite", "shapeId": "sh/dcbud0ra"},
+        {"action": "rewrite", "shapeId": "sh/zedcfa9g"},
+        {"action": "rewrite", "shapeId": "sh/f2d0b6lc"},
+        {"action": "rewrite", "shapeId": "sh/eh4jil4r"}
+      ]
+    }
+  ],
+  "omittedSourceSlides": []
+}
