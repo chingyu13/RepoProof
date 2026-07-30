@@ -12,6 +12,7 @@ from .question_planner import (
     template_bundle,
 )
 from .assessment_catalog import (
+    ASSESSMENT_POINT_BY_ID,
     TEMPLATE_BY_ID,
     TOPIC_BY_ID,
     weighted_template_schedule,
@@ -1178,6 +1179,98 @@ def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
     return tasks, warnings
 
 
+def _frozen_tasks(evidence_store: EvidenceStore, cfg: dict,
+                  rng: random.Random) -> tuple[list[dict], list[str]]:
+    """Build generation tasks from a confirmed blueprint's frozen slots.
+
+    Generation must use exactly the slots the creator confirmed — it must not
+    silently re-run scheduling and produce a different paper (PRD §8, AC 12).
+    Each slot already names its Assessment Point, Template, Focus and evidence,
+    so this only rebuilds the prompt payload; nothing is re-planned.
+    """
+    slots = cfg.get("frozen_slots") or []
+    extra_focus = str(cfg.get("focus") or "").strip()
+    choice_count = max(2, min(7, int(cfg.get("choice_count", 4))))
+    tasks, warnings = [], []
+
+    for index, frozen in enumerate(slots):
+        template = TEMPLATE_BY_ID.get(str(frozen.get("template_id") or ""))
+        topic = TOPIC_BY_ID.get(str(frozen.get("primary_focus_id") or ""))
+        if not template or not topic:
+            warnings.append(
+                f"Skipped planned question {index + 1}: its template or focus is no "
+                "longer in the catalog.")
+            continue
+        point = ASSESSMENT_POINT_BY_ID.get(str(frozen.get("assessment_point_id") or ""))
+        query = (point or {}).get("query", "")
+        target = _target_for_frozen(cfg, frozen)
+
+        evidence, missing = template_bundle(evidence_store, topic, template, query)
+        if missing:
+            warnings.append(
+                f"Skipped planned question {index + 1} ({(point or {}).get('name', '')}): "
+                "its evidence is no longer available.")
+            continue
+        plan, problem = render_question_plan(template, topic, target, evidence)
+        if not plan:
+            warnings.append(
+                f"Skipped planned question {index + 1}: {problem or 'plan could not be rebuilt'}.")
+            continue
+
+        band = frozen.get("expected_difficulty") or {}
+        slot = {
+            "slot": f"{topic['id']}:{template['id']}",
+            "focus": topic["name"],
+            "reasoning_prompt": template["reasoning_prompt"],
+            "template_id": template["id"],
+            "template_name": template["name"],
+            "option_task": template["option_task"],
+            "default_evidence_ids": [chunk["id"] for chunk in evidence],
+            # Difficulty comes from this slot's own expected band (its midpoint),
+            # never from one creator-entered number copied to every slot (AC 13).
+            "requested_difficulty": _band_midpoint(band),
+            "assessment_point_id": frozen.get("assessment_point_id", ""),
+            "expected_difficulty": band,
+            **plan,
+        }
+        tasks.append({
+            "i": index,
+            "slot": slot,
+            "slot_variants": [slot],
+            "evidence_variants": [evidence],
+            "evidence_chars": template["evidence"]["chars_per_chunk"],
+            "focus_for_prompt": extra_focus,
+            "alignment": _alignment_summary(target),
+            "correct_count": _pick_correct_count(cfg, choice_count, rng),
+        })
+
+    if not tasks:
+        warnings.append("The confirmed question plan could not be rebuilt. Preview it again.")
+    return tasks, warnings
+
+
+def _band_midpoint(band: dict) -> int:
+    """Representative difficulty for an expected-difficulty band."""
+    low = band.get("min")
+    high = band.get("max")
+    if low is None and high is None:
+        return 3
+    low = int(low if low is not None else high)
+    high = int(high if high is not None else low)
+    return max(1, min(5, (low + high) // 2))
+
+
+def _target_for_frozen(cfg: dict, frozen: dict) -> dict | None:
+    """The assignment target the blueprint bound to this slot, if any."""
+    wanted = set(frozen.get("target_ids") or [])
+    if not wanted:
+        return None
+    for target in cfg.get("assessment_targets") or []:
+        if target.get("id") in wanted:
+            return target
+    return None
+
+
 def generate_questions(
     chunks: list[dict],
     cfg: dict,
@@ -1238,7 +1331,12 @@ def generate_questions(
         }
         cfg["_generation_metrics"] = metrics
     seed = int(cfg.get("seed", 42))
-    tasks, task_warnings = _catalog_tasks(evidence_store, cfg, num, rng)
+    # A confirmed blueprint wins: generate exactly its slots. Only fall back to
+    # live scheduling when no plan was frozen (legacy / internal callers).
+    if cfg.get("frozen_slots"):
+        tasks, task_warnings = _frozen_tasks(evidence_store, cfg, rng)
+    else:
+        tasks, task_warnings = _catalog_tasks(evidence_store, cfg, num, rng)
     fallback_warnings.extend(task_warnings)
     _notify(progress, "retrieving_evidence", current=0, total=len(tasks) or num,
             message=f"Matched structured evidence for {len(tasks)} question slot(s).")
@@ -1287,12 +1385,16 @@ def generate_questions(
             if not evidence:
                 last_err = "No matching structured evidence."
                 continue
+            # A planned slot carries its own expected difficulty; only fall back
+            # to the framework-wide number when generating without a blueprint.
+            slot_difficulty = max(1, min(5, int(slot.get("requested_difficulty") or difficulty)))
             try:
                 if mock:
-                    raw = _mock_question(slot, evidence, choice_count, correct_count, difficulty, trng)
+                    raw = _mock_question(slot, evidence, choice_count, correct_count,
+                                         slot_difficulty, trng)
                 else:
                     prompt = _question_prompt(
-                        slot, evidence, choice_count, correct_count, difficulty,
+                        slot, evidence, choice_count, correct_count, slot_difficulty,
                         task["focus_for_prompt"], task["evidence_chars"],
                     )
                     if fresh_attempt and last_err:
