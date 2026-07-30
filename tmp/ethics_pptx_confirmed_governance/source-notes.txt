@@ -1,6 +1,0 @@
-Sources used for this revision:
-- Current RepoProof repository implementation (app/static/assess.html, app/db.py, app/main.py, app/config.py)
-- User-confirmed AWS deployment facts: Squarespace DNS/domain, AWS EC2 in ap-southeast-2, encrypted EBS using alias/aws/ebs
-- User-confirmed governance: student developer is sole current operator; deletion is manual; no routine backups
-- CARE opt-out recruitment template: confidential Qualtrics revocation form, independent staff processing, final opt-out date
-- University of Sydney Data Breach Policy 2023

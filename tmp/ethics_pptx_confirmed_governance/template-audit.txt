@@ -1,5 +1,0 @@
-The source deck contains eight slides using one established theme and master/layout hierarchy.
-Slides 1-8 are retained in their current order and duplicated one-to-one.
-Only inherited textboxes and the existing slide-5 table are rewritten.
-Slides 3, 5, 7, and 8 contain the consent/governance language affected by this revision.
-No new visual primitives, layouts, or placeholders are introduced.

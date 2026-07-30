@@ -1,4 +1,0 @@
-Source deck: docs/ethics/RepoProof_Ethics_COMP5339_revised.pptx
-Slides 1-7 retain their existing layouts and theme.
-Slide 8 duplicates slide 7 to preserve the established title, banner, and four-row checklist layout.
-The duplicated slide is fully rewritten as a deployment and governance checklist.

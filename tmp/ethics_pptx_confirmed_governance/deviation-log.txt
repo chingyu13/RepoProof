@@ -1,5 +1,0 @@
-No visual or layout deviations.
-Slide 3: clarify that cohort analytics opt-out closes at the quiz deadline.
-Slide 5: distinguish cohort aggregate opt-out from individual retention opt-in and correct backup language.
-Slide 7: update CARE mapping and resolved governance items.
-Slide 8: replace unknown fields with confirmed deployment, access, deletion, opt-out, mapping, and incident-response facts.

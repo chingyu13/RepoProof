@@ -1,6 +1,0 @@
-Slide 2: simplify the inherited heading to remove an existing title/tagline overlap.
-Slide 3: relabel the research opt-out statement as no academic disadvantage.
-Slide 4: replace realistic-looking SID examples with explicit synthetic values.
-Slide 5: align deletion, de-identification, consent, withdrawal, reporting, and five-year RDS retention language.
-Slide 6: distinguish one-month operational source data from the five-year de-identified research dataset; replace verbatim-code examples in the retained-data section.
-Slide 7: change approved-coverage language to proposed coverage and include unresolved governance decisions.

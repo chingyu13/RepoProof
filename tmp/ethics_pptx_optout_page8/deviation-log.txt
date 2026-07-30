@@ -1,2 +1,0 @@
-No layout deviations planned.
-Slide 8 intentionally reuses slide 7 because both are four-row governance checklists.
