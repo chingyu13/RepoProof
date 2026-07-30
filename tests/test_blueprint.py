@@ -115,13 +115,32 @@ def test_expected_difficulty_empty_when_ranges_cannot_meet():
                                          difficulty_min=4, difficulty_max=5) == {}
 
 
-def test_difficulty_is_not_one_number_copied_everywhere(store):
-    bp = _plan(store)
-    if len(bp["planned"]) < 2:
-        pytest.skip("not enough evidence-supported plans in this fixture")
-    bands = {(s["expected_difficulty"]["min"], s["expected_difficulty"]["max"])
-             for s in bp["planned"]}
-    assert len(bands) > 1, "every slot received an identical difficulty band"
+def test_difficulty_is_not_the_creator_range_copied_everywhere(store):
+    """AC 13: each slot's band is derived, not the requested range copied.
+
+    Two slots may legitimately land on the same band when their Assessment
+    Points have similar allowed ranges — what must never happen is the creator's
+    requested range being stamped onto every slot.
+    """
+    bp = _plan(store, difficulty_min=1, difficulty_max=4)
+    if not bp["planned"]:
+        pytest.skip("no evidence-supported plans in this fixture")
+    for slot in bp["planned"]:
+        band = slot["expected_difficulty"]
+        assert (band["min"], band["max"]) != (1, 4), "requested range copied to a slot"
+
+
+def test_difficulty_bands_vary_across_the_candidate_pool(store):
+    """Across all eligible candidates the estimator must discriminate."""
+    weights = blueprint.assessment_point_distribution(TARGETS, FOCUS)
+    candidates, _rejects = blueprint.enumerate_candidates(
+        store, point_weights=weights, focus_areas=FOCUS, targets=TARGETS,
+        difficulty_min=1, difficulty_max=5)
+    if len(candidates) < 3:
+        pytest.skip("not enough candidates in this fixture")
+    bands = {(c["expected_difficulty"]["min"], c["expected_difficulty"]["max"])
+             for c in candidates}
+    assert len(bands) > 1, "the difficulty estimator produced a single band"
 
 
 # --- §7.8 selection, diversity, repetition ----------------------------------
@@ -244,3 +263,59 @@ def test_low_weight_focus_allocated_zero_slots_does_not_crash(store):
            "assessment_targets": []}
     tasks, _warnings = _catalog_tasks(store, cfg, 5, random.Random(1))
     assert isinstance(tasks, list)
+
+
+# --- code/concept mix: quota + interleaving ---------------------------------
+
+def _seq(bp):
+    return [bool(s["shows_code"]) for s in bp["planned"]]
+
+
+def test_balanced_emphasis_mixes_code_and_concept(store):
+    bp = _plan(store, emphasis="balanced")
+    if len(bp["planned"]) < 4:
+        pytest.skip("fixture cannot support a mixed run")
+    kinds = _seq(bp)
+    assert any(kinds) and not all(kinds), "balanced must plan both code and no-code"
+
+
+def test_balanced_emphasis_hits_its_code_quota(store):
+    bp = _plan(store, emphasis="balanced")
+    if len(bp["planned"]) < 4:
+        pytest.skip("fixture cannot support a mixed run")
+    quota = blueprint._code_quota(len(bp["planned"]), "balanced")
+    assert abs(sum(_seq(bp)) - quota) <= 1
+
+
+def test_emphasis_shifts_the_code_share(store):
+    concepts = _plan(store, emphasis="mostly_concepts")
+    code = _plan(store, emphasis="mostly_code")
+    if len(concepts["planned"]) < 4 or len(code["planned"]) < 4:
+        pytest.skip("fixture cannot support a mixed run")
+    assert sum(_seq(code)) > sum(_seq(concepts))
+
+
+def test_code_questions_are_not_clustered(store):
+    """No three consecutive questions of the same kind while the other exists."""
+    bp = _plan(store, emphasis="balanced")
+    kinds = _seq(bp)
+    if len(kinds) < 4 or len(set(kinds)) < 2:
+        pytest.skip("fixture cannot support a mixed run")
+    runs, longest = 1, 1
+    for a, b in zip(kinds, kinds[1:]):
+        runs = runs + 1 if a == b else 1
+        longest = max(longest, runs)
+    assert longest <= 2, f"code/no-code clustered: {kinds}"
+
+
+def test_interleave_alternates_and_renumbers():
+    slots = [{"shows_code": True, "index": 0}, {"shows_code": True, "index": 1},
+             {"shows_code": False, "index": 2}, {"shows_code": False, "index": 3}]
+    out = blueprint.interleave_by_code(slots)
+    assert [s["shows_code"] for s in out] == [True, False, True, False]
+    assert [s["index"] for s in out] == [0, 1, 2, 3]
+
+
+def test_interleave_is_stable_when_one_kind_only():
+    slots = [{"shows_code": False, "index": 0}, {"shows_code": False, "index": 1}]
+    assert [s["index"] for s in blueprint.interleave_by_code(slots)] == [0, 1]

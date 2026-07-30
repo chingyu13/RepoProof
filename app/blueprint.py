@@ -46,6 +46,16 @@ POINT_WEIGHT_FLOOR = 0.08
 MIN_DISTINCT_POINTS = 3
 MIN_DISTINCT_TEMPLATES = 2
 
+# Share of questions that should show code, per requested emphasis. Balanced
+# means roughly half, so a run does not silently become all-concept or all-code.
+EMPHASIS_CODE_SHARE = {
+    "mostly_concepts": 0.2,
+    "balanced": 0.5,
+    "mostly_code": 0.8,
+}
+# Penalty applied when a candidate's code class has already filled its quota.
+CODE_QUOTA_PENALTY = 0.55
+
 
 # --------------------------------------------------------------------------
 # §7.1 assignment information -> assessment point distribution
@@ -341,6 +351,8 @@ def enumerate_candidates(evidence_store: EvidenceStore, *, point_weights: dict[s
                 "variables": {k: v for k, v in plan.items() if isinstance(v, str)},
                 "subject": subject,
                 "planned_stem": str(plan.get("rendered_stem") or ""),
+                "code_mode": template.get("code_mode", "none"),
+                "shows_code": template.get("code_mode", "none") != "none",
                 "evidence_ids": evidence_ids,
                 "target_ids": [target["id"]] if target else [],
                 "expected_difficulty": band,
@@ -432,8 +444,36 @@ def repetition_penalty(candidate: dict, chosen: list[dict]) -> float:
     return round(penalty, 4)
 
 
-def select_plans(candidates: list[dict], count: int, *, seed: int = 0) -> tuple[list[dict], list[str]]:
-    """Relevance-first greedy selection with diversity penalties.
+def _code_quota(count: int, emphasis: str) -> int:
+    """How many of the ``count`` questions should show code."""
+    share = EMPHASIS_CODE_SHARE.get(emphasis, EMPHASIS_CODE_SHARE["balanced"])
+    return int(round(count * share))
+
+
+def interleave_by_code(slots: list[dict]) -> list[dict]:
+    """Alternate code and no-code questions so neither kind clusters together.
+
+    Relative order within each kind (i.e. relevance order) is preserved; only the
+    interleaving changes. Slot indexes are renumbered to the final order.
+    """
+    code = [s for s in slots if s.get("shows_code")]
+    plain = [s for s in slots if not s.get("shows_code")]
+    # Start with whichever kind has more, so the leftovers spread out evenly.
+    first, second = (code, plain) if len(code) >= len(plain) else (plain, code)
+    out: list[dict] = []
+    for i in range(max(len(first), len(second))):
+        if i < len(first):
+            out.append(first[i])
+        if i < len(second):
+            out.append(second[i])
+    for index, slot in enumerate(out):
+        slot["index"] = index
+    return out
+
+
+def select_plans(candidates: list[dict], count: int, *, seed: int = 0,
+                 emphasis: str = "balanced") -> tuple[list[dict], list[str]]:
+    """Relevance-first greedy selection with diversity and code-mix penalties.
 
     Returns ``(slots, warnings)``. Soft diversity targets may be relaxed on
     sparse repositories, and every relaxation is reported (PRD §7.8).
@@ -442,11 +482,22 @@ def select_plans(candidates: list[dict], count: int, *, seed: int = 0) -> tuple[
     pool = list(candidates)
     chosen: list[dict] = []
     warnings: list[str] = []
+    code_quota = _code_quota(count, emphasis)
+    plain_quota = count - code_quota
 
     while pool and len(chosen) < count:
+        picked_code = sum(1 for c in chosen if c.get("shows_code"))
+        picked_plain = len(chosen) - picked_code
         scored = []
         for cand in pool:
             penalty = repetition_penalty(cand, chosen)
+            # Soft quota: once one kind has had its share, deprioritise it so the
+            # run keeps the requested code/concept mix instead of one kind
+            # winning on relevance alone. Still selectable if nothing else fits.
+            if cand.get("shows_code") and picked_code >= code_quota:
+                penalty += CODE_QUOTA_PENALTY
+            elif not cand.get("shows_code") and picked_plain >= plain_quota:
+                penalty += CODE_QUOTA_PENALTY
             scored.append((round(cand["relevance"] - penalty, 6), cand))
         best = max(s for s, _c in scored)
         tied = [c for s, c in scored if s == best]
@@ -462,10 +513,20 @@ def select_plans(candidates: list[dict], count: int, *, seed: int = 0) -> tuple[
         chosen.append(pick)
         pool = [c for c in pool if c["plan_key"] != pick["plan_key"]]
 
+    # Spread code and no-code questions through the paper rather than clustering.
+    chosen = interleave_by_code(chosen)
+
     if len(chosen) < count:
         warnings.append(
             f"only {len(chosen)} evidence-supported plans available (requested {count})")
     if chosen:
+        picked_code = sum(1 for c in chosen if c.get("shows_code"))
+        if code_quota and not picked_code:
+            warnings.append(
+                f"no code-based question had sufficient evidence (wanted {code_quota})")
+        elif plain_quota and picked_code == len(chosen):
+            warnings.append(
+                f"every planned question shows code (wanted {plain_quota} without code)")
         points = {c["assessment_point_id"] for c in chosen}
         templates = {c["template_id"] for c in chosen}
         if count >= 5 and len(points) < MIN_DISTINCT_POINTS:
@@ -524,7 +585,7 @@ def build_blueprint(evidence_store: EvidenceStore, *, targets: list[dict] | None
         targets=targets, emphasis=emphasis, allow_code=allow_code,
         difficulty_min=difficulty_min, difficulty_max=difficulty_max,
         excluded_points=excluded)
-    planned, warnings = select_plans(candidates, num_questions, seed=seed)
+    planned, warnings = select_plans(candidates, num_questions, seed=seed, emphasis=emphasis)
 
     if not targets:
         warnings.insert(0, "No assignment scope supplied — Assessment Points inferred "
