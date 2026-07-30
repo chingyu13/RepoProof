@@ -65,9 +65,11 @@ label{display:block;font-size:.85rem;color:var(--muted);margin:.5rem 0 .2rem}
 input[type=text],input[type=number],select,textarea{width:100%;padding:.55rem .7rem;border:2px solid var(--input-border);border-radius:5px;font:inherit;background:var(--input-bg);color:var(--ink)}
 input::placeholder,textarea::placeholder{color:var(--placeholder)}
 textarea{min-height:60px}
+/* Context fields start one line tall and grow with the text, then scroll. */
+textarea.autogrow{min-height:0;height:2.5rem;max-height:11rem;overflow-y:auto;resize:vertical}
 .context-fields{display:grid;gap:.65rem;margin:.5rem 0 1rem}
 .context-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem;align-items:stretch}
-.context-control textarea{min-height:76px;resize:vertical}
+.context-control textarea:not(.autogrow){min-height:76px;resize:vertical}
 .context-upload{min-width:96px}
 .context-files{min-height:1em;margin-top:.2rem}
 button{background:var(--accent);color:#fff;border:0;border-radius:5px;padding:.6rem 1rem;font:inherit;font-weight:500;letter-spacing:.03em;cursor:pointer}
@@ -299,7 +301,7 @@ a{color:var(--accent)}
     <div>
       <label>Assumed prior knowledge</label>
       <div class="context-control">
-        <textarea id="assumedKnowledge"></textarea>
+        <textarea id="assumedKnowledge" class="autogrow" rows="1"></textarea>
         <button class="secondary context-upload" id="uploadPrior" type="button">Upload</button>
         <input id="priorFiles" type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,.tsv,.json,.yaml,.yml" multiple hidden>
       </div>
@@ -308,7 +310,7 @@ a{color:var(--accent)}
     <div>
       <label>Project scope definition</label>
       <div class="context-control">
-        <textarea id="projectScope"></textarea>
+        <textarea id="projectScope" class="autogrow" rows="1"></textarea>
         <button class="secondary context-upload" id="uploadScope" type="button">Upload</button>
         <input id="scopeFiles" type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,.tsv,.json,.yaml,.yml" multiple hidden>
       </div>
@@ -323,22 +325,8 @@ a{color:var(--accent)}
     <div id="gExactWrap"><label>Exact correct</label><input type="number" id="gExact" value="1" min="1"></div>
     <div id="gRangeWrap" class="hidden"><label>Range (min–max)</label>
       <div style="display:flex;gap:.3rem"><input type="number" id="gMin" value="1" min="1"><input type="number" id="gMax" value="3" min="1"></div></div>
-    <div><label>Target difficulty (min–max)</label>
-      <div style="display:flex;gap:.3rem">
-        <input type="number" id="gDiffMin" value="1" min="1" max="5" aria-label="Minimum target difficulty">
-        <input type="number" id="gDiffMax" value="4" min="1" max="5" aria-label="Maximum target difficulty">
-      </div></div>
-    <div><label>Question emphasis</label>
-      <select id="gEmphasis">
-        <option value="mostly_concepts">Mostly concepts</option>
-        <option value="balanced" selected>Balanced</option>
-        <option value="mostly_code">Mostly code</option>
-      </select></div>
-    <div><label>Show code in questions</label>
-      <select id="gAllowCode">
-        <option value="1" selected>Allowed</option>
-        <option value="0">Not allowed</option>
-      </select></div>
+    <div><label>Target avg difficulty (1–5)</label>
+      <input type="number" id="gDiffAvg" value="3" min="1" max="5"></div>
     <div><label>LLM model</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
   <p class="small" id="providerNote"></p>
@@ -808,6 +796,7 @@ async function openProject(id){
   if (currentProject !== null && currentProject !== id) {
     $('assumedKnowledge').value = '';
     $('projectScope').value = '';
+    document.querySelectorAll('textarea.autogrow').forEach(el=>{ el.style.height = ''; });
     priorContextFiles.splice(0);
     scopeContextFiles.splice(0);
     $('priorFiles').value = '';
@@ -953,14 +942,21 @@ async function waitForGeneration(runId){
 let currentPlan = null;
 const excludedPoints = new Set();
 
+// The creator sets one target average difficulty; the planner works with a
+// range, so widen it by one level either side (clamped to 1..5).
+function difficultyRange(){
+  const avg = Math.min(5, Math.max(1, +$('gDiffAvg').value || 3));
+  return {difficulty_min: Math.max(1, avg - 1), difficulty_max: Math.min(5, avg + 1)};
+}
+
 function frameworkConfig(){
   return {
     num_questions:+$('gNum').value, choice_count:+$('gChoices').value,
     correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
     correct_min:+$('gMin').value, correct_max:+$('gMax').value,
-    difficulty_min:+$('gDiffMin').value, difficulty_max:+$('gDiffMax').value,
-    question_emphasis:$('gEmphasis').value,
-    allow_code:$('gAllowCode').value === '1',
+    ...difficultyRange(),
+    question_emphasis:'balanced',
+    allow_code:true,
     excluded_assessment_points:[...excludedPoints],
     focus:$('gFocus').value,
     focus_areas: areas.filter(area=>area.w > 0).map(area=>({
@@ -1047,6 +1043,15 @@ async function buildPlan(){
   } catch(e){ $('planErr').textContent = e.message; $('planStatus').textContent = ''; }
   $('previewPlan').disabled = false;
 }
+
+// One-line context fields that grow with their content, then scroll.
+function autoGrow(el){
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 11 * 16) + 'px';
+}
+document.querySelectorAll('textarea.autogrow').forEach(el=>{
+  el.addEventListener('input', ()=>autoGrow(el));
+});
 
 $('previewPlan').onclick = ()=>{ excludedPoints.clear(); return buildPlan(); };
 $('rebuildPlan').onclick = ()=>{ excludedPoints.clear(); return buildPlan(); };
@@ -1228,10 +1233,8 @@ $('publish').onclick = async ()=>{
                               num_questions:+$('gNum').value, choice_count:+$('gChoices').value,
                               correct_mode:$('gMode').value, correct_exact:+$('gExact').value,
                               correct_min:+$('gMin').value, correct_max:+$('gMax').value,
-                              difficulty_min:+$('gDiffMin').value,
-                              difficulty_max:+$('gDiffMax').value,
-                              question_emphasis:$('gEmphasis').value,
-                              allow_code:$('gAllowCode').value === '1',
+                              difficulty:+$('gDiffAvg').value,
+                              ...difficultyRange(),
                               focus:$('gFocus').value,
                               ...selectedLlm(),
                               assumed_knowledge:$('assumedKnowledge').value,
@@ -1274,15 +1277,10 @@ function frameworkSummary(fw){
     ? `exact ${fw.correct_exact} correct`
     : `dynamic ${fw.correct_min}–${fw.correct_max} correct`;
   const areas = (fw.focus_areas || []).map(area=>`${area.name || area.id} ${area.weight}`).join(', ') || '—';
-  // Older snapshots stored a single `difficulty`; newer ones store a range.
-  const diff = fw.difficulty_min != null
-    ? `difficulty ${fw.difficulty_min}–${fw.difficulty_max}`
-    : `difficulty ${fw.difficulty}`;
-  const emphasis = fw.question_emphasis
-    ? ` · ${ {mostly_concepts:'mostly concepts', balanced:'balanced', mostly_code:'mostly code'}[fw.question_emphasis] || fw.question_emphasis }`
-    : '';
-  return `${fw.num_questions} questions · ${fw.choice_count} options · ${cc} · ${diff}${emphasis}`
-    + (fw.allow_code === false ? ' · no code shown' : '')
+  const diff = fw.difficulty != null
+    ? `target avg difficulty ${fw.difficulty}`
+    : `difficulty ${fw.difficulty_min}–${fw.difficulty_max}`;
+  return `${fw.num_questions} questions · ${fw.choice_count} options · ${cc} · ${diff}`
     + ` · provider: ${fw.model || fw.provider || 'default'}`
     + `\nFocus areas: ${areas}`
     + (fw.assumed_knowledge ? `\nAssumed prior knowledge: ${fw.assumed_knowledge}` : '')
