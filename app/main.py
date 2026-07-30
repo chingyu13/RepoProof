@@ -403,6 +403,7 @@ def _store_generated_questions(
             "explanation": q["explanation"],
             "generator": q["generator"],
             "flags_json": q.get("quality_flags", []),
+            "confidence": q.get("confidence"),
         })
         ids.append(qid)
     provider_used = questions[0]["generator"] if questions else (
@@ -888,7 +889,17 @@ def edit_question(question_id: int, edit: QuestionEdit):
                 "generator": q["generator"], "reasons": errs,
             }, project_id=q["project_id"])
             raise HTTPException(422, "Cannot approve: " + " ".join(errs))
-    db.update("questions", question_id, {
+    # The model's confidence describes the question it produced. Editing the
+    # content invalidates it; changing only difficulty, focus or status does not
+    # (ERD §6).
+    content_edited = any([
+        merged["stem"] != q["stem"],
+        merged["options"] != q["options"],
+        sorted(set(merged["answer"])) != sorted(set(q["answer"])),
+        merged["explanation"] != q["explanation"],
+    ])
+    confidence_invalidated = content_edited and q.get("confidence") is not None
+    updates = {
         "stem": merged["stem"],
         "options_json": merged["options"],
         "answer_json": sorted(set(merged["answer"])),
@@ -896,7 +907,10 @@ def edit_question(question_id: int, edit: QuestionEdit):
         "focus_areas_json": merged["focus_areas"],
         "explanation": merged["explanation"],
         "status": status,
-    })
+    }
+    if confidence_invalidated:
+        updates["confidence"] = None
+    db.update("questions", question_id, updates)
     db.log_event("question_review", {
         "question_id": question_id,
         "action": status,                 # draft | approved | rejected
@@ -904,6 +918,8 @@ def edit_question(question_id: int, edit: QuestionEdit):
         "edited": edited,                 # human corrected model output → training signal
         "generator": q["generator"],
         "slot": q["slot"],
+        "confidence": q.get("confidence"),
+        "confidence_invalidated": confidence_invalidated,
     }, project_id=q["project_id"])
     return db.get("questions", question_id)
 

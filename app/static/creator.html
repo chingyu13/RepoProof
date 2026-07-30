@@ -1118,7 +1118,9 @@ function renderQuestion(q, pos){
     : '';
   div.innerHTML = `
     <span class="status ${q.status}">${q.status}</span>
-    <div class="small" style="margin:0 0 .4rem"><strong>Q${pos}</strong> · slot: ${q.slot} · by ${q.generator} · ref #${q.id}</div>
+    <div class="small" style="margin:0 0 .4rem"><strong>Q${pos}</strong> · ref #${q.id} · <span
+      title="The model's confidence that the answer key and explanation are correct based on the available project evidence."
+      >confidence: ${q.confidence == null ? '-' : q.confidence}</span></div>
     ${flags}
     <textarea class="stem">${esc(q.stem)}</textarea>
     <div class="opts"></div>

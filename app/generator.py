@@ -33,8 +33,17 @@ Return strict JSON only:
   "incorrect_options": [
     {"text": "...", "justification": "one short evidence-based contradiction"}
   ],
-  "explanation": "one or two concise sentences"
-}"""
+  "explanation": "one or two concise sentences",
+  "confidence": 8
+}
+
+Give one confidence score from 1 to 10 for whether the answer key and
+explanation are correct and supported by the supplied project evidence.
+
+1-3: Evidence is insufficient or the answer may be wrong.
+4-6: The answer needs assumptions or indirect evidence.
+7-8: The answer is clearly supported.
+9-10: Every option and the explanation are directly and unambiguously supported."""
 
 RAW_OPENAI_SYSTEM_PROMPT = """You are an assessment designer. Generate a complete batch of multi-answer
 questions from the original project files supplied by the user. The focus-area weights describe the
@@ -1409,6 +1418,11 @@ def generate_questions(
                 # quality flags for the reviewer instead of burning LLM calls.
                 errs, soft_flags = validate_maq_split(q, choice_count, correct_count)
                 errs.extend(_specific_evidence_errors(q, slot, chunk_by_id))
+                # A model-generated question must carry a usable 1-10 confidence;
+                # a missing or malformed one goes through the existing bounded
+                # repair flow rather than being defaulted (ERD §3, AC 2).
+                if not mock and q.get("confidence") is None:
+                    errs.append("confidence must be an integer from 1 to 10")
                 if not errs:
                     if soft_flags:
                         q["quality_flags"] = soft_flags
@@ -1600,4 +1614,30 @@ def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | No
         "difficulty": int(diff) if isinstance(diff, (int, float, str)) and str(diff).isdigit() else 1,
         "focus_areas": [str(f) for f in raw.get("focus_areas", [slot["focus"]])][:4] or [slot["focus"]],
         "explanation": explanation,
+        # Model metadata, not a calibrated probability. None when the model gave
+        # nothing usable — never a fabricated default (ERD §3).
+        "confidence": _clean_confidence(raw.get("confidence")),
     }
+
+
+def _clean_confidence(value) -> int | None:
+    """An integer 1-10 from the model, or None.
+
+    Rejects booleans, decimals, numeric strings with a fraction, and anything
+    out of range, so an invalid score reaches the repair flow instead of being
+    silently coerced (ERD §3).
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not re.fullmatch(r"\d+", text):
+            return None
+        value = int(text)
+    try:
+        score = int(value)
+    except (TypeError, ValueError):
+        return None
+    return score if 1 <= score <= 10 else None

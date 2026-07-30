@@ -107,6 +107,9 @@ _MIGRATIONS = [
     ("questions", "alignment_json", "TEXT NOT NULL DEFAULT '{}'"),
     ("attempts", "repo_id", "TEXT NOT NULL DEFAULT ''"),   # pseudonymous taker id — never the SID
     ("attempts", "research_opt_in", "INTEGER NOT NULL DEFAULT 0"),  # 1 = student opted in to research retention
+    # Model's own 1-10 confidence in the answer key + explanation. Nullable on
+    # purpose: existing, manual and mock questions must not get a fabricated score.
+    ("questions", "confidence", "INTEGER"),
 ]
 
 
