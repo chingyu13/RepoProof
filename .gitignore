@@ -2,13 +2,10 @@
 .DS_Store
 data/
 __pycache__/
+docs/
 *.pyc
 .venv/
 venv/
 notebooks/*.ipynb
 template_Q/
 .claude/
-docs/disc/
-docs/ethics/
-docs/flow/*.pptx
-docs/support material/*.pdf
