@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from pydantic import ValidationError
@@ -35,6 +36,7 @@ class ArchitectureCleanupTests(unittest.TestCase):
 
     def test_only_background_generation_route_remains(self):
         paths = {route.path for route in app.routes}
+        self.assertIn("/static", paths)
         self.assertIn("/api/projects/{project_id}/generation-runs", paths)
         self.assertNotIn("/api/projects/{project_id}/generate", paths)
 
@@ -51,6 +53,22 @@ class ArchitectureCleanupTests(unittest.TestCase):
             difficulty=3,
         )
         self.assertEqual(prompt.count("CODE LOGIC PROTOTYPE REQUIREMENTS:"), 1)
+
+    def test_step_two_uses_inline_context_file_tags(self):
+        html = Path("app/static/creator.html").read_text()
+        self.assertNotIn("priorFileNames", html)
+        self.assertNotIn("scopeFileNames", html)
+        self.assertIn('id="priorFileTags"', html)
+        self.assertIn('id="scopeFileTags"', html)
+        self.assertIn(".context-fields{display:grid;gap:.4rem", html)
+        self.assertIn('class="framework-field question-count-field"', html)
+        self.assertIn('class="difficulty-control"', html)
+        self.assertIn('class="difficulty-icon-wrap"', html)
+        self.assertNotIn("numeric-step", html)
+        self.assertIn("const difficultyIcons = {", html)
+        self.assertNotIn("Target avg difficulty", html)
+        for name in ("dropdown.svg", "easy_easy.svg", "easy.svg", "mid.svg", "hard.svg", "hard_hard.svg"):
+            self.assertTrue((Path("app/static/assets") / name).is_file())
 
     def test_print_view_escapes_dynamic_content(self):
         rows = {

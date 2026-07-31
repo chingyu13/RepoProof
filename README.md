@@ -88,8 +88,13 @@ app/
 ├── db.py          # SQLite storage, migrations, telemetry events
 ├── config.py      # env config, provider selection, consent copy/versioning
 ├── main.py        # FastAPI routes, session auth, middleware
-└── static/        # index (landing/login), creator, demo, assess UIs
+└── static/        # browser UIs, runtime SVG assets, and vendored dependencies
 assessment_catalog.json # authoritative Topics/Templates/typed slots/Evidence requirements
+scripts/                # local inspection, notebook generation, asset download
+design/source/          # editable design sources; not served by the application
+tests/fixtures/         # small, deterministic sample projects for tests/dev tools
+notebooks/              # generated, disposable module notebooks
+data/                   # local runtime database and uploaded projects (gitignored)
 ```
 
 ---

@@ -2,13 +2,13 @@
 
 Usage (pick one):
     # 1) Print a one-shot summary
-    python inspect_analysis.py data/try
+    python scripts/inspect_analysis.py tests/fixtures/sample_project
 
     # 2) Drop into ipython with analysis / chunks in the namespace
-    TARGET=data/try ipython -i inspect_analysis.py
+    TARGET=tests/fixtures/sample_project ipython -i scripts/inspect_analysis.py
 
 Point TARGET at a project folder (not a single file), e.g. put sample
-sources under data/try/.
+sources under tests/fixtures/sample_project/.
 
 Afterwards you can run:
     show(analysis["stats"])          # summary stats
@@ -21,12 +21,20 @@ import sys
 import json
 from pathlib import Path
 
-# Make `import app` work from the repo root
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Make `import app` work regardless of the current working directory.
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 from app.analyzer import analyze_project      # noqa: E402
 from app.knowledge import build_chunks        # noqa: E402
 
-TARGET = Path(os.environ.get("TARGET") or (sys.argv[1] if len(sys.argv) > 1 else "data/try"))
+TARGET = Path(
+    os.environ.get("TARGET")
+    or (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else ROOT / "tests" / "fixtures" / "sample_project"
+    )
+)
 
 
 def show(x):

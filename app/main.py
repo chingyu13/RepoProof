@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import blueprint, config, db, generation_runs
@@ -39,6 +40,7 @@ if config.ACCESS_PASSWORD and (len(config.ACCESS_PASSWORD) < 8 or config.ACCESS_
     print("[repoproof] WARNING: REPOPROOF_ACCESS_PASSWORD is weak — change it before exposing this server")
 
 STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 COOKIE_NAME = "repoproof_creator"
 _SESSION_SECRET = config.SESSION_SECRET or secrets.token_urlsafe(32)
 SESSION_TTL_SECONDS = 8 * 60 * 60

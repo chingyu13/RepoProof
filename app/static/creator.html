@@ -63,15 +63,43 @@ header h1{font-size:1.15rem;margin:0;font-weight:600}
 .sub{color:var(--muted);font-size:.85rem;margin:0 0 1rem}
 label{display:block;font-size:.85rem;color:var(--muted);margin:.5rem 0 .2rem}
 input[type=text],input[type=number],select,textarea{width:100%;padding:.55rem .7rem;border:2px solid var(--input-border);border-radius:5px;font:inherit;background:var(--input-bg);color:var(--ink)}
+select{appearance:none;-webkit-appearance:none;padding-right:2.2rem;background-image:url('/static/assets/dropdown.svg');
+  background-repeat:no-repeat;background-position:right 12px center;background-size:11px 6px}
 input::placeholder,textarea::placeholder{color:var(--placeholder)}
 textarea{min-height:60px}
 /* Context fields start one line tall and grow with the text, then scroll. */
 textarea.autogrow{min-height:0;height:2.5rem;max-height:11rem;overflow-y:auto;resize:vertical}
-.context-fields{display:grid;gap:.65rem;margin:.5rem 0 1rem}
+.context-fields{display:grid;gap:.4rem;margin:.5rem 0 1rem}
 .context-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem;align-items:stretch}
 .context-control textarea:not(.autogrow){min-height:76px;resize:vertical}
 .context-upload{min-width:96px}
-.context-files{min-height:1em;margin-top:.2rem}
+.context-input{display:flex;flex-wrap:wrap;align-items:flex-start;gap:.35rem;min-height:2.5rem;padding:.25rem .35rem;
+  border:2px solid var(--input-border);border-radius:5px;background:var(--input-bg)}
+.context-input:focus-within{border-color:var(--strong)}
+.context-tags{display:contents}
+.context-file-tag{display:inline-flex;align-items:center;max-width:16rem;min-height:1.75rem;padding:.25rem .5rem;
+  border:1px solid #c1c1c1;border-radius:4px;background:#ececec;color:#4e4e4e;font-size:.8rem;
+  line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.context-input textarea.autogrow{flex:1 1 12rem;width:auto;min-width:8rem;height:1.75rem;padding:.25rem .35rem;
+  border:0;background:transparent;resize:vertical;outline:none}
+.framework-config{display:flex;gap:13px;align-items:flex-start;margin-top:.5rem}
+.framework-field{flex:1 1 0;min-width:0}
+.framework-field label{white-space:nowrap}
+.question-count-field{flex:0 0 124px}
+.correct-count-field{flex:0 0 108px}
+.range-count-field{flex-basis:140px}
+.difficulty-field{flex:0 0 112px}
+.difficulty-control{height:2.5rem;display:flex;align-items:center;gap:8px;padding:0 11px;
+  border:2px solid var(--input-border);border-radius:5px;background:var(--input-bg)}
+.difficulty-icon-wrap{position:relative;width:22px;height:22px;flex:0 0 22px}
+.difficulty-icon{position:absolute;left:50%;top:50%;width:32px;height:32px;max-width:none;
+  object-fit:contain;transform:translate(-50%,-50%)}
+[data-theme="dark"] .difficulty-icon{filter:invert(1)}
+.difficulty-control input[type=number]{width:48px;height:28px;min-width:48px;padding:0 0 0 2px;border:0;background:transparent;
+  line-height:28px;text-align:center}
+.correct-range{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:.2rem}
+.correct-range input[type=number]{min-width:0;padding:.55rem .35rem}
+.correct-range span{color:var(--muted)}
 button{background:var(--accent);color:#fff;border:0;border-radius:5px;padding:.6rem 1rem;font:inherit;font-weight:500;letter-spacing:.03em;cursor:pointer}
 button:hover{background:var(--accent-hover)}
 button.secondary{background:var(--input-bg);color:var(--ink);border:2px solid var(--strong)}
@@ -132,8 +160,8 @@ a{color:var(--accent)}
   --radar-fill:rgba(119,120,126,.32); --radar-dot-ring:var(--card);
 }
 .radar-wrap{display:flex;gap:1.4rem;align-items:flex-start;flex-wrap:wrap;margin-top:.4rem}
-.radar-panel{background:transparent;border-radius:14px;padding:.6rem;flex:0 0 auto}
-#radar{display:block;width:300px;height:300px;max-width:100%}
+.radar-panel{background:transparent;border-radius:14px;padding:5px 0 0;flex:0 0 auto}
+#radar{display:block;width:300px;height:260px;max-width:100%}
 #radar .radar-grid{fill:none;stroke:var(--radar-grid);stroke-width:1}
 #radar .radar-spoke{stroke:var(--radar-grid);stroke-width:1}
 #radar .radar-area{fill:var(--radar-fill);stroke:var(--radar-stroke);stroke-width:2;stroke-linejoin:round}
@@ -190,6 +218,12 @@ a{color:var(--accent)}
   .workflow{margin:1rem auto}
   .card{padding:1.1rem}
   .context-control{grid-template-columns:1fr}
+  .framework-config{flex-wrap:wrap}
+  .framework-field{flex:1 1 calc(50% - 13px);min-width:130px}
+  .question-count-field{flex:0 0 124px;min-width:124px}
+  .correct-count-field{flex:0 0 108px;min-width:108px}
+  .range-count-field{flex-basis:140px;min-width:140px}
+  .difficulty-field{flex:0 0 112px;min-width:112px}
 }
 </style>
 </head>
@@ -301,33 +335,48 @@ a{color:var(--accent)}
     <div>
       <label>Assumed prior knowledge</label>
       <div class="context-control">
-        <textarea id="assumedKnowledge" class="autogrow" rows="1"></textarea>
+        <div class="context-input">
+          <div class="context-tags" id="priorFileTags"></div>
+          <textarea id="assumedKnowledge" class="autogrow" rows="1"></textarea>
+        </div>
         <button class="secondary context-upload" id="uploadPrior" type="button">Upload</button>
         <input id="priorFiles" type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,.tsv,.json,.yaml,.yml" multiple hidden>
       </div>
-      <div class="small context-files" id="priorFileNames"></div>
     </div>
     <div>
       <label>Project scope definition</label>
       <div class="context-control">
-        <textarea id="projectScope" class="autogrow" rows="1"></textarea>
+        <div class="context-input">
+          <div class="context-tags" id="scopeFileTags"></div>
+          <textarea id="projectScope" class="autogrow" rows="1"></textarea>
+        </div>
         <button class="secondary context-upload" id="uploadScope" type="button">Upload</button>
         <input id="scopeFiles" type="file" accept=".pdf,.docx,.pptx,.txt,.md,.csv,.tsv,.json,.yaml,.yml" multiple hidden>
       </div>
-      <div class="small context-files" id="scopeFileNames"></div>
     </div>
   </div>
-  <div class="row">
-    <div><label># Questions</label><input type="number" id="gNum" value="5" min="1" max="20"></div>
-    <div><label>Options per question</label><input type="number" id="gChoices" value="4" min="2" max="7"></div>
-    <div><label>Correct-count mode</label>
+  <div class="framework-config">
+    <div class="framework-field question-count-field"><label># Questions</label><input type="number" id="gNum" value="5" min="1" max="20"></div>
+    <div class="framework-field"><label>Options per question</label><input type="number" id="gChoices" value="4" min="2" max="7"></div>
+    <div class="framework-field"><label>Correct-count mode</label>
       <select id="gMode"><option value="exact" selected>Exact</option><option value="dynamic">Dynamic range</option></select></div>
-    <div id="gExactWrap"><label>Exact correct</label><input type="number" id="gExact" value="1" min="1"></div>
-    <div id="gRangeWrap" class="hidden"><label>Range (min–max)</label>
-      <div style="display:flex;gap:.3rem"><input type="number" id="gMin" value="1" min="1"><input type="number" id="gMax" value="3" min="1"></div></div>
-    <div><label>Target avg difficulty (1–5)</label>
-      <input type="number" id="gDiffAvg" value="3" min="1" max="5"></div>
-    <div><label>LLM model</label><select id="gProvider"><option value="">Loading…</option></select></div>
+    <div class="framework-field correct-count-field" id="gExactWrap"><label>Exact correct</label>
+      <input type="number" id="gExact" value="1" min="1">
+    </div>
+    <div class="framework-field correct-count-field range-count-field hidden" id="gRangeWrap"><label>Range (min–max)</label>
+      <div class="correct-range">
+        <input type="number" id="gMin" value="1" min="1" aria-label="Minimum correct options">
+        <span>–</span>
+        <input type="number" id="gMax" value="3" min="1" aria-label="Maximum correct options">
+      </div>
+    </div>
+    <div class="framework-field difficulty-field"><label for="gDiffAvg">Difficulty</label>
+      <div class="difficulty-control">
+        <span class="difficulty-icon-wrap"><img class="difficulty-icon" id="difficultyIcon" src="/static/assets/mid.svg" alt=""></span>
+        <input type="number" id="gDiffAvg" value="3" min="1" max="5" aria-label="Difficulty from 1 to 5">
+      </div>
+    </div>
+    <div class="framework-field"><label>LLM model</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
   <p class="small" id="providerNote"></p>
   <label>Focus areas — drag each slider to set how strongly that area is tested (0 = skip)</label>
@@ -341,7 +390,7 @@ a{color:var(--accent)}
       </div>
     </div>
   </div>
-  <label>Extra instructions (optional — e.g. "recursion, testing; don't ask about deployment")</label>
+  <label>Extra instructions (optional — e.g. "don't ask about deployment")</label>
   <input type="text" id="gFocus">
   <p style="margin-top:.8rem">
     <button id="previewPlan">Preview question plan</button>
@@ -489,16 +538,28 @@ async function api(path, opts={}) {
   return body;
 }
 
-function bindContextFiles(buttonId, inputId, namesId, target){
+function renderContextFileTags(tagsId, files){
+  const tags = $(tagsId);
+  tags.replaceChildren();
+  files.forEach(file=>{
+    const tag = document.createElement('span');
+    tag.className = 'context-file-tag';
+    tag.textContent = file.name;
+    tag.title = file.name;
+    tags.appendChild(tag);
+  });
+}
+
+function bindContextFiles(buttonId, inputId, tagsId, target){
   const input = $(inputId);
   $(buttonId).onclick = ()=>input.click();
   input.onchange = ()=>{
     target.splice(0, target.length, ...input.files);
-    $(namesId).textContent = target.map(file=>file.name).join(' · ');
+    renderContextFileTags(tagsId, target);
   };
 }
-bindContextFiles('uploadPrior', 'priorFiles', 'priorFileNames', priorContextFiles);
-bindContextFiles('uploadScope', 'scopeFiles', 'scopeFileNames', scopeContextFiles);
+bindContextFiles('uploadPrior', 'priorFiles', 'priorFileTags', priorContextFiles);
+bindContextFiles('uploadScope', 'scopeFiles', 'scopeFileTags', scopeContextFiles);
 
 function selectedLlm(){
   const option = $('gProvider').selectedOptions[0];
@@ -801,8 +862,8 @@ async function openProject(id){
     scopeContextFiles.splice(0);
     $('priorFiles').value = '';
     $('scopeFiles').value = '';
-    $('priorFileNames').textContent = '';
-    $('scopeFileNames').textContent = '';
+    renderContextFileTags('priorFileTags', priorContextFiles);
+    renderContextFileTags('scopeFileTags', scopeContextFiles);
   }
   currentProject = id;
   document.querySelectorAll('.project-content').forEach(el=>el.classList.remove('hidden'));
@@ -822,13 +883,32 @@ $('gMode').onchange = ()=>{
   $('gRangeWrap').classList.toggle('hidden', exact);
 };
 
+const difficultyIcons = {
+  1:'/static/assets/easy_easy.svg',
+  2:'/static/assets/easy.svg',
+  3:'/static/assets/mid.svg',
+  4:'/static/assets/hard.svg',
+  5:'/static/assets/hard_hard.svg',
+};
+function syncDifficultyIcon(normalize=false){
+  const raw = $('gDiffAvg').value;
+  if (raw === '') return;
+  const level = Math.min(5, Math.max(1, Math.round(+raw || 3)));
+  if (normalize) $('gDiffAvg').value = level;
+  $('difficultyIcon').src = difficultyIcons[level];
+  $('difficultyIcon').alt = `Difficulty ${level}`;
+}
+$('gDiffAvg').addEventListener('input', ()=>syncDifficultyIcon());
+$('gDiffAvg').addEventListener('change', ()=>syncDifficultyIcon(true));
+syncDifficultyIcon(true);
+
 let topicCatalog = [];
 let areas = [];
 const topicById = id => topicCatalog.find(topic => topic.id === id);
 function escXml(s){ return (s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function drawRadar(){
   const svg = $('radar');
-  const n = areas.length, cx = 150, cy = 150, R = 102, LVL = 5;
+  const n = areas.length, cx = 150, cy = 130, R = 112, LVL = 5;
   const pt = (i, r) => {
     const a = -Math.PI/2 + i * 2 * Math.PI / n;
     return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
@@ -847,10 +927,13 @@ function drawRadar(){
   s += `<polygon points="${dataPts.map(p=>p.join(',')).join(' ')}" class="radar-area"/>`;
   dataPts.forEach(p=>{ s += `<circle cx="${p[0]}" cy="${p[1]}" r="4" class="radar-dot"/>`; });
   areas.forEach((a,i)=>{
-    const [x,y] = pt(i, R + 14);
-    const anchor = Math.abs(x - cx) < 10 ? 'middle' : (x > cx ? 'start' : 'end');
+    const [x,y] = pt(i, R + 12);
+    let labelX = x;
+    let anchor = Math.abs(x - cx) < 10 ? 'middle' : (x > cx ? 'start' : 'end');
+    if (x < 70) { labelX = 4; anchor = 'start'; }
+    if (x > 230) { labelX = 296; anchor = 'end'; }
     const name = (topicById(a.id) || {name:a.id}).name;
-    s += `<text x="${x}" y="${y + 3}" text-anchor="${anchor}" class="radar-label">${escXml(name.slice(0, 18))}</text>`;
+    s += `<text x="${labelX}" y="${y + 3}" text-anchor="${anchor}" class="radar-label">${escXml(name.slice(0, 18))}</text>`;
   });
   svg.innerHTML = s;
 }
