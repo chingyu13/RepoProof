@@ -394,6 +394,7 @@ a{color:var(--accent)}
   <input type="text" id="gFocus">
   <p style="margin-top:.8rem">
     <button id="previewPlan">Preview question plan</button>
+    <button id="directGenerate" class="hidden">Generate questions</button>
     <span class="small" id="planStatus"></span>
   </p>
   <p class="err" id="planErr"></p>
@@ -637,6 +638,7 @@ async function loadMeta(){
     const fallback = [...sel.options].find(option=>!option.disabled && !option.hidden);
     sel.value = fallback?.value || 'mock';
   }
+  syncPlanControls();   // blueprint step only applies to the planned providers
   $('providerNote').classList.toggle('hidden', !!p.local?.available);
   $('providerNote').textContent = p.local?.available
     ? ''
@@ -1136,20 +1138,45 @@ document.querySelectorAll('textarea.autogrow').forEach(el=>{
   el.addEventListener('input', ()=>autoGrow(el));
 });
 
+// The hosted API provider is the unconstrained benchmark baseline: it generates
+// straight from the raw project files and does not consume a blueprint. So the
+// planning step is hidden for it — showing a plan it will not follow would
+// misrepresent what gets generated.
+function usesBlueprint(){
+  return selectedLlm().provider !== 'openai';
+}
+
+function syncPlanControls(){
+  const planned = usesBlueprint();
+  $('previewPlan').classList.toggle('hidden', !planned);
+  if (!planned){
+    currentPlan = null;
+    $('blueprint').classList.add('hidden');
+    $('planStatus').textContent = '';
+    $('planErr').textContent = '';
+  }
+  $('directGenerate').classList.toggle('hidden', planned);
+}
+
+$('gProvider').addEventListener('change', syncPlanControls);
 $('previewPlan').onclick = ()=>{ excludedPoints.clear(); return buildPlan(); };
 $('rebuildPlan').onclick = ()=>{ excludedPoints.clear(); return buildPlan(); };
 
-$('generate').onclick = async ()=>{
+async function runGeneration(){
   $('genErr').textContent=''; $('genStatus').textContent='Generating…';
-  $('generate').disabled = true;
+  $('generate').disabled = true; $('directGenerate').disabled = true;
   $('genStage').textContent = 'Preparing generation';
-  $('genProgress').textContent = 'Confirming the question plan.';
+  $('genProgress').textContent = usesBlueprint()
+    ? 'Confirming the question plan.' : 'Submitting the question framework.';
   $('genAlignment').textContent = '';
   $('genOverlay').classList.remove('hidden');
   try {
-    if (!currentPlan) throw new Error('Preview a question plan first.');
-    await api(`/api/question-plans/${currentPlan.id}/confirm`, {method:'POST'});
-    const cfg = {...frameworkConfig(), question_plan_id: currentPlan.id};
+    let cfg = frameworkConfig();
+    if (usesBlueprint()){
+      if (!currentPlan) throw new Error('Preview a question plan first.');
+      await api(`/api/question-plans/${currentPlan.id}/confirm`, {method:'POST'});
+      cfg = {...cfg, question_plan_id: currentPlan.id};
+    }
     const form = contextForm(cfg);
     const started = await api(`/api/projects/${currentProject}/generation-runs`, {
       method:'POST', body:form
@@ -1164,7 +1191,11 @@ $('generate').onclick = async ()=>{
   } catch(e){ $('genErr').textContent = e.message; $('genStatus').textContent=''; }
   $('genOverlay').classList.add('hidden');
   $('generate').disabled = false;
-};
+  $('directGenerate').disabled = false;
+}
+
+$('generate').onclick = runGeneration;
+$('directGenerate').onclick = runGeneration;
 
 async function loadQuestions(){
   const qs = await api(`/api/projects/${currentProject}/questions`);
@@ -1201,9 +1232,10 @@ function renderQuestion(q, pos){
     : '';
   div.innerHTML = `
     <span class="status ${q.status}">${q.status}</span>
-    <div class="small" style="margin:0 0 .4rem"><strong>Q${pos}</strong> · ref #${q.id} · <span
+    <div class="small" style="margin:0 0 .4rem"><strong>Q${pos}</strong> · ref #${q.id}${
+      q.confidence == null ? '' : ` · <span
       title="The model's confidence that the answer key and explanation are correct based on the available project evidence."
-      >confidence: ${q.confidence == null ? '-' : q.confidence}</span></div>
+      >confidence: ${q.confidence}</span>`}</div>
     ${flags}
     <textarea class="stem">${esc(q.stem)}</textarea>
     <div class="opts"></div>

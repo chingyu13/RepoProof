@@ -58,15 +58,10 @@ def project():
 
     from app import analyzer, knowledge
     db.init()
-    best = None
-    root = Path("data/projects")
-    if root.exists():
-        for path in root.glob("*/*"):
-            if path.is_dir() and not path.name.startswith("."):
-                n = len(list(path.rglob("*.py"))) + len(list(path.rglob("*.ipynb")))
-                if n and (best is None or n > best[1]):
-                    best = (path, n)
-    target = best[0] if best else Path("app")
+    # Committed synthetic fixture: keeps the suite deterministic and runnable on
+    # a fresh clone. Real student projects live in the gitignored data/ dir and
+    # must never be a test dependency.
+    target = Path(__file__).parent / "fixtures" / "sample_project"
     chunks = knowledge.build_chunks(analyzer.analyze_project(target), "snapA")
     pid = db.insert("projects", {
         "name": "plan-api-fixture", "source_type": "upload", "source": "fixture.zip",
@@ -139,13 +134,29 @@ def test_confirm_freezes_plan(client, project):
     assert client.get(f"/api/question-plans/{body['id']}").json()["status"] == "confirmed"
 
 
-def test_confirming_replaces_other_previews(client, project):
+def test_only_the_latest_preview_is_kept(client, project):
+    """A new preview supersedes the previous one, which is deleted.
+
+    Plan rows carry slot text derived from the student's code, so stale previews
+    are removed rather than accumulating.
+    """
     first = _preview(client, project).json()["id"]
     second = _preview(client, project).json()
-    if not second["planned"]:
+    assert second["id"] != first
+    assert client.get(f"/api/question-plans/{first}").status_code == 404
+    assert client.get(f"/api/question-plans/{second['id']}").status_code == 200
+
+
+def test_confirmed_plans_survive_a_later_preview(client, project):
+    """Generation still references a confirmed plan, so it must not be pruned."""
+    confirmed = _preview(client, project).json()
+    if not confirmed["planned"]:
         pytest.skip("fixture produced no evidence-supported plans")
-    client.post(f"/api/question-plans/{second['id']}/confirm")
-    assert client.get(f"/api/question-plans/{first}").json()["status"] == "replaced"
+    client.post(f"/api/question-plans/{confirmed['id']}/confirm")
+    _preview(client, project)
+    got = client.get(f"/api/question-plans/{confirmed['id']}")
+    assert got.status_code == 200
+    assert got.json()["status"] == "confirmed"
 
 
 def test_confirm_rejects_empty_plan(client, project):

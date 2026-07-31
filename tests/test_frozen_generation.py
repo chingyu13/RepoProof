@@ -19,15 +19,10 @@ def store():
     from pathlib import Path
 
     from app import analyzer
-    best = None
-    root = Path("data/projects")
-    if root.exists():
-        for path in root.glob("*/*"):
-            if path.is_dir() and not path.name.startswith("."):
-                n = len(list(path.rglob("*.py"))) + len(list(path.rglob("*.ipynb")))
-                if n and (best is None or n > best[1]):
-                    best = (path, n)
-    target = best[0] if best else Path("app")
+    # Committed synthetic fixture: keeps the suite deterministic and runnable on
+    # a fresh clone. Real student projects live in the gitignored data/ dir and
+    # must never be a test dependency.
+    target = Path(__file__).parent / "fixtures" / "sample_project"
     chunks = knowledge.build_chunks(analyzer.analyze_project(target), "snap1")
     return knowledge.EvidenceStore(chunks), chunks
 

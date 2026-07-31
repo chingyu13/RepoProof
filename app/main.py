@@ -652,6 +652,11 @@ async def create_question_plan(
         seed=int(cfg.get("seed") or 42),
     )
 
+    # Only the newest preview is useful, and a plan row holds slot text derived
+    # from the student's code — so drop superseded previews instead of letting
+    # them accumulate. Confirmed plans are kept: generation still references them.
+    db.delete_where("question_plans", "project_id=? AND status='preview'", (project_id,))
+
     plan_id = secrets.token_urlsafe(12)
     db.insert("question_plans", {
         "id": plan_id,

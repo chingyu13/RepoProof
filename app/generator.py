@@ -79,18 +79,9 @@ Return strict JSON only in this shape:
     "difficulty": 1,
     "focus_areas": ["..."],
     "source_file_ids": ["f0"],
-    "explanation": "1-2 sentences",
-    "confidence": 8
+    "explanation": "1-2 sentences"
   }]
-}
-
-For each question give one `confidence` score from 1 to 10 for whether its answer
-key and explanation are correct and supported by the supplied project files.
-
-1-3: Evidence is insufficient or the answer may be wrong.
-4-6: The answer needs assumptions or indirect evidence.
-7-8: The answer is clearly supported.
-9-10: Every option and the explanation are directly and unambiguously supported."""
+}"""
 
 RAW_TOPIC_GUIDANCE = {
     "project_logic": (
@@ -829,9 +820,7 @@ ORIGINAL PROJECT FILES:
 {files}
 
 Return strict JSON with a `questions` array containing exactly one complete question. Preserve the
-required question type and use only the structured `code` object for code. Include an integer
-`confidence` from 1 to 10 for whether the answer key and explanation are correct and supported by
-the supplied project files.
+required question type and use only the structured `code` object for code.
 """
 
 
