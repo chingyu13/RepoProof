@@ -174,3 +174,26 @@ def test_confidence_is_absent_from_the_taker_payload(client, question):
     assert "confidence" not in blob
     for item in payload["questions"]:
         assert "confidence" not in item
+
+
+def test_creator_can_delete_assessment_and_its_attempts(client, question):
+    pid, qid = question
+    _patch(client, qid, status="approved")
+    published = client.post(f"/api/projects/{pid}/assessments", json={
+        "title": "delete-me", "question_ids": [qid]})
+    assert published.status_code == 200, published.text
+    assessment_id = published.json()["id"]
+    db.insert("attempts", {
+        "assessment_id": assessment_id,
+        "taker_name": "Test taker",
+        "responses_json": {str(qid): ["A"]},
+        "score_json": {"correct": 1, "total": 1},
+    })
+
+    deleted = client.delete(f"/api/assessments/{assessment_id}")
+
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"ok": True, "attempts_deleted": 1}
+    assert db.get("assessments", assessment_id) is None
+    assert db.list_where("attempts", "assessment_id=?", (assessment_id,)) == []
+    assert db.get("questions", qid) is not None

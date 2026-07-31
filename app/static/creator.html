@@ -33,15 +33,13 @@ header h1{font-size:1.15rem;margin:0;font-weight:600}
 .badge.warn{background:#fef3c7;color:#92400e}
 .workflow{max-width:1012px;margin:1.5rem auto;display:flex;overflow-x:hidden;scroll-behavior:smooth;align-items:flex-start}
 .workflow-step{flex:0 0 100%;min-width:0;padding:0 1rem;display:grid;gap:1.25rem}
-.step-back{width:30px;height:30px;padding:0;border:2px solid var(--card-border);border-radius:5px;background:var(--input-bg);color:var(--muted);
-  display:grid;place-items:center;justify-self:start;margin-bottom:-.8rem;box-shadow:var(--shadow)}
-.step-back:hover{background:var(--card);color:var(--ink)}
-.step-back svg{width:22px;height:22px;display:block;stroke:currentColor}
-.card{background:var(--card);border:3px solid var(--card-border);border-radius:10px;padding:1.4rem 1.6rem;box-shadow:var(--shadow);position:relative}
+.card{min-width:0;background:var(--card);border:3px solid var(--card-border);border-radius:10px;padding:1.4rem 1.6rem;box-shadow:var(--shadow);position:relative}
 /* blueprint preview (Step 2): plot + accessible table + unsupported list */
 .bp-h{font-size:.95rem;font-weight:600;color:var(--heading);margin:1.1rem 0 .3rem}
-.bp-plot-wrap{background:var(--input-bg);border:2px solid var(--input-border);border-radius:5px;padding:.5rem;overflow-x:auto}
-#bpPlot{min-width:560px;height:260px;display:block}
+.bp-plot-wrap{width:100%;max-width:100%;min-width:0;background:var(--input-bg);border:2px solid var(--input-border);
+  border-radius:5px;padding:.5rem;overflow-x:auto;overflow-y:hidden}
+#blueprint{width:100%;max-width:100%;min-width:0}
+#bpPlot{width:560px;min-width:560px;max-width:none;height:260px;display:block}
 #bpPlot .axis{stroke:var(--chip-strong);stroke-width:1.6}
 #bpPlot .grid{stroke:var(--line);stroke-width:1.3}
 #bpPlot text{fill:var(--muted);font-family:inherit}
@@ -77,9 +75,13 @@ textarea.autogrow{min-height:0;height:2.5rem;max-height:11rem;overflow-y:auto;re
   border:2px solid var(--input-border);border-radius:5px;background:var(--input-bg)}
 .context-input:focus-within{border-color:var(--strong)}
 .context-tags{display:contents}
-.context-file-tag{display:inline-flex;align-items:center;max-width:16rem;min-height:1.75rem;padding:.25rem .5rem;
+.context-file-tag{display:inline-flex;align-items:center;gap:.3rem;max-width:16rem;min-height:1.75rem;padding:.25rem .35rem .25rem .5rem;
   border:1px solid #c1c1c1;border-radius:4px;background:#ececec;color:#4e4e4e;font-size:.8rem;
-  line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  line-height:1.2;white-space:nowrap}
+.context-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.context-file-remove{width:18px;height:18px;flex:0 0 18px;padding:0;border:0;border-radius:3px;background:transparent;
+  color:#4e4e4e;font-size:1rem;font-weight:400;line-height:1;letter-spacing:0;display:grid;place-items:center}
+.context-file-remove:hover{background:#d8d8d8;color:#222}
 .context-input textarea.autogrow{flex:1 1 12rem;width:auto;min-width:8rem;height:1.75rem;padding:.25rem .35rem;
   border:0;background:transparent;resize:vertical;outline:none}
 .framework-config{display:flex;gap:13px;align-items:flex-start;margin-top:.5rem}
@@ -94,7 +96,6 @@ textarea.autogrow{min-height:0;height:2.5rem;max-height:11rem;overflow-y:auto;re
 .difficulty-icon-wrap{position:relative;width:22px;height:22px;flex:0 0 22px}
 .difficulty-icon{position:absolute;left:50%;top:50%;width:32px;height:32px;max-width:none;
   object-fit:contain;transform:translate(-50%,-50%)}
-[data-theme="dark"] .difficulty-icon{filter:invert(1)}
 .difficulty-control input[type=number]{width:48px;height:28px;min-width:48px;padding:0 0 0 2px;border:0;background:transparent;
   line-height:28px;text-align:center}
 .correct-range{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:.2rem}
@@ -128,6 +129,14 @@ button:disabled{opacity:.5;cursor:default}
 .plist li:hover{border-color:var(--input-border)}
 .plist .project-delete{padding:.1rem .25rem;border:0;background:transparent;color:var(--ink);font-size:1.25rem;line-height:1}
 .plist .project-delete:hover{background:transparent;color:var(--muted)}
+.assessment-history{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:.5rem .75rem;
+  padding:.5rem .7rem;border:1px solid var(--line);border-radius:5px;background:var(--input-bg);margin:.35rem 0}
+.assessment-summary{min-width:0}
+.assessment-delete{width:16px;height:16px;padding:0;border:0;background:transparent;color:#626262;
+  font-size:16px;font-weight:400;line-height:1;letter-spacing:0;display:grid;place-items:center}
+.assessment-delete:hover{background:transparent;color:var(--muted)}
+.assessment-history .results,.assessment-history .detail{grid-column:1 / -1}
+.assessment-history .results:empty{display:none}
 .q{border:1px solid var(--line);border-radius:12px;padding:1rem;margin:.8rem 0}
 .q .status{float:right;font-size:.75rem;padding:.15rem .55rem;border-radius:999px}
 .status.draft{background:var(--chip);color:var(--chip-ink)}
@@ -159,8 +168,8 @@ a{color:var(--accent)}
 [data-theme="dark"]{
   --radar-fill:rgba(119,120,126,.32); --radar-dot-ring:var(--card);
 }
-.radar-wrap{display:flex;gap:1.4rem;align-items:flex-start;flex-wrap:wrap;margin-top:.4rem}
-.radar-panel{background:transparent;border-radius:14px;padding:5px 0 0;flex:0 0 auto}
+.radar-wrap{display:flex;gap:1.4rem;align-items:stretch;flex-wrap:wrap;margin-top:.4rem}
+.radar-panel{background:transparent;border-radius:14px;padding:5px 0;flex:0 0 auto;display:flex;align-items:center}
 #radar{display:block;width:300px;height:260px;max-width:100%}
 #radar .radar-grid{fill:none;stroke:var(--radar-grid);stroke-width:1}
 #radar .radar-spoke{stroke:var(--radar-grid);stroke-width:1}
@@ -194,7 +203,14 @@ a{color:var(--accent)}
 #logout{padding:.45rem .7rem;background:var(--input-bg);color:var(--ink);border:1px solid var(--card-border)}
 .actions{display:flex;justify-content:center;margin:.9rem 0 0}
 .actions button{min-width:150px}
-.stepper{display:flex;max-width:980px;margin:0 auto;padding:.75rem 2.5rem;background:var(--bg)}
+.stepper{display:grid;grid-template-columns:30px minmax(0,1fr) 30px;gap:.8rem;max-width:980px;margin:0 auto;padding:.75rem 0;background:var(--bg)}
+.step-track{display:flex;min-width:0}
+.step-nav-arrow{width:30px;height:30px;padding:0;border:0;border-radius:8px;background:var(--card);
+  display:grid;place-items:center;align-self:center;overflow:hidden;box-shadow:none}
+.step-nav-arrow:hover{background:var(--card)}
+.step-nav-arrow img{width:15px;height:12px;display:block}
+.step-nav-arrow.next img{transform:scaleX(-1)}
+.step-nav-arrow.hidden{display:block;visibility:hidden;pointer-events:none}
 .step{flex:1;position:relative;text-align:center;cursor:pointer;user-select:none;outline:none}
 .step.locked{cursor:not-allowed;opacity:.55}
 .step:focus-visible .dot{box-shadow:0 0 0 3px var(--chip)}
@@ -213,7 +229,7 @@ a{color:var(--accent)}
 @media (max-width:640px){
   header{padding:.7rem 1rem}
   header .small{display:none}
-  .stepper{padding:.65rem .5rem}
+  .stepper{grid-template-columns:30px minmax(0,1fr) 30px;gap:.25rem;padding:.65rem .5rem}
   .step .lbl{font-size:.67rem}
   .workflow{margin:1rem auto}
   .card{padding:1.1rem}
@@ -251,10 +267,18 @@ a{color:var(--accent)}
     <button id="logout" type="button">Log out</button>
   </header>
   <nav class="stepper" id="stepper" aria-label="Assessment creation progress">
-    <div class="step current" data-step="1" role="button" tabindex="0"><div class="dot"><span>1</span></div><span class="lbl">Link the Project</span></div>
-    <div class="step locked" data-step="2" role="button" tabindex="0"><div class="dot"><span>2</span></div><span class="lbl">Question Framework</span></div>
-    <div class="step locked" data-step="3" role="button" tabindex="0"><div class="dot"><span>3</span></div><span class="lbl">Review and Approve</span></div>
-    <div class="step locked" data-step="4" role="button" tabindex="0"><div class="dot"><span>4</span></div><span class="lbl">Publish Assessment</span></div>
+    <button class="step-nav-arrow previous hidden" id="stepPrevious" type="button" aria-label="Previous step" title="Previous step">
+      <img src="/static/assets/arrow-left.svg" alt="" aria-hidden="true">
+    </button>
+    <div class="step-track">
+      <div class="step current" data-step="1" role="button" tabindex="0"><div class="dot"><span>1</span></div><span class="lbl">Link the Project</span></div>
+      <div class="step locked" data-step="2" role="button" tabindex="0"><div class="dot"><span>2</span></div><span class="lbl">Question Framework</span></div>
+      <div class="step locked" data-step="3" role="button" tabindex="0"><div class="dot"><span>3</span></div><span class="lbl">Review and Approve</span></div>
+      <div class="step locked" data-step="4" role="button" tabindex="0"><div class="dot"><span>4</span></div><span class="lbl">Publish Assessment</span></div>
+    </div>
+    <button class="step-nav-arrow next hidden" id="stepNext" type="button" aria-label="Next step" title="Next step">
+      <img src="/static/assets/arrow-left.svg" alt="" aria-hidden="true">
+    </button>
   </nav>
 </div>
 <main class="workflow" id="workflow">
@@ -313,11 +337,6 @@ a{color:var(--accent)}
 </section>
 
 <section class="workflow-step" id="frameworkStep" data-panel="2">
-<button class="step-back" type="button" data-back-step="1" aria-label="Back to Link the Project" title="Back">
-  <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M15 6l-6 6 6 6"/><path d="M10 12h10"/>
-  </svg>
-</button>
 <div class="card project-content hidden">
   <div class="gen-overlay hidden" id="genOverlay">
     <div class="gen-panel">
@@ -414,11 +433,6 @@ a{color:var(--accent)}
 </section>
 
 <section class="workflow-step" id="reviewStep" data-panel="3">
-<button class="step-back" type="button" data-back-step="2" aria-label="Back to Question Framework" title="Back">
-  <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M15 6l-6 6 6 6"/><path d="M10 12h10"/>
-  </svg>
-</button>
 <div class="card project-content hidden">
   <h2 style="display:flex;align-items:center;gap:.8rem">3 · Review and Approve
     <label class="small" style="margin-left:auto;font-weight:400;display:flex;gap:.35rem;align-items:center;cursor:pointer">
@@ -430,11 +444,6 @@ a{color:var(--accent)}
 </section>
 
 <section class="workflow-step" id="publishStep" data-panel="4">
-<button class="step-back" type="button" data-back-step="3" aria-label="Back to Review and Approve" title="Back">
-  <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M15 6l-6 6 6 6"/><path d="M10 12h10"/>
-  </svg>
-</button>
 <div class="card project-content hidden">
   <h2>4 · Publish Assessment</h2>
   <label>Title</label>
@@ -503,6 +512,14 @@ function renderStepper(){
     if (s === currentStep) el.setAttribute('aria-current', 'step');
     else el.removeAttribute('aria-current');
   });
+  const labels = ['Link the Project', 'Question Framework', 'Review and Approve', 'Publish Assessment'];
+  const previous = $('stepPrevious'), next = $('stepNext');
+  const canGoBack = currentStep > 1;
+  const canGoForward = currentStep < maxUnlockedStep;
+  previous.classList.toggle('hidden', !canGoBack);
+  next.classList.toggle('hidden', !canGoForward);
+  previous.setAttribute('aria-label', canGoBack ? `Back to ${labels[currentStep - 2]}` : 'Previous step');
+  next.setAttribute('aria-label', canGoForward ? `Continue to ${labels[currentStep]}` : 'Next step');
 }
 function goToStep(n, {unlock=false}={}){
   if (unlock) maxUnlockedStep = Math.max(maxUnlockedStep, n);
@@ -520,9 +537,8 @@ document.querySelectorAll('#stepper .step').forEach(el=>{
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
   });
 });
-document.querySelectorAll('.step-back').forEach(btn=>{
-  btn.addEventListener('click', ()=>goToStep(+btn.dataset.backStep));
-});
+$('stepPrevious').onclick = ()=>goToStep(currentStep - 1);
+$('stepNext').onclick = ()=>goToStep(currentStep + 1);
 window.addEventListener('resize', ()=>{
   $('workflow').scrollTo({left:(currentStep - 1) * $('workflow').clientWidth, behavior:'auto'});
 });
@@ -539,14 +555,28 @@ async function api(path, opts={}) {
   return body;
 }
 
-function renderContextFileTags(tagsId, files){
+function renderContextFileTags(tagsId, files, inputId){
   const tags = $(tagsId);
   tags.replaceChildren();
-  files.forEach(file=>{
+  files.forEach((file, index)=>{
     const tag = document.createElement('span');
     tag.className = 'context-file-tag';
-    tag.textContent = file.name;
     tag.title = file.name;
+    const name = document.createElement('span');
+    name.className = 'context-file-name';
+    name.textContent = file.name;
+    const remove = document.createElement('button');
+    remove.className = 'context-file-remove';
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Remove ${file.name}`);
+    remove.title = `Remove ${file.name}`;
+    remove.onclick = ()=>{
+      files.splice(index, 1);
+      if (inputId) $(inputId).value = '';
+      renderContextFileTags(tagsId, files, inputId);
+    };
+    tag.append(name, remove);
     tags.appendChild(tag);
   });
 }
@@ -556,7 +586,7 @@ function bindContextFiles(buttonId, inputId, tagsId, target){
   $(buttonId).onclick = ()=>input.click();
   input.onchange = ()=>{
     target.splice(0, target.length, ...input.files);
-    renderContextFileTags(tagsId, target);
+    renderContextFileTags(tagsId, target, inputId);
   };
 }
 bindContextFiles('uploadPrior', 'priorFiles', 'priorFileTags', priorContextFiles);
@@ -864,8 +894,8 @@ async function openProject(id){
     scopeContextFiles.splice(0);
     $('priorFiles').value = '';
     $('scopeFiles').value = '';
-    renderContextFileTags('priorFileTags', priorContextFiles);
-    renderContextFileTags('scopeFileTags', scopeContextFiles);
+    renderContextFileTags('priorFileTags', priorContextFiles, 'priorFiles');
+    renderContextFileTags('scopeFileTags', scopeContextFiles, 'scopeFiles');
   }
   currentProject = id;
   document.querySelectorAll('.project-content').forEach(el=>el.classList.remove('hidden'));
@@ -1101,6 +1131,8 @@ function renderPlanPlot(plan){
   });
   svg.innerHTML = g;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.style.width = `${W}px`;
   // Colour encodes the Template (not the Assessment Point — several questions
   // can share a template, and a point can appear more than once).
   $('bpLegend').innerHTML = '<span class="bp-legend-label">Template:</span>' + templates.map(t=>
@@ -1363,7 +1395,7 @@ $('publish').onclick = async ()=>{
                               focus_areas: areas.filter(area=>area.w > 0).map(area=>({
                                 id:area.id, name:(topicById(area.id)||{}).name || area.id, weight:area.w})),
                             }})});
-    $('pubOk').innerHTML = `Published. Take link: <a href="${res.take_url}" target="_blank">${location.origin}${res.take_url}</a> · <a href="${res.print_url}" target="_blank">printable</a> (<a href="${res.print_url}?key=1" target="_blank">with answer key</a>)`;
+    $('pubOk').innerHTML = `Published. Take link: <a href="${res.take_url}" target="_blank">${location.origin}${res.take_url}</a>`;
     await loadAssessments();
     goToStep(4, {unlock:true});
   } catch(e){ $('pubErr').textContent = e.message; }
@@ -1412,16 +1444,29 @@ async function loadAssessments(){
   wrap.innerHTML = as.length ? '' : 'None yet.';
   as.forEach(a=>{
     const d = document.createElement('div');
-    d.style.cssText = 'padding:.5rem .7rem;border:1px solid var(--line);border-radius:5px;background:var(--input-bg);margin:.35rem 0';
+    d.className = 'assessment-history';
     d.innerHTML = `
-      <a href="#" class="toggleDetail"><strong>${esc(a.title)}</strong> — ${esc(a.created_at)}</a>
-      <span class="small"> · ${a.questions} questions · ${a.attempts} attempt(s) ·
-        <a href="/a/${a.token}" target="_blank">take</a> ·
-        <a href="/print/${a.id}" target="_blank">print</a> ·
-        <a href="/print/${a.id}?key=1" target="_blank">answer key</a> ·
-        <a href="#" class="viewAttempts">results</a></span>
+      <div class="assessment-summary">
+        <a href="#" class="toggleDetail"><strong>${esc(a.title)}</strong> — ${esc(a.created_at)}</a>
+        <span class="small"> · ${a.questions} questions · ${a.attempts} attempt(s) ·
+          <a href="/a/${a.token}" target="_blank">take</a> ·
+          <a href="#" class="viewAttempts">results</a></span>
+      </div>
+      <button class="assessment-delete" type="button" aria-label="Delete ${esc(a.title)}" title="Delete assessment">×</button>
       <div class="small results"></div>
       <div class="detail hidden" style="margin-top:.5rem"></div>`;
+    d.querySelector('.assessment-delete').onclick = async ()=>{
+      const attempts = a.attempts
+        ? ` and its ${a.attempts} stored attempt(s)`
+        : '';
+      if (!confirm(`Delete "${a.title}"${attempts}?`)) return;
+      try {
+        await api(`/api/assessments/${a.id}`, {method:'DELETE'});
+        await loadAssessments();
+      } catch (error) {
+        $('pubErr').textContent = error.message;
+      }
+    };
     d.querySelector('.toggleDetail').onclick = async (ev)=>{
       ev.preventDefault();
       const det = d.querySelector('.detail');

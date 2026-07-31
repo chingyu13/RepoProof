@@ -1033,6 +1033,21 @@ def assessment_detail(assessment_id: int):
             "questions": questions}
 
 
+@app.delete("/api/assessments/{assessment_id}")
+def delete_assessment(assessment_id: int):
+    assessment = db.get("assessments", assessment_id)
+    if not assessment:
+        raise HTTPException(404, "Assessment not found")
+    attempts = db.list_where("attempts", "assessment_id=?", (assessment_id,))
+    db.delete_where("attempts", "assessment_id=?", (assessment_id,))
+    db.delete("assessments", assessment_id)
+    db.log_event("assessment_deleted", {
+        "assessment_id": assessment_id,
+        "attempts_deleted": len(attempts),
+    }, project_id=assessment["project_id"])
+    return {"ok": True, "attempts_deleted": len(attempts)}
+
+
 @app.get("/api/assessments/{assessment_id}/attempts")
 def list_attempts(assessment_id: int):
     return db.list_where("attempts", "assessment_id=?", (assessment_id,))
