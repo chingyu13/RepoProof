@@ -206,6 +206,32 @@ class LocalGenerationTests(unittest.TestCase):
                 self.assertEqual(plan["code_mode"], "none")
                 self.assertNotIn("display_code", plan)
 
+    def test_data_flow_plan_prefers_an_indented_execution_flow(self):
+        evidence = [
+            chunk(
+                "flow", "flow", "Call flow from run",
+                "Approximate execution flow starting at run:\n"
+                "run (pipeline.py lines 1-8)\n"
+                "  fetch_records (pipeline.py lines 10-14)\n"
+                "  save_records (pipeline.py lines 16-20)",
+                ["call_graph", "data_flow_graph"],
+            ),
+            chunk(
+                "calls", "callgraph", "Approximate call graph",
+                "money -> Decimal\nmoney -> quantize",
+                ["call_graph"],
+            ),
+        ]
+        plan, problem = render_question_plan(
+            TEMPLATE_BY_ID["data_flow_selection"],
+            TOPIC_BY_ID["data_flow"],
+            None,
+            evidence,
+        )
+        self.assertFalse(problem)
+        self.assertIn("`run`", plan["rendered_stem"])
+        self.assertIn("`fetch_records`", plan["rendered_stem"])
+
     def test_condition_outcome_injects_the_cited_condition_branch(self):
         evidence, missing = template_bundle(
             EvidenceStore(CHUNKS),

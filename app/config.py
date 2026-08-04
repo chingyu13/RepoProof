@@ -41,6 +41,11 @@ if OPENAI_MODEL not in {option["id"] for option in _OPENAI_MODEL_OPTIONS}:
 LOCAL_LLM_URL = os.environ.get("REPOPROOF_LOCAL_LLM_URL", "http://127.0.0.1:11434/v1").rstrip("/")
 LOCAL_LLM_MODEL = os.environ.get("REPOPROOF_LOCAL_LLM_MODEL", "qwen2.5-coder:7b")
 LOCAL_LLM_MAX_TOKENS = int(os.environ.get("REPOPROOF_LOCAL_LLM_MAX_TOKENS", "700"))
+# The creator browser uses its own loopback address. This is intentionally
+# separate from LOCAL_LLM_URL, whose loopback belongs to the web server.
+BROWSER_OLLAMA_URL = os.environ.get(
+    "REPOPROOF_BROWSER_OLLAMA_URL", "http://127.0.0.1:11434"
+).rstrip("/")
 # optional forced default: 'openai' | 'local' | 'mock'
 _FORCED_PROVIDER = os.environ.get("REPOPROOF_LLM_PROVIDER", "").strip().lower()
 

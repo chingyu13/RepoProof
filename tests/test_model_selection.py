@@ -26,15 +26,21 @@ class ModelSelectionTests(unittest.TestCase):
             config.LOCAL_LLM_MODEL,
         )
 
-    def test_meta_exposes_one_openai_model_catalog(self):
+    def test_meta_exposes_browser_managed_local_provider_without_server_probe(self):
         with (
-            patch("app.main.config.local_llm_available", return_value=True),
+            patch("app.main.config.local_llm_available", return_value=True) as probe,
             patch("app.main.config.default_provider", return_value="openai"),
         ):
             result = meta()
+        probe.assert_not_called()
         self.assertEqual(
             result["providers"]["openai"]["models"],
             config.openai_model_options(),
+        )
+        self.assertTrue(result["providers"]["local"]["client_managed"])
+        self.assertEqual(
+            result["providers"]["local"]["url"],
+            config.BROWSER_OLLAMA_URL,
         )
 
     def test_generation_config_accepts_selected_model(self):

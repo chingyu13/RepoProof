@@ -193,14 +193,9 @@ def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
         f"\nCreator instruction: {extra_focus[:300]}"
         if extra_focus else ""
     )
-    code_text = ""
-    if slot.get("display_code"):
-        code_text = (
-            f"\n\nCODE SHOWN TO THE STUDENT:\n```{slot['display_language']}\n"
-            f"{slot['display_code']}\n```"
-        )
+    fixed_stem = _fixed_stem(slot)
     return f"""FIXED STEM:
-{slot['rendered_stem']}{code_text}
+{fixed_stem}
 
 OPTION TASK:
 {slot['option_task']}
@@ -223,6 +218,16 @@ EVIDENCE:
 Return only the required JSON."""
 
 
+def _fixed_stem(slot: dict) -> str:
+    stem = str(slot.get("rendered_stem") or "").strip()
+    if slot.get("display_code"):
+        stem += (
+            f"\n\nCODE SHOWN TO THE STUDENT:\n```{slot['display_language']}\n"
+            f"{slot['display_code']}\n```"
+        )
+    return stem
+
+
 def _repair_prompt(raw: dict, slot: dict, evidence: list[dict], choice_count: int,
                    correct_count: int, errors: str) -> str:
     repair_evidence = evidence[:2]
@@ -234,7 +239,7 @@ def _repair_prompt(raw: dict, slot: dict, evidence: list[dict], choice_count: in
     return f"""Repair the options for this fixed RepoProof question.
 
 FIXED STEM:
-{slot['rendered_stem']}
+{_fixed_stem(slot)}
 
 VALIDATOR:
 {errors}
@@ -1280,6 +1285,241 @@ def _target_for_frozen(cfg: dict, frozen: dict) -> dict | None:
     return None
 
 
+def prepare_local_generation(
+    chunks: list[dict],
+    cfg: dict,
+    *,
+    progress: Callable[..., None] | None = None,
+) -> dict:
+    """Freeze prompt tasks for Ollama running in the creator's browser."""
+    cfg = dict(cfg)
+    cfg["provider"] = "local"
+    cfg["model"] = config.resolve_model("local", cfg.get("model", ""))
+    evidence_store = EvidenceStore(chunks)
+    rng = random.Random(cfg.get("seed", 42))
+    num = int(cfg.get("num_questions", 5))
+    if cfg.get("frozen_slots"):
+        tasks, warnings = _frozen_tasks(evidence_store, cfg, rng)
+    else:
+        tasks, warnings = _catalog_tasks(evidence_store, cfg, num, rng)
+    _notify(
+        progress,
+        "retrieving_evidence",
+        current=0,
+        total=len(tasks) or num,
+        message=f"Matched structured evidence for {len(tasks)} question slot(s).",
+    )
+    metrics = {
+        "llm_calls": 0,
+        "llm_seconds": 0.0,
+        "repair_calls": 0,
+        "validation_failures": 0,
+        "duplicate_warnings": 0,
+        "accepted_first_pass": 0,
+        "accepted_after_repair": 0,
+        "accepted_after_regeneration": 0,
+        "rejected": 0,
+    }
+    cfg["_generation_metrics"] = metrics
+    return {
+        "cfg": cfg,
+        "model": cfg["model"],
+        "warnings": list(warnings),
+        "metrics": metrics,
+        "tasks": [
+            {
+                "task": task,
+                "attempt": 0,
+                "status": "pending",
+                "last_error": "",
+                "last_raw": None,
+                "question": None,
+                "warning": "",
+            }
+            for task in tasks
+        ],
+    }
+
+
+def _local_variant(item: dict) -> tuple[dict, list[dict]]:
+    task = item["task"]
+    variant = 0 if int(item.get("attempt", 0)) < 2 else 1
+    slot_index = min(variant, len(task["slot_variants"]) - 1)
+    evidence_index = min(variant, len(task["evidence_variants"]) - 1)
+    return task["slot_variants"][slot_index], task["evidence_variants"][evidence_index]
+
+
+def local_generation_batch(state: dict, batch_id: str) -> dict:
+    """Return only the prompts that the creator's local Ollama must execute."""
+    cfg = state["cfg"]
+    choice_count = max(2, min(7, int(cfg.get("choice_count", 4))))
+    fallback_difficulty = max(1, min(5, int(cfg.get("difficulty", 3))))
+    prompts = []
+    for item in state["tasks"]:
+        if item.get("status") != "pending":
+            continue
+        task = item["task"]
+        attempt = int(item.get("attempt", 0))
+        slot, evidence = _local_variant(item)
+        difficulty = max(
+            1, min(5, int(slot.get("requested_difficulty") or fallback_difficulty))
+        )
+        repair = attempt in (1, 3) and isinstance(item.get("last_raw"), dict)
+        if repair:
+            prompt = _repair_prompt(
+                item["last_raw"],
+                slot,
+                evidence,
+                choice_count,
+                task["correct_count"],
+                item.get("last_error") or "The draft did not satisfy the framework.",
+            )
+            temperature = 0.0
+        else:
+            prompt = _question_prompt(
+                slot,
+                evidence,
+                choice_count,
+                task["correct_count"],
+                difficulty,
+                task["focus_for_prompt"],
+                task["evidence_chars"],
+            )
+            if attempt:
+                prompt += (
+                    "\n\nGenerate a substantively different replacement. Previous issue: "
+                    + (item.get("last_error") or "The previous response was unusable.")
+                )
+            temperature = 0.2
+        prompts.append({
+            "task_index": task["i"],
+            "attempt": attempt,
+            "prompt": prompt,
+            "temperature": temperature,
+        })
+    return {
+        "batch_id": batch_id,
+        "model": state["model"],
+        "system": SYSTEM_PROMPT,
+        "max_tokens": config.LOCAL_LLM_MAX_TOKENS,
+        "tasks": prompts,
+    }
+
+
+def apply_local_generation_outputs(
+    chunks: list[dict],
+    state: dict,
+    outputs: list[dict],
+) -> tuple[list[dict], bool]:
+    """Validate one browser-executed batch and advance repair/regeneration."""
+    pending = {
+        item["task"]["i"]: item
+        for item in state["tasks"]
+        if item.get("status") == "pending"
+    }
+    received = {int(output.get("task_index", -1)) for output in outputs}
+    if received != set(pending):
+        raise ValueError("Local completion batch does not match the pending question tasks.")
+
+    cfg = state["cfg"]
+    model = state["model"]
+    metrics = state["metrics"]
+    chunk_by_id = {chunk["id"]: chunk for chunk in chunks}
+    choice_count = max(2, min(7, int(cfg.get("choice_count", 4))))
+    seed = int(cfg.get("seed", 42))
+
+    for output in sorted(outputs, key=lambda value: int(value.get("task_index", -1))):
+        index = int(output["task_index"])
+        item = pending[index]
+        attempt = int(item.get("attempt", 0))
+        if int(output.get("attempt", -1)) != attempt:
+            raise ValueError(f"Stale local completion for question {index + 1}.")
+        task = item["task"]
+        slot, evidence = _local_variant(item)
+        metrics["llm_calls"] += 1
+        metrics["llm_seconds"] += max(
+            0.0, min(3_600.0, float(output.get("duration_seconds") or 0.0))
+        )
+        if attempt in (1, 3):
+            metrics["repair_calls"] += 1
+
+        raw = None
+        errors: list[str] = []
+        try:
+            if output.get("error"):
+                raise GenerationError(str(output["error"]))
+            raw = output.get("raw")
+            if not isinstance(raw, dict):
+                raw = _extract_json(str(output.get("content") or ""))
+            rng = random.Random(seed * 10_000 + index * 10 + attempt)
+            question = _normalize(raw, slot, chunk_by_id, rng)
+            errors, soft_flags = validate_maq_split(
+                question, choice_count, task["correct_count"]
+            )
+            errors.extend(_specific_evidence_errors(question, slot, chunk_by_id))
+            if not errors:
+                question["generator"] = f"local:{model}"
+                question["focus_areas"] = [slot["focus"]]
+                question["alignment"] = task.get("alignment") or _question_alignment(
+                    question, cfg, index
+                )
+                if soft_flags:
+                    question["quality_flags"] = soft_flags
+                    metrics["quality_flags"] = (
+                        metrics.get("quality_flags", 0) + len(soft_flags)
+                    )
+                previous = [
+                    other["question"]
+                    for other in sorted(
+                        state["tasks"], key=lambda value: value["task"]["i"]
+                    )
+                    if other.get("question") is not None
+                ]
+                duplicate = find_similar_question(question, previous)
+                if duplicate:
+                    item["warning"] = (
+                        f"Question {index + 1} is similar to another generated question "
+                        f"(similarity {duplicate[1]:.2f})."
+                    )
+                    metrics["duplicate_warnings"] += 1
+                item["question"] = question
+                item["status"] = "accepted"
+                outcome = (
+                    "accepted_first_pass" if attempt == 0
+                    else "accepted_after_regeneration" if attempt == 2
+                    else "accepted_after_repair"
+                )
+                metrics[outcome] += 1
+                continue
+        except Exception as exc:
+            errors = [f"{type(exc).__name__}: {exc}"]
+
+        metrics["validation_failures"] += 1
+        item["last_raw"] = raw if isinstance(raw, dict) else None
+        item["last_error"] = "; ".join(errors)
+        item["attempt"] = attempt + 1
+        if item["attempt"] >= 4:
+            item["status"] = "rejected"
+            metrics["rejected"] += 1
+            state["warnings"].append(
+                f"Question {index + 1} ({task['slot']['slot']}) rejected after repair "
+                f"and fresh regeneration: {item['last_error']}"
+            )
+
+    done = all(item.get("status") != "pending" for item in state["tasks"])
+    questions = [
+        item["question"]
+        for item in sorted(state["tasks"], key=lambda value: value["task"]["i"])
+        if item.get("question") is not None
+    ]
+    if done:
+        state["warnings"].extend(
+            item["warning"] for item in state["tasks"] if item.get("warning")
+        )
+        metrics["llm_seconds"] = round(metrics["llm_seconds"], 2)
+    return questions, done
+
+
 def generate_questions(
     chunks: list[dict],
     cfg: dict,
@@ -1316,6 +1556,55 @@ def generate_questions(
                 message="Checking question coverage and saving the batch.")
         return questions, fallback_warnings + warnings
 
+    if provider == "local":
+        state = prepare_local_generation(chunks, cfg, progress=progress)
+        cfg["_generation_metrics"] = state["metrics"]
+        if not state["tasks"]:
+            return [], fallback_warnings + state["warnings"]
+        questions: list[dict] = []
+        while True:
+            batch = local_generation_batch(state, "server-local")
+            outputs = []
+            for task in batch["tasks"]:
+                accepted = sum(
+                    item.get("status") == "accepted" for item in state["tasks"]
+                )
+                _notify(
+                    progress,
+                    "generating_questions",
+                    current=accepted,
+                    total=len(state["tasks"]),
+                    message=f"Generating question {task['task_index'] + 1} of {len(state['tasks'])}.",
+                )
+                started = time.perf_counter()
+                output = {
+                    "task_index": task["task_index"],
+                    "attempt": task["attempt"],
+                }
+                try:
+                    output["raw"] = _call_llm(
+                        "local",
+                        batch["system"],
+                        task["prompt"],
+                        model=batch["model"],
+                        temperature=task["temperature"],
+                    )
+                except Exception as exc:
+                    output["error"] = f"{type(exc).__name__}: {exc}"
+                output["duration_seconds"] = time.perf_counter() - started
+                outputs.append(output)
+            questions, done = apply_local_generation_outputs(chunks, state, outputs)
+            if done:
+                break
+        _notify(
+            progress,
+            "finalizing",
+            current=len(questions),
+            total=int(cfg.get("num_questions", 5)),
+            message="Checking question coverage and saving the batch.",
+        )
+        return questions, fallback_warnings + state["warnings"]
+
     evidence_store = EvidenceStore(chunks)
     chunk_by_id = {c["id"]: c for c in chunks}
     rng = random.Random(cfg.get("seed", 42))
@@ -1323,22 +1612,6 @@ def generate_questions(
     choice_count = max(2, min(7, int(cfg.get("choice_count", 4))))
     difficulty = max(1, min(5, int(cfg.get("difficulty", 3))))
 
-    mock = provider == "mock"
-    generator_label = {"mock": "mock", "local": f"local:{model}"}[provider]
-    metrics = None
-    if provider == "local":
-        metrics = {
-            "llm_calls": 0,
-            "llm_seconds": 0.0,
-            "repair_calls": 0,
-            "validation_failures": 0,
-            "duplicate_warnings": 0,
-            "accepted_first_pass": 0,
-            "accepted_after_repair": 0,
-            "accepted_after_regeneration": 0,
-            "rejected": 0,
-        }
-        cfg["_generation_metrics"] = metrics
     seed = int(cfg.get("seed", 42))
     # A confirmed blueprint wins: generate exactly its slots. Only fall back to
     # live scheduling when no plan was frozen (legacy / internal callers).
@@ -1355,32 +1628,12 @@ def generate_questions(
         correct_count = task["correct_count"]
         trng = random.Random(seed * 1000 + task["i"])
 
-        def _tracked_call(user_prompt: str, *, temperature: float | None = None,
-                          repair: bool = False) -> dict:
-            started = time.perf_counter()
-            try:
-                return _call_llm(
-                    provider,
-                    SYSTEM_PROMPT,
-                    user_prompt,
-                    model=model,
-                    temperature=temperature,
-                )
-            finally:
-                if metrics is not None:
-                    metrics["llm_calls"] += 1
-                    metrics["llm_seconds"] += time.perf_counter() - started
-                    if repair:
-                        metrics["repair_calls"] += 1
-
-        def _accept(cand, warning=None, outcome: str = ""):
-            cand["generator"] = generator_label
+        def _accept(cand, warning=None):
+            cand["generator"] = "mock"
             cand["focus_areas"] = [slot["focus"]]
             cand["alignment"] = task.get("alignment") or _question_alignment(
                 cand, cfg, task["i"]
             )
-            if metrics is not None and outcome:
-                metrics[outcome] += 1
             return task["i"], cand, warning
 
         last_err = None
@@ -1398,96 +1651,28 @@ def generate_questions(
             # to the framework-wide number when generating without a blueprint.
             slot_difficulty = max(1, min(5, int(slot.get("requested_difficulty") or difficulty)))
             try:
-                if mock:
-                    raw = _mock_question(slot, evidence, choice_count, correct_count,
-                                         slot_difficulty, trng)
-                else:
-                    prompt = _question_prompt(
-                        slot, evidence, choice_count, correct_count, slot_difficulty,
-                        task["focus_for_prompt"], task["evidence_chars"],
-                    )
-                    if fresh_attempt and last_err:
-                        prompt += (
-                            "\n\nGenerate a substantively different replacement using the supplied "
-                            f"evidence. Previous issue: {last_err}"
-                        )
-                    raw = _tracked_call(prompt)
+                raw = _mock_question(
+                    slot, evidence, choice_count, correct_count, slot_difficulty, trng
+                )
                 q = _normalize(raw, slot, chunk_by_id, trng)
-                # Two-tier: only HARD failures trigger the costly repair /
-                # regeneration loop. Soft style heuristics ride along as
-                # quality flags for the reviewer instead of burning LLM calls.
                 errs, soft_flags = validate_maq_split(q, choice_count, correct_count)
                 errs.extend(_specific_evidence_errors(q, slot, chunk_by_id))
                 if not errs:
                     if soft_flags:
                         q["quality_flags"] = soft_flags
-                        if metrics is not None:
-                            metrics["quality_flags"] = (
-                                metrics.get("quality_flags", 0) + len(soft_flags)
-                            )
                     duplicate = find_similar_question(q, previous_questions)
-                    outcome = (
-                        "accepted_first_pass"
-                        if fresh_attempt == 0
-                        else "accepted_after_regeneration"
-                    )
                     warning = None
                     if duplicate:
                         warning = (
                             f"Question {task['i'] + 1} is similar to "
                             f"Q{duplicate[0] + 1} (similarity {duplicate[1]:.2f})."
                         )
-                        if metrics is not None:
-                            metrics["duplicate_warnings"] += 1
-                    return _accept(q, warning=warning, outcome=outcome)
+                    return _accept(q, warning=warning)
                 last_err = "; ".join(errs)
-                if metrics is not None:
-                    metrics["validation_failures"] += 1
-                if mock:
-                    continue
-                if fresh_attempt > 0:
-                    continue
-
-                repair_raw = _tracked_call(
-                    _repair_prompt(
-                        raw, slot, evidence, choice_count, correct_count, last_err
-                    ),
-                    temperature=0.0,
-                    repair=True,
-                )
-                repaired = _normalize(repair_raw, slot, chunk_by_id, trng)
-                repair_errs, repair_flags = validate_maq_split(repaired, choice_count, correct_count)
-                repair_errs.extend(_specific_evidence_errors(repaired, slot, chunk_by_id))
-                if not repair_errs:
-                    if repair_flags:
-                        repaired["quality_flags"] = repair_flags
-                        if metrics is not None:
-                            metrics["quality_flags"] = (
-                                metrics.get("quality_flags", 0) + len(repair_flags)
-                            )
-                    duplicate = find_similar_question(repaired, previous_questions)
-                    warning = None
-                    if duplicate:
-                        warning = (
-                            f"Question {task['i'] + 1} is similar to "
-                            f"Q{duplicate[0] + 1} (similarity {duplicate[1]:.2f})."
-                        )
-                        if metrics is not None:
-                            metrics["duplicate_warnings"] += 1
-                    return _accept(
-                        repaired,
-                        warning=warning,
-                        outcome="accepted_after_repair",
-                    )
-                last_err = "; ".join(repair_errs)
-                if metrics is not None:
-                    metrics["validation_failures"] += 1
             except GenerationError as exc:
                 last_err = str(exc)
             except Exception as exc:
                 last_err = f"{type(exc).__name__}: {exc}"
-        if metrics is not None:
-            metrics["rejected"] += 1
         return task["i"], None, last_err
 
     questions, warnings = [], list(fallback_warnings)
@@ -1506,13 +1691,11 @@ def generate_questions(
                 warnings.append(err)
         else:
             warnings.append(
-                f"Question {i + 1} ({task['slot']['slot']}) rejected after repair and fresh regeneration: {err}"
+                f"Question {i + 1} ({task['slot']['slot']}) could not satisfy the framework: {err}"
             )
 
     _notify(progress, "finalizing", current=len(questions), total=num,
             message="Checking question coverage and saving the batch.")
-    if metrics is not None:
-        metrics["llm_seconds"] = round(metrics["llm_seconds"], 2)
     return questions, warnings
 
 

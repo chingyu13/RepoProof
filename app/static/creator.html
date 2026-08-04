@@ -159,6 +159,14 @@ button:disabled{opacity:.5;cursor:default}
 .qflags{font-size:.78rem;background:#fef3c7;color:#92400e;border-radius:5px;padding:.4rem .6rem;margin:.45rem 0}
 [data-theme="dark"] .qflags{background:#3d2f0a;color:#f5d67a}
 .small{font-size:.8rem;color:var(--muted)}
+.local-setup{display:flex;align-items:center;gap:.55rem;min-height:2rem;margin:.35rem 0 .15rem;
+  font-size:.8rem;color:var(--muted)}
+.local-setup.hidden{display:none}
+.local-actions{display:flex;align-items:center;gap:.35rem;margin-left:auto}
+.local-actions button,.local-actions a{padding:.28rem .55rem;font-size:.78rem;text-decoration:none;border-radius:5px}
+.local-actions a{background:var(--input-bg);color:var(--ink);border:2px solid var(--strong)}
+.local-progress{width:120px;height:5px;border-radius:5px;background:var(--line);overflow:hidden}
+.local-progress i{display:block;height:100%;width:0;background:var(--accent)}
 a{color:var(--accent)}
 .hidden{display:none}
 :root{
@@ -397,7 +405,15 @@ a{color:var(--accent)}
     </div>
     <div class="framework-field"><label>LLM model</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
-  <p class="small" id="providerNote"></p>
+  <div class="local-setup hidden" id="localSetup">
+    <span id="providerNote"></span>
+    <div class="local-progress hidden" id="localProgress"><i></i></div>
+    <div class="local-actions">
+      <a class="hidden" id="localInstall" href="/static/local-setup.html" target="_blank" rel="noopener">Set up Ollama</a>
+      <button class="secondary hidden" id="localPull" type="button">Download model</button>
+      <button class="secondary" id="localCheck" type="button">Check again</button>
+    </div>
+  </div>
   <label>Focus areas — drag each slider to set how strongly that area is tested (0 = skip)</label>
   <div class="radar-wrap">
     <div class="radar-panel"><svg id="radar" viewBox="0 0 300 300" aria-label="Focus areas radar chart"></svg></div>
@@ -480,6 +496,8 @@ let pendingFile = null;
 let maxProjectMB = 1024;
 let priorContextFiles = [];
 let scopeContextFiles = [];
+let localProvider = {url:'http://127.0.0.1:11434', model:'qwen2.5-coder:7b'};
+let localModelReady = false;
 
 /* theme */
 const savedTheme = localStorage.getItem('rp-theme');
@@ -600,6 +618,97 @@ function selectedLlm(){
   };
 }
 
+function setLocalStatus(text, {install=false, pull=false, checking=true, progress=null}={}){
+  $('providerNote').textContent = text;
+  $('localInstall').classList.toggle('hidden', !install);
+  $('localPull').classList.toggle('hidden', !pull);
+  $('localCheck').classList.toggle('hidden', !checking);
+  $('localProgress').classList.toggle('hidden', progress === null);
+  if (progress !== null) {
+    $('localProgress').firstElementChild.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+  }
+}
+
+async function localFetch(path, options={}, timeoutMs=4000){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), timeoutMs);
+  try {
+    return await fetch(`${localProvider.url}${path}`, {...options, signal:controller.signal});
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function checkLocalModel(){
+  localModelReady = false;
+  setLocalStatus('Checking local Ollama…', {checking:false});
+  try {
+    const response = await localFetch('/api/tags');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const body = await response.json();
+    const installed = (body.models || []).some(model=>
+      model.name === localProvider.model || model.model === localProvider.model);
+    localModelReady = installed;
+    if (installed) {
+      setLocalStatus(`${localProvider.model} ready.`, {checking:false});
+    } else {
+      setLocalStatus(`${localProvider.model} is not installed.`, {pull:true});
+    }
+  } catch (_error) {
+    setLocalStatus('Ollama is unavailable or browser access is blocked.', {install:true});
+  }
+  return localModelReady;
+}
+
+async function pullLocalModel(){
+  $('localPull').disabled = true;
+  setLocalStatus(`Downloading ${localProvider.model}…`, {checking:false, progress:0});
+  try {
+    const response = await fetch(`${localProvider.url}/api/pull`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:localProvider.model, stream:true}),
+    });
+    if (!response.ok) throw new Error(`Model download failed (HTTP ${response.status}).`);
+    if (response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = '';
+      while (true) {
+        const {value, done} = await reader.read();
+        buffered += decoder.decode(value || new Uint8Array(), {stream:!done});
+        const lines = buffered.split('\n');
+        buffered = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const update = JSON.parse(line);
+          if (update.total && update.completed) {
+            const percent = Math.round(update.completed / update.total * 100);
+            setLocalStatus(`Downloading ${localProvider.model}… ${percent}%`, {
+              checking:false, progress:percent,
+            });
+          }
+        }
+        if (done) break;
+      }
+    }
+    await checkLocalModel();
+  } catch (error) {
+    setLocalStatus(error.message || 'Model download failed.', {pull:true});
+  } finally {
+    $('localPull').disabled = false;
+  }
+}
+
+function syncLocalSetup(){
+  const local = selectedLlm().provider === 'local';
+  $('localSetup').classList.toggle('hidden', !local);
+  if (local) checkLocalModel();
+}
+
+$('localCheck').onclick = checkLocalModel;
+$('localPull').onclick = pullLocalModel;
+
 $('logout').onclick = async ()=>{
   await fetch('/api/logout', {method:'POST'});
   location.href = '/';
@@ -616,6 +725,10 @@ async function loadMeta(){
   if (m.mock_mode) $('mockBadge').classList.remove('hidden');
 
   const p = m.providers || {};
+  localProvider = {
+    url:(p.local?.url || 'http://127.0.0.1:11434').replace(/\/$/, ''),
+    model:p.local?.model || 'qwen2.5-coder:7b',
+  };
   const sel = $('gProvider');
   sel.innerHTML = '';
   const addOpt = (value, label, enabled, provider, model='', hidden=false) => {
@@ -644,8 +757,8 @@ async function loadMeta(){
   });
   addOpt(
     `local:${p.local?.model || ''}`,
-    `Local · ${p.local?.model || '?'}${p.local?.available ? ' — private' : ' — not running'}`,
-    !!p.local?.available,
+    `Local · ${p.local?.model || '?'}`,
+    true,
     'local',
     p.local?.model || '',
   );
@@ -669,10 +782,7 @@ async function loadMeta(){
     sel.value = fallback?.value || 'mock';
   }
   syncPlanControls();   // blueprint step only applies to the planned providers
-  $('providerNote').classList.toggle('hidden', !!p.local?.available);
-  $('providerNote').textContent = p.local?.available
-    ? ''
-    : `No local LLM detected (looked at ${p.local?.url || 'n/a'}). Install Ollama and run: ollama pull ${p.local?.model || 'qwen2.5-coder:7b'} && ollama serve`;
+  syncLocalSetup();
 
   topicCatalog = m.topics || [];
   areas = [
@@ -1025,6 +1135,7 @@ const generationStages = {
   planning_questions:'Planning questions',
   retrieving_evidence:'Retrieving evidence bundles',
   generating_questions:'Generating and validating questions',
+  awaiting_local_model:'Waiting for local model',
   repairing_questions:'Repairing questions',
   finalizing:'Final checks',
   complete:'Complete',
@@ -1044,10 +1155,78 @@ async function waitForGeneration(runId){
   while (true) {
     const run = await api(`/api/generation-runs/${runId}`);
     showGenerationProgress(run);
-    if (run.status === 'complete') return run.result;
+    if (run.status === 'complete' || run.status === 'awaiting_client') return run;
     if (run.status === 'failed') throw new Error(run.error || 'Question generation failed.');
     await new Promise(resolve=>setTimeout(resolve, 900));
   }
+}
+
+async function callLocalOllama(batch, task){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), 10 * 60 * 1000);
+  const started = performance.now();
+  try {
+    const response = await fetch(`${localProvider.url}/api/chat`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      signal:controller.signal,
+      body:JSON.stringify({
+        model:batch.model,
+        messages:[
+          {role:'system', content:batch.system},
+          {role:'user', content:task.prompt},
+        ],
+        format:'json',
+        stream:false,
+        keep_alive:'10m',
+        options:{temperature:task.temperature, num_predict:batch.max_tokens},
+      }),
+    });
+    const body = await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(body.error || `Local Ollama returned HTTP ${response.status}.`);
+    const content = body.message?.content || body.response || '';
+    if (!content) throw new Error('Local Ollama returned an empty response.');
+    return {
+      task_index:task.task_index,
+      attempt:task.attempt,
+      content,
+      duration_seconds:(performance.now() - started) / 1000,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runClientLocalGeneration(run){
+  while (run.status === 'awaiting_client') {
+    const batch = run.local_batch;
+    if (!batch?.tasks?.length) throw new Error('No local generation tasks were returned.');
+    const outputs = [];
+    for (let index=0; index<batch.tasks.length; index++) {
+      const task = batch.tasks[index];
+      const phase = task.attempt ? 'Repairing' : 'Generating';
+      $('genStage').textContent = `${phase} with ${batch.model}`;
+      $('genProgress').textContent = `Question ${task.task_index + 1} · ${index + 1} of ${batch.tasks.length} in this batch`;
+      try {
+        outputs.push(await callLocalOllama(batch, task));
+      } catch (error) {
+        outputs.push({
+          task_index:task.task_index,
+          attempt:task.attempt,
+          error:error.message || 'Local Ollama request failed.',
+        });
+      }
+    }
+    run = await api(`/api/generation-runs/${run.id}/local-completions`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({batch_id:batch.batch_id, outputs}),
+    });
+    showGenerationProgress(run);
+    if (run.status === 'failed') throw new Error(run.error || 'Question generation failed.');
+  }
+  if (run.status !== 'complete') throw new Error('Local generation did not complete.');
+  return run;
 }
 
 // --- Step 2 blueprint preview -------------------------------------------
@@ -1190,7 +1369,10 @@ function syncPlanControls(){
   $('directGenerate').classList.toggle('hidden', planned);
 }
 
-$('gProvider').addEventListener('change', syncPlanControls);
+$('gProvider').addEventListener('change', ()=>{
+  syncPlanControls();
+  syncLocalSetup();
+});
 $('previewPlan').onclick = ()=>{ excludedPoints.clear(); return buildPlan(); };
 $('rebuildPlan').onclick = ()=>{ excludedPoints.clear(); return buildPlan(); };
 
@@ -1204,6 +1386,9 @@ async function runGeneration(){
   $('genOverlay').classList.remove('hidden');
   try {
     let cfg = frameworkConfig();
+    if (cfg.provider === 'local' && !localModelReady && !await checkLocalModel()) {
+      throw new Error(`Install or download ${localProvider.model} before generating.`);
+    }
     if (usesBlueprint()){
       if (!currentPlan) throw new Error('Preview a question plan first.');
       await api(`/api/question-plans/${currentPlan.id}/confirm`, {method:'POST'});
@@ -1213,7 +1398,9 @@ async function runGeneration(){
     const started = await api(`/api/projects/${currentProject}/generation-runs`, {
       method:'POST', body:form
     });
-    const res = await waitForGeneration(started.id);
+    let run = await waitForGeneration(started.id);
+    if (run.status === 'awaiting_client') run = await runClientLocalGeneration(run);
+    const res = run.result;
     $('genStatus').textContent = `Created ${res.created.length} question(s) via ${res.provider || (res.mock_mode ? 'mock' : 'LLM')}`
       + (res.metrics?.llm_calls ? ` · ${res.metrics.llm_calls} model call(s), ${res.metrics.llm_seconds}s` : '')
       + (res.replaced_drafts ? ` (replaced ${res.replaced_drafts} previous draft(s))` : '') + '.';

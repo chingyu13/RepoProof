@@ -482,12 +482,12 @@
     {
       "id": "contextual_use",
       "name": "Contextual Use",
-      "reasoning_prompt": "Explain a project-specific use, relationship, or constraint supported by the supplied evidence.",
+      "reasoning_prompt": "Identify the immediate, project-specific role of one subject using the supplied evidence.",
       "stem_frames": [
         "In {context}, which statement correctly describes what {subject} does in this project?",
         "In {context}, which statement correctly describes how the project uses {subject}?"
       ],
-      "option_task": "Test the subject's evidenced interaction, input/output, side effect, or downstream contribution. Do not test generic library knowledge or repeat what its name suggests.",
+      "option_task": "Test only the subject's immediate, project-specific role. Do not test a multi-stage flow, ordering, or downstream consequences. Do not test generic library knowledge or repeat what its name suggests.",
       "slots": {
         "context": {
           "source": "target_or_topic"
@@ -562,13 +562,13 @@
     {
       "id": "interaction_flow",
       "name": "Interaction / Flow",
-      "reasoning_prompt": "Trace an evidenced interaction, data path, or code path.",
+      "reasoning_prompt": "Trace an evidenced relationship, data path, or code path involving at least two entities.",
       "stem_frames": [
         "Which statement correctly describes how {subject} and {counterpart} work together?",
         "Which statement correctly describes the link from {subject} to {counterpart}?",
         "Which statement correctly describes what moves from {subject} to {counterpart}?"
       ],
-      "option_task": "Test an evidenced direction, ordering, transferred data, or cross-component consequence. Every option must be a complete relational claim.",
+      "option_task": "Test a relationship involving at least two entities, including evidenced direction, ordering, transferred data, or downstream consequence. Every option must be a complete relational claim.",
       "slots": {
         "context": {
           "source": "target_or_topic"

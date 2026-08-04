@@ -210,3 +210,60 @@ def test_generation_rejects_plan_from_another_project(client, project):
     r = client.post(f"/api/projects/{other}/generation-runs",
                     data={"config_json": json.dumps(fw)})
     assert r.status_code == 400
+
+
+def test_local_generation_is_handed_to_the_creator_browser(client, project):
+    preview = _preview(
+        client,
+        project,
+        num_questions=1,
+        allow_code=False,
+        focus_areas=[{"id": "api", "weight": 5}],
+    ).json()
+    if not preview["planned"]:
+        pytest.skip("fixture produced no evidence-supported local plan")
+    assert client.post(f"/api/question-plans/{preview['id']}/confirm").status_code == 200
+    framework = {
+        **FRAMEWORK,
+        "num_questions": 1,
+        "allow_code": False,
+        "focus_areas": [{"id": "api", "weight": 5}],
+        "provider": "local",
+        "question_plan_id": preview["id"],
+    }
+    started = client.post(
+        f"/api/projects/{project}/generation-runs",
+        data={"config_json": json.dumps(framework)},
+    )
+    assert started.status_code == 200, started.text
+    run = client.get(f"/api/generation-runs/{started.json()['id']}").json()
+    assert run["status"] == "awaiting_client"
+    assert "_local_state" not in run
+    batch = run["local_batch"]
+    outputs = []
+    for task in batch["tasks"]:
+        content = json.dumps({
+            "correct_options": [{
+                "text": "The operation uses the integration shown by the project evidence.",
+                "justification": "The supplied evidence shows this integration.",
+            }],
+            "incorrect_options": [{
+                "text": f"The operation performs unrelated behavior {index}.",
+                "justification": "That behavior conflicts with the supplied evidence.",
+            } for index in range(3)],
+            "explanation": "The answer follows from the supplied project evidence.",
+            "confidence": 8,
+        })
+        outputs.append({
+            "task_index": task["task_index"],
+            "attempt": task["attempt"],
+            "content": content,
+            "duration_seconds": 1.0,
+        })
+    completed = client.post(
+        f"/api/generation-runs/{run['id']}/local-completions",
+        json={"batch_id": batch["batch_id"], "outputs": outputs},
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "complete"
+    assert len(completed.json()["result"]["created"]) == 1

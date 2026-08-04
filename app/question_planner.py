@@ -356,18 +356,40 @@ def _clean_endpoint(value: str) -> str:
 
 def _relation_candidates(evidence: list[dict]) -> list[dict]:
     relations = []
+
+    def add(chunk: dict, source: str, destination: str, text: str) -> None:
+        source = _clean_endpoint(source)
+        destination = _clean_endpoint(destination)
+        if not source or not destination or source == destination:
+            return
+        relations.append({
+            "source": source,
+            "target": destination,
+            "chunk_id": chunk["id"],
+            "kind": chunk["kind"],
+            "text": text,
+        })
+
     for chunk in evidence:
         for line in chunk["text"].splitlines():
             if "->" not in line and "→" not in line:
                 continue
             parts = [_clean_endpoint(part) for part in _ARROW_RE.split(line)]
             parts = [part for part in parts if part]
-            relations.extend({
-                "source": source,
-                "target": destination,
-                "chunk_id": chunk["id"],
-                "text": line,
-            } for source, destination in zip(parts, parts[1:]))
+            for source, destination in zip(parts, parts[1:]):
+                add(chunk, source, destination, line)
+        if chunk["kind"] == "flow":
+            stack: list[tuple[int, str]] = []
+            for line in chunk["text"].splitlines()[1:]:
+                if not line.strip() or "recursion" in line.casefold():
+                    continue
+                indent = len(line) - len(line.lstrip())
+                endpoint = _clean_endpoint(line)
+                while stack and stack[-1][0] >= indent:
+                    stack.pop()
+                if stack:
+                    add(chunk, stack[-1][1], endpoint, line)
+                stack.append((indent, endpoint))
     unique = {}
     for relation in relations:
         key = (
@@ -501,6 +523,10 @@ def render_question_plan(template: dict, topic: dict, target: dict | None,
     relations.sort(
         key=lambda relation: (
             -int(relation["chunk_id"] in target_evidence_ids),
+            -int(
+                template["id"] == "data_flow_selection"
+                and relation["kind"] == "flow"
+            ),
             -len(context_tokens.intersection(_tokens(relation["text"]))),
             relation["source"].casefold(),
             relation["target"].casefold(),

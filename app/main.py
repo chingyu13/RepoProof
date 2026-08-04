@@ -10,7 +10,7 @@ from html import escape
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,9 +24,15 @@ from .alignment import (
     extract_document_text,
 )
 from .analyzer import ANALYSIS_VERSION, analyze_project, prune_non_source
-from .generator import generate_questions
+from .generator import (
+    apply_local_generation_outputs,
+    generate_questions,
+    local_generation_batch,
+    prepare_local_generation,
+)
 from .ingest import IngestError, clone_github, delete_project_files, extract_upload, raw_project_files
 from .knowledge import EvidenceStore, build_chunks
+from .local_setup import macos_setup_script, windows_setup_archive
 from .scoring import score_attempt
 from .assessment_catalog import ASSESSMENT_POINTS, TEMPLATES, public_topics
 from .validator import normalize_answer, validate_maq
@@ -172,8 +178,7 @@ def logout():
 
 @app.get("/api/meta")
 def meta():
-    local_up = config.local_llm_available()
-    default_provider = config.default_provider(local_available=local_up)
+    default_provider = config.default_provider(local_available=True)
     return {
         "mock_mode": default_provider == "mock",
         "model": config.OPENAI_MODEL,
@@ -187,7 +192,12 @@ def meta():
                 "model": config.OPENAI_MODEL,
                 "models": config.openai_model_options(),
             },
-            "local": {"available": local_up, "model": config.LOCAL_LLM_MODEL, "url": config.LOCAL_LLM_URL},
+            "local": {
+                "available": True,
+                "client_managed": True,
+                "model": config.LOCAL_LLM_MODEL,
+                "url": config.BROWSER_OLLAMA_URL,
+            },
         },
         "topics": public_topics(),
         "max_project_mb": config.MAX_PROJECT_MB,
@@ -196,6 +206,45 @@ def meta():
         "consent_version": config.CONSENT_VERSION,
         "pro_contact": config.PRO_CONTACT,
     }
+
+
+def _request_origin(request: Request) -> str:
+    scheme = request.headers.get(
+        "x-forwarded-proto", request.url.scheme
+    ).split(",", 1)[0].strip()
+    host = request.headers.get(
+        "x-forwarded-host", request.headers.get("host", "")
+    ).split(",", 1)[0].strip()
+    return f"{scheme}://{host}"
+
+
+@app.get("/api/local-setup/macos/script")
+def local_setup_macos_script(request: Request):
+    try:
+        script = macos_setup_script(_request_origin(request), config.LOCAL_LLM_MODEL)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return Response(
+        script,
+        media_type="text/x-shellscript",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/local-setup/windows")
+def local_setup_windows_download(request: Request):
+    try:
+        archive, filename = windows_setup_archive(_request_origin(request), config.LOCAL_LLM_MODEL)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return Response(
+        archive,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # ---------- projects ----------
@@ -543,6 +592,29 @@ def _run_generation(
             "files": [name for name, _ in prior_files + scope_files],
         }
         _update_generation_run(run_id, context=context_result)
+        if (cfg.get("provider") or "").lower() == "local":
+            state = prepare_local_generation(
+                project["chunks"],
+                cfg,
+                progress=lambda **progress: _generation_progress(run_id, **progress),
+            )
+            if not state["tasks"]:
+                raise ValueError(" ".join(state["warnings"]) or "No local generation tasks were available.")
+            cfg["_generation_metrics"] = state["metrics"]
+            batch_id = secrets.token_urlsafe(12)
+            _update_generation_run(
+                run_id,
+                status="awaiting_client",
+                _local_state=state,
+                local_batch=local_generation_batch(state, batch_id),
+                progress={
+                    "stage": "awaiting_local_model",
+                    "current": 0,
+                    "total": len(state["tasks"]),
+                    "message": "Ready for the local model on this device.",
+                },
+            )
+            return
         raw_files = _raw_files_for_generation(project, cfg)
         questions, warnings = generate_questions(
             project["chunks"],
@@ -820,12 +892,93 @@ async def start_generation(
     return {"id": run_id, "status": "queued"}
 
 
+class LocalCompletion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_index: int = Field(ge=0, le=99)
+    attempt: int = Field(ge=0, le=3)
+    content: str = Field(default="", max_length=100_000)
+    error: str = Field(default="", max_length=2_000)
+    duration_seconds: float = Field(default=0.0, ge=0.0, le=3_600.0)
+
+
+class LocalCompletionBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: str = Field(min_length=8, max_length=128)
+    outputs: list[LocalCompletion] = Field(min_length=1, max_length=20)
+
+
+def _public_generation_run(run: dict) -> dict:
+    return {key: value for key, value in run.items() if not key.startswith("_")}
+
+
+@app.post("/api/generation-runs/{run_id}/local-completions")
+def submit_local_completions(run_id: str, req: LocalCompletionBatch):
+    run = generation_runs.get_run(run_id)
+    if not run:
+        raise HTTPException(404, "Generation run not found")
+    if run["status"] != "awaiting_client":
+        raise HTTPException(409, "This generation run is not waiting for local completions.")
+    batch = run.get("local_batch") or {}
+    if not secrets.compare_digest(req.batch_id, str(batch.get("batch_id") or "")):
+        raise HTTPException(409, "This local completion batch has expired.")
+    state = run.get("_local_state")
+    project = db.get("projects", run["project_id"])
+    if not state or not project:
+        raise HTTPException(409, "The local generation state is no longer available.")
+    outputs = [output.model_dump() for output in req.outputs]
+    if any(not output["content"] and not output["error"] for output in outputs):
+        raise HTTPException(400, "Every local completion needs model output or an error.")
+    try:
+        questions, done = apply_local_generation_outputs(project["chunks"], state, outputs)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    if done:
+        cfg = state["cfg"]
+        cfg["_generation_metrics"] = state["metrics"]
+        result = _store_generated_questions(
+            run["project_id"], cfg, questions, state["warnings"]
+        )
+        result["context"] = run.get("context") or {}
+        _update_generation_run(
+            run_id,
+            status="complete",
+            result=result,
+            _local_state=None,
+            local_batch=None,
+            progress={
+                "stage": "complete",
+                "current": len(questions),
+                "total": len(state["tasks"]),
+                "message": f"Created {len(questions)} question(s).",
+            },
+        )
+    else:
+        batch_id = secrets.token_urlsafe(12)
+        accepted = sum(item.get("status") == "accepted" for item in state["tasks"])
+        pending = sum(item.get("status") == "pending" for item in state["tasks"])
+        _update_generation_run(
+            run_id,
+            _local_state=state,
+            local_batch=local_generation_batch(state, batch_id),
+            progress={
+                "stage": "repairing_questions",
+                "current": accepted,
+                "total": len(state["tasks"]),
+                "message": f"Retrying {pending} question(s) on the local model.",
+            },
+        )
+    return _public_generation_run(generation_runs.get_run(run_id))
+
+
 @app.get("/api/generation-runs/{run_id}")
 def generation_run(run_id: str):
     run = generation_runs.get_run(run_id)
     if not run:
         raise HTTPException(404, "Generation run not found")
-    return run
+    return _public_generation_run(run)
 
 
 @app.get("/api/projects/{project_id}/questions")

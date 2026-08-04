@@ -1,11 +1,8 @@
 """Persistent store for background generation runs.
 
-Replaces the old in-process `_GENERATION_RUNS` dict in main.py, which had two
-failure modes: a server restart made in-flight runs vanish (the frontend then
-polls a 404 forever), and with more than one uvicorn worker the POST and the
-GET could land in different processes. Runs now live in SQLite: status is
-readable from any process and an interrupted run is explicitly failed at the
-next startup instead of disappearing.
+Runs live in SQLite so every process sees the same state. On restart,
+process-owned queued/running work is failed explicitly; browser-owned
+awaiting_client work remains resumable.
 """
 import json
 from datetime import datetime
