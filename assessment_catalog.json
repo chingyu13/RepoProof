@@ -251,7 +251,7 @@
         "3": "Trace how enrichment data is matched and attached.",
         "4": "Analyse incomplete matches, API failures, or enrichment quality."
       },
-      "query": "augment enrich geocode location coordinates external attribute match",
+      "query": "augment enrich geocode geocoding latitude longitude location coordinates external attribute match",
       "evidence_types": [
         "api_discovery",
         "data_flow_graph",
@@ -272,7 +272,7 @@
         "3": "Trace a multi-stage workflow and intermediate forms.",
         "4": "Analyse a cross-component consequence or broken pipeline path."
       },
-      "query": "pipeline workflow data flow source destination stage order intermediate",
+      "query": "pipeline workflow data flow source destination stage order intermediate extraction validation storage visualisation visualization",
       "evidence_types": [
         "data_flow_graph",
         "call_graph",
@@ -476,6 +476,373 @@
         "sql_analysis",
         "api_discovery"
       ]
+    },
+    {
+      "id": "module_dependency_boundary",
+      "name": "Module Dependency / Boundary",
+      "description": "How modules are separated, which direction dependencies run, and which boundary owns an interaction.",
+      "difficulty_range": [2, 4],
+      "difficulty_anchors": {
+        "2": "Identify a direct module dependency or boundary.",
+        "3": "Explain why a responsibility belongs on one side of the boundary.",
+        "4": "Analyse coupling or the consequence of changing the dependency direction."
+      },
+      "query": "module dependency boundary coupling layer separation import direction interface",
+      "evidence_types": ["module_graph", "dependency_graph", "call_graph"]
+    },
+    {
+      "id": "entrypoint_lifecycle",
+      "name": "Entrypoint / Application Lifecycle",
+      "description": "How execution starts, initializes resources, coordinates stages, and shuts down.",
+      "difficulty_range": [1, 4],
+      "difficulty_anchors": {
+        "1": "Identify an entrypoint or initialization function.",
+        "2": "Explain the direct startup or shutdown sequence.",
+        "3": "Trace lifecycle-dependent calls and state.",
+        "4": "Analyse a faulty initialization, cleanup, or ordering change."
+      },
+      "query": "entrypoint main startup initialize lifecycle shutdown cleanup bootstrap run application",
+      "evidence_types": ["call_graph", "control_flow_graph", "module_graph", "symbol_table"]
+    },
+    {
+      "id": "configuration_deployment",
+      "name": "Configuration / Deployment",
+      "description": "How runtime settings, environments, paths, and deployment-specific values alter project behaviour.",
+      "difficulty_range": [1, 4],
+      "difficulty_anchors": {
+        "1": "Identify a configuration source or environment setting.",
+        "2": "Explain where one runtime value is consumed.",
+        "3": "Trace how configuration changes project behaviour.",
+        "4": "Analyse an environment-specific configuration failure."
+      },
+      "query": "configuration environment variable setting deployment path host port runtime dotenv",
+      "evidence_types": ["symbol_table", "dependency_graph", "call_graph", "control_flow_graph"]
+    },
+    {
+      "id": "request_response_handling",
+      "name": "Request / Response Handling",
+      "description": "How requests are constructed and how status, headers, payloads, and errors are interpreted.",
+      "difficulty_range": [1, 4],
+      "difficulty_anchors": {
+        "1": "Identify a request method or response field.",
+        "2": "Explain request construction or response parsing.",
+        "3": "Trace a response into downstream project data.",
+        "4": "Analyse incorrect status, payload, or error handling."
+      },
+      "query": "http request response status header body payload parse client get post error",
+      "evidence_types": ["api_discovery", "data_flow_graph", "control_flow_graph", "call_graph"]
+    },
+    {
+      "id": "pagination_rate_limits",
+      "name": "Pagination / Rate Limits",
+      "description": "How an integration retrieves multiple pages and respects quotas, throttling, or backoff constraints.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a page token, limit, or quota.",
+        "3": "Trace repeated retrieval across pages.",
+        "4": "Analyse missing records or excessive calls caused by pagination logic.",
+        "5": "Evaluate a quota-safe pagination and backoff design."
+      },
+      "query": "pagination page cursor offset limit quota rate throttle backoff api repeated request",
+      "evidence_types": ["api_discovery", "control_flow_graph", "data_flow_graph", "complexity_analysis"]
+    },
+    {
+      "id": "retry_idempotency",
+      "name": "Retry / Idempotency",
+      "description": "Whether repeated external operations are safe and how retry behaviour avoids duplicated effects.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a retry or repeatable operation.",
+        "3": "Explain the observable effect of repeating it.",
+        "4": "Diagnose duplicate writes, messages, or requests.",
+        "5": "Evaluate an idempotency mechanism across components."
+      },
+      "query": "retry idempotent duplicate repeated request write message backoff operation safe",
+      "evidence_types": ["api_discovery", "control_flow_graph", "data_flow_graph", "sql_analysis"]
+    },
+    {
+      "id": "orchestration_scheduling",
+      "name": "Orchestration / Scheduling",
+      "description": "How jobs, tasks, dependencies, triggers, and execution schedules coordinate a workflow.",
+      "difficulty_range": [1, 4],
+      "difficulty_anchors": {
+        "1": "Identify a scheduled job or task.",
+        "2": "Explain a direct task dependency or trigger.",
+        "3": "Trace an ordered multi-task run.",
+        "4": "Analyse a scheduling, dependency, or rerun failure."
+      },
+      "query": "orchestration schedule scheduler cron dag task dependency trigger job workflow run airflow",
+      "evidence_types": ["module_graph", "call_graph", "control_flow_graph", "data_flow_graph"]
+    },
+    {
+      "id": "ordering_deduplication",
+      "name": "Ordering / Deduplication",
+      "description": "How records or events are sorted, keyed, de-duplicated, and processed in a stable order.",
+      "difficulty_range": [2, 4],
+      "difficulty_anchors": {
+        "2": "Identify an ordering or duplicate-removal key.",
+        "3": "Predict the retained order and records.",
+        "4": "Analyse stale, repeated, or out-of-order results."
+      },
+      "query": "order sort sequence deduplicate duplicate unique key timestamp stable event record",
+      "evidence_types": ["data_flow_graph", "control_flow_graph", "symbol_table"]
+    },
+    {
+      "id": "window_buffer_processing",
+      "name": "Window / Buffer Processing",
+      "description": "How streams or collections are partitioned into windows, buffers, batches, or time intervals.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify the window, buffer, or batch boundary.",
+        "3": "Predict which records are processed together.",
+        "4": "Analyse late, partial, or boundary records.",
+        "5": "Evaluate a windowing trade-off for latency and correctness."
+      },
+      "query": "window buffer batch chunk interval event time tumbling sliding latency records",
+      "evidence_types": ["data_flow_graph", "control_flow_graph", "complexity_analysis"]
+    },
+    {
+      "id": "data_lineage_quality",
+      "name": "Data Lineage / Quality",
+      "description": "How provenance, quality rules, and intermediate checks connect an output to its source.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a source or quality check for an output.",
+        "3": "Trace a value through transformations and checks.",
+        "4": "Locate where an invalid output could enter the lineage.",
+        "5": "Evaluate whether the available checks establish trustworthy lineage."
+      },
+      "query": "data lineage provenance quality source trace audit intermediate validation output origin",
+      "evidence_types": ["data_flow_graph", "call_graph", "test_discovery", "sql_analysis"]
+    },
+    {
+      "id": "algorithm_control_logic",
+      "name": "Algorithm / Control Logic",
+      "description": "The ordered steps, branches, loops, and termination conditions that implement a local algorithm.",
+      "difficulty_range": [1, 5],
+      "difficulty_anchors": {
+        "1": "Identify a visible step or branch.",
+        "2": "Explain the purpose of a short control path.",
+        "3": "Trace an input through several steps.",
+        "4": "Diagnose incorrect ordering or termination.",
+        "5": "Evaluate correctness across interacting paths and edge cases."
+      },
+      "query": "algorithm logic steps branch loop iteration termination condition calculate control path",
+      "evidence_types": ["control_flow_graph", "data_flow_graph", "symbol_table", "complexity_analysis"]
+    },
+    {
+      "id": "state_mutation_side_effect",
+      "name": "State Mutation / Side Effect",
+      "description": "How functions mutate shared state or produce externally observable effects beyond returning a value.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a state change or side effect.",
+        "3": "Trace the effect to a later read or caller.",
+        "4": "Analyse an unexpected mutation or ordering dependency.",
+        "5": "Evaluate a safer state-management design."
+      },
+      "query": "state mutation side effect global assignment update shared variable write caller",
+      "evidence_types": ["data_flow_graph", "control_flow_graph", "call_graph", "symbol_table"]
+    },
+    {
+      "id": "resource_lifecycle",
+      "name": "Resource Lifecycle",
+      "description": "How files, connections, clients, threads, and other resources are opened, used, and released.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify resource acquisition or cleanup.",
+        "3": "Trace the complete resource lifecycle.",
+        "4": "Diagnose a leak or incomplete cleanup path.",
+        "5": "Evaluate lifecycle safety across failures or concurrency."
+      },
+      "query": "resource lifecycle open close connect disconnect file client thread cleanup context manager",
+      "evidence_types": ["control_flow_graph", "call_graph", "data_flow_graph", "api_discovery"]
+    },
+    {
+      "id": "edge_case_boundary",
+      "name": "Edge Case / Boundary Behaviour",
+      "description": "Observable behaviour for empty, missing, extreme, malformed, or boundary inputs.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a guarded boundary condition.",
+        "3": "Predict behaviour for one concrete edge input.",
+        "4": "Diagnose an unhandled boundary case.",
+        "5": "Reason across interacting edge cases and recovery paths."
+      },
+      "query": "edge case boundary empty missing malformed invalid zero negative maximum minimum input",
+      "evidence_types": ["control_flow_graph", "test_discovery", "data_flow_graph", "symbol_table"]
+    },
+    {
+      "id": "entity_relationship_keys",
+      "name": "Entity Relationship / Keys",
+      "description": "How entities relate and how primary, foreign, natural, or composite keys identify records.",
+      "difficulty_range": [1, 4],
+      "difficulty_anchors": {
+        "1": "Identify an entity, relationship, or key.",
+        "2": "Explain cardinality or key purpose.",
+        "3": "Trace how related records are linked.",
+        "4": "Analyse an incorrect key or relationship design."
+      },
+      "query": "entity relationship primary foreign composite natural key cardinality one many model",
+      "evidence_types": ["sql_analysis", "symbol_table", "data_flow_graph"]
+    },
+    {
+      "id": "query_join_filter",
+      "name": "Query / Join / Filter Semantics",
+      "description": "Which records a database query selects, joins, groups, orders, or excludes.",
+      "difficulty_range": [1, 5],
+      "difficulty_anchors": {
+        "1": "Identify a queried table or filter.",
+        "2": "Explain a direct query clause.",
+        "3": "Predict the result set or join output.",
+        "4": "Diagnose incorrect, missing, or duplicated rows.",
+        "5": "Evaluate a complex query's correctness and grain."
+      },
+      "query": "sql query select where filter join group by having order result rows semantics",
+      "evidence_types": ["sql_analysis", "data_flow_graph", "symbol_table"]
+    },
+    {
+      "id": "transaction_atomicity",
+      "name": "Transaction / Atomicity",
+      "description": "How grouped persistence operations commit, roll back, and preserve consistency under failure.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a transaction boundary or commit.",
+        "3": "Explain which writes succeed or roll back together.",
+        "4": "Analyse a partial-write or concurrency failure.",
+        "5": "Evaluate an atomicity or isolation design."
+      },
+      "query": "transaction atomicity commit rollback isolation consistency partial write insert all writes together failure stored database",
+      "evidence_types": ["sql_analysis", "control_flow_graph", "data_flow_graph"]
+    },
+    {
+      "id": "schema_evolution_migration",
+      "name": "Schema Evolution / Migration",
+      "description": "How stored structures and consumers adapt when fields, types, tables, or versions change.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a schema version or structural change.",
+        "3": "Trace the direct migration effect.",
+        "4": "Analyse compatibility or data-loss risk.",
+        "5": "Evaluate a safe staged migration across producers and consumers."
+      },
+      "query": "schema evolution migration version alter table backward compatibility field type change",
+      "evidence_types": ["sql_analysis", "data_flow_graph", "api_discovery", "dependency_graph"]
+    },
+    {
+      "id": "authentication_authorization",
+      "name": "Authentication / Authorization",
+      "description": "How identities are established and how permissions restrict protected operations or data.",
+      "difficulty_range": [1, 5],
+      "difficulty_anchors": {
+        "1": "Identify an authentication credential or protected operation.",
+        "2": "Explain an access check.",
+        "3": "Trace an accepted or rejected request.",
+        "4": "Diagnose an access-control flaw.",
+        "5": "Evaluate authorization boundaries across components."
+      },
+      "query": "authentication authorization identity login token session role permission access control protected",
+      "evidence_types": ["api_discovery", "control_flow_graph", "data_flow_graph", "symbol_table"]
+    },
+    {
+      "id": "input_validation_injection",
+      "name": "Input Validation / Injection",
+      "description": "How untrusted input is validated, encoded, parameterised, or rejected before sensitive use.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify an input validation or parameterisation step.",
+        "3": "Trace valid and invalid input paths.",
+        "4": "Diagnose an injection or unsafe-input flaw.",
+        "5": "Evaluate validation across API, command, and database boundaries."
+      },
+      "query": "input validation sanitize injection sql command parameterized untrusted encode reject",
+      "evidence_types": ["control_flow_graph", "api_discovery", "sql_analysis", "data_flow_graph"]
+    },
+    {
+      "id": "secret_sensitive_data",
+      "name": "Secrets / Sensitive Data",
+      "description": "How credentials and sensitive values are stored, transmitted, logged, and prevented from exposure.",
+      "difficulty_range": [1, 5],
+      "difficulty_anchors": {
+        "1": "Identify a secret or sensitive value.",
+        "2": "Explain how it is loaded or protected.",
+        "3": "Trace where it may be transmitted or logged.",
+        "4": "Diagnose an exposure path.",
+        "5": "Evaluate protection across storage, transport, and observability."
+      },
+      "query": "secret credential password api key token sensitive data privacy log expose encrypt environment",
+      "evidence_types": ["symbol_table", "data_flow_graph", "api_discovery", "dependency_graph"]
+    },
+    {
+      "id": "test_scope_isolation",
+      "name": "Test Scope / Isolation",
+      "description": "Whether unit, integration, and end-to-end tests isolate dependencies at the intended boundary.",
+      "difficulty_range": [1, 4],
+      "difficulty_anchors": {
+        "1": "Identify a test type or dependency double.",
+        "2": "Explain what the test isolates.",
+        "3": "Distinguish unit, integration, and end-to-end coverage.",
+        "4": "Analyse a misleading mock or incorrect test boundary."
+      },
+      "query": "unit integration end to end test isolation mock stub fake fixture dependency boundary",
+      "evidence_types": ["test_discovery", "call_graph", "dependency_graph", "symbol_table"]
+    },
+    {
+      "id": "boundary_failure_testing",
+      "name": "Boundary / Failure Testing",
+      "description": "Tests that verify invalid, empty, extreme, exceptional, and recovery behaviour.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a boundary or failure test.",
+        "3": "Select a test input that reaches a guarded path.",
+        "4": "Design a test that exposes an unhandled fault.",
+        "5": "Evaluate failure coverage across component boundaries."
+      },
+      "query": "boundary failure test exception invalid empty extreme timeout recovery edge case assertion",
+      "evidence_types": ["test_discovery", "control_flow_graph", "api_discovery", "data_flow_graph"]
+    },
+    {
+      "id": "time_space_complexity",
+      "name": "Time / Space Complexity",
+      "description": "How input size affects operation count and memory use for evidenced code paths.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a loop, collection, or repeated operation.",
+        "3": "Determine a local time or space growth rate.",
+        "4": "Analyse nested work or materialisation at scale.",
+        "5": "Evaluate a complexity improvement without changing correctness."
+      },
+      "query": "time space complexity big o input size nested loop memory allocation growth algorithm",
+      "evidence_types": ["complexity_analysis", "control_flow_graph", "data_flow_graph"]
+    },
+    {
+      "id": "object_design_principles",
+      "name": "Object Design Principles",
+      "description": "How classes preserve invariants, encapsulate state, and divide responsibilities.",
+      "difficulty_range": [1, 5],
+      "difficulty_anchors": {
+        "1": "Identify a class, field, or method.",
+        "2": "Explain an encapsulated responsibility.",
+        "3": "Trace how a method preserves object state.",
+        "4": "Diagnose poor cohesion or broken invariants.",
+        "5": "Evaluate a responsibility or interface redesign."
+      },
+      "query": "object oriented class encapsulation invariant responsibility cohesion solid method state",
+      "evidence_types": ["symbol_table", "call_graph", "module_graph", "control_flow_graph"]
+    },
+    {
+      "id": "class_collaboration_polymorphism",
+      "name": "Class Collaboration / Polymorphism",
+      "description": "How objects collaborate through composition, inheritance, interfaces, and substitutable behaviour.",
+      "difficulty_range": [2, 5],
+      "difficulty_anchors": {
+        "2": "Identify a class relationship or overridden method.",
+        "3": "Explain a collaboration or dispatch path.",
+        "4": "Analyse composition versus inheritance in the evidenced design.",
+        "5": "Evaluate substitutability and extension impact across classes."
+      },
+      "query": "class collaboration composition inheritance interface abstraction polymorphism override dispatch object",
+      "evidence_types": ["symbol_table", "module_graph", "call_graph", "dependency_graph"]
     }
   ],
   "templates": [
@@ -1327,6 +1694,204 @@
         "max_chunks": 3,
         "chars_per_chunk": 2000
       }
+    },
+    {
+      "id": "state_trace",
+      "name": "State / Output Trace",
+      "reasoning_prompt": "Execute the complete shown path and determine the final state, output, return value, and material side effects.",
+      "stem_frames": [
+        "After the shown code runs, which statement correctly describes the resulting state and output?"
+      ],
+      "option_task": "Each option must give a concrete final result. Exactly one must match every visible assignment, call, branch, output, exception, and return; do not require hidden code or memorisation.",
+      "slots": {
+        "context": {"source": "target_or_topic"}
+      },
+      "code_mode": "required",
+      "query": "trace execute final state variable output return side effect path",
+      "evidence": {
+        "required": [{
+          "label": "complete executable path",
+          "types": ["control_flow_graph", "data_flow_graph", "symbol_table"],
+          "kinds": ["function", "notebook_cell", "source"],
+          "count": 1,
+          "query": "assignment branch loop return print update append"
+        }],
+        "optional": [{
+          "label": "called behaviour",
+          "types": ["call_graph", "symbol_table"],
+          "kinds": ["flow", "function", "module_var"],
+          "count": 1
+        }],
+        "max_chunks": 2,
+        "chars_per_chunk": 3000
+      }
+    },
+    {
+      "id": "edge_case_outcome",
+      "name": "Edge-case Outcome",
+      "reasoning_prompt": "Determine the exact observable behaviour for one concrete boundary or invalid input using the complete shown path.",
+      "stem_frames": [
+        "When {condition}, which statement correctly describes the evidenced behaviour?"
+      ],
+      "option_task": "Use one concrete empty, missing, malformed, extreme, timeout, or failure condition. Exactly one option must match the shown guard, exception, fallback, state change, and return behaviour.",
+      "slots": {
+        "condition": {"source": "code_condition"}
+      },
+      "code_mode": "required",
+      "query": "edge case empty missing invalid boundary exception fallback outcome",
+      "evidence": {
+        "required": [{
+          "label": "guarded boundary path",
+          "types": ["control_flow_graph", "data_flow_graph"],
+          "kinds": ["function", "notebook_cell", "source"],
+          "count": 1,
+          "query": "if empty none missing invalid except timeout return"
+        }],
+        "optional": [{
+          "label": "boundary expectation",
+          "types": ["test_discovery", "call_graph", "symbol_table"],
+          "kinds": ["test_discovery", "flow", "function"],
+          "count": 1
+        }],
+        "max_chunks": 2,
+        "chars_per_chunk": 2800
+      }
+    },
+    {
+      "id": "test_case_selection",
+      "name": "Test Case Selection",
+      "reasoning_prompt": "Choose the test setup and assertion that objectively verifies one evidenced behaviour or exposes one evidenced fault.",
+      "stem_frames": [
+        "Which test case correctly verifies the required behaviour of {subject}?"
+      ],
+      "option_task": "Each option must specify an input or setup and an observable assertion. Exactly one must exercise the requested path and assert its evidenced result; avoid subjective claims about which test is better.",
+      "slots": {
+        "subject": {
+          "source": "evidence_entity",
+          "types": ["function", "class", "component", "api_method", "data_store", "state"]
+        }
+      },
+      "code_mode": "none",
+      "query": "test case input setup assertion expected failure boundary verify behavior",
+      "evidence": {
+        "required": [{
+          "label": "testable behaviour",
+          "types": ["test_discovery", "control_flow_graph", "data_flow_graph", "api_discovery", "sql_analysis"],
+          "kinds": ["test_discovery", "function", "source", "notebook_cell", "api_discovery", "sql_analysis"],
+          "count": 1,
+          "query": "assert expected return error validate boundary"
+        }],
+        "optional": [{
+          "label": "dependency boundary",
+          "types": ["call_graph", "dependency_graph", "symbol_table"],
+          "kinds": ["flow", "callgraph", "imports", "function"],
+          "count": 1
+        }],
+        "max_chunks": 2,
+        "chars_per_chunk": 2400
+      }
+    },
+    {
+      "id": "contract_verification",
+      "name": "Contract Verification",
+      "reasoning_prompt": "Verify one concrete input, output, payload, schema, permission, or transaction contract against the supplied evidence.",
+      "stem_frames": [
+        "Which statement satisfies the evidenced contract for {subject}?"
+      ],
+      "option_task": "Exactly one option must satisfy every evidenced field, type, key, status, permission, or atomicity rule. Incorrect options must contradict a visible contract rather than represent merely weaker designs.",
+      "slots": {
+        "subject": {
+          "source": "evidence_entity",
+          "types": ["function", "api_method", "data_store", "component", "state"]
+        }
+      },
+      "code_mode": "none",
+      "query": "contract input output schema payload field status key permission transaction satisfy",
+      "evidence": {
+        "required": [{
+          "label": "explicit contract",
+          "types": ["api_discovery", "sql_analysis", "symbol_table", "data_flow_graph", "test_discovery"],
+          "kinds": ["api_discovery", "sql_analysis", "function", "module_var", "flow", "test_discovery"],
+          "count": 1,
+          "query": "parameter return payload field type key constraint status assert"
+        }],
+        "optional": [{
+          "label": "contract consumer",
+          "types": ["call_graph", "data_flow_graph", "dependency_graph"],
+          "kinds": ["flow", "callgraph", "imports", "function"],
+          "count": 1
+        }],
+        "max_chunks": 2,
+        "chars_per_chunk": 2400
+      }
+    },
+    {
+      "id": "complexity_analysis",
+      "name": "Complexity Analysis",
+      "reasoning_prompt": "Determine an evidenced time, space, I/O, or throughput implication and its cause.",
+      "stem_frames": [
+        "Which statement correctly describes the evidenced complexity or resource behaviour of {subject}?"
+      ],
+      "option_task": "Exactly one option must match the visible loops, calls, allocations, materialisation, or repeated I/O. Do not assert an exact Big-O class unless the shown path supports it.",
+      "slots": {
+        "subject": {
+          "source": "evidence_entity",
+          "types": ["function", "component", "api_method", "data_store"]
+        }
+      },
+      "code_mode": "none",
+      "query": "complexity time space memory io throughput repeated loop allocation scale",
+      "evidence": {
+        "required": [{
+          "label": "resource indicator",
+          "types": ["complexity_analysis", "control_flow_graph", "data_flow_graph", "call_graph"],
+          "kinds": ["complexity", "function", "flow", "callgraph", "source"],
+          "count": 1,
+          "query": "loop branch call repeated load write memory size"
+        }],
+        "optional": [{
+          "label": "scale context",
+          "types": ["data_flow_graph", "api_discovery", "sql_analysis"],
+          "kinds": ["flow", "api_discovery", "sql_analysis", "function"],
+          "count": 1
+        }],
+        "max_chunks": 2,
+        "chars_per_chunk": 2400
+      }
+    },
+    {
+      "id": "dependency_change_impact",
+      "name": "Dependency Change Impact",
+      "reasoning_prompt": "Trace the objectively evidenced effect of changing one module, interface, schema, or dependency.",
+      "stem_frames": [
+        "Which evidenced part directly depends on {subject} and would therefore require review if its contract changed?"
+      ],
+      "option_task": "Exactly one option must follow a visible dependency, call, data-flow, API, or schema edge. Do not ask which design is better or rely on undocumented architectural intent.",
+      "slots": {
+        "subject": {
+          "source": "evidence_entity",
+          "types": ["component", "function", "class", "api_method", "data_store", "imported_library"]
+        }
+      },
+      "code_mode": "none",
+      "query": "change impact dependency caller consumer schema interface downstream affected",
+      "evidence": {
+        "required": [{
+          "label": "dependency edge",
+          "types": ["dependency_graph", "module_graph", "call_graph", "data_flow_graph", "api_discovery", "sql_analysis"],
+          "kinds": ["import_graph", "module_graph", "callgraph", "flow", "api_discovery", "sql_analysis"],
+          "count": 1,
+          "query": "depends calls consumes imports reads writes downstream"
+        }],
+        "optional": [{
+          "label": "affected implementation",
+          "types": ["symbol_table", "control_flow_graph", "data_flow_graph"],
+          "kinds": ["function", "class", "source", "notebook_cell", "flow"],
+          "count": 1
+        }],
+        "max_chunks": 2,
+        "chars_per_chunk": 2400
+      }
     }
   ],
   "topics": [
@@ -1341,22 +1906,7 @@
         "call_graph",
         "symbol_table",
         "data_flow_graph"
-      ],
-      "template_weights": {
-        "contextual_use": 0,
-        "interaction_flow": 1.0,
-        "condition_outcome": 0,
-        "code_explain": 0,
-        "fault_correction": 0,
-        "requirement_change": 0,
-        "constraint_behavior": 0,
-        "approach_classification": 0.7,
-        "data_flow_selection": 1.0,
-        "source_method_mapping": 0.4,
-        "stage_responsibility": 0.9,
-        "processing_mode": 0.6,
-        "data_grain": 0.4
-      }
+      ]
     },
     {
       "id": "api",
@@ -1369,22 +1919,7 @@
         "data_flow_graph",
         "control_flow_graph",
         "call_graph"
-      ],
-      "template_weights": {
-        "contextual_use": 0.9,
-        "interaction_flow": 1.0,
-        "condition_outcome": 0.7,
-        "code_explain": 0.1,
-        "fault_correction": 0.55,
-        "requirement_change": 0.6,
-        "constraint_behavior": 0.7,
-        "approach_classification": 0.9,
-        "data_flow_selection": 0.9,
-        "source_method_mapping": 1.0,
-        "stage_responsibility": 0.6,
-        "processing_mode": 0.8,
-        "data_grain": 0.7
-      }
+      ]
     },
     {
       "id": "data_flow",
@@ -1396,22 +1931,7 @@
         "call_graph",
         "symbol_table",
         "module_graph"
-      ],
-      "template_weights": {
-        "contextual_use": 0.75,
-        "interaction_flow": 1.0,
-        "condition_outcome": 0.65,
-        "code_explain": 0.2,
-        "fault_correction": 0.3,
-        "requirement_change": 0.5,
-        "constraint_behavior": 0.65,
-        "approach_classification": 0.8,
-        "data_flow_selection": 1.0,
-        "source_method_mapping": 0.8,
-        "stage_responsibility": 0.9,
-        "processing_mode": 1.0,
-        "data_grain": 0.8
-      }
+      ]
     },
     {
       "id": "project_logic",
@@ -1423,22 +1943,7 @@
         "control_flow_graph",
         "data_flow_graph",
         "call_graph"
-      ],
-      "template_weights": {
-        "contextual_use": 0.25,
-        "interaction_flow": 0.4,
-        "condition_outcome": 0.8,
-        "code_explain": 1.0,
-        "fault_correction": 1.0,
-        "requirement_change": 1.0,
-        "constraint_behavior": 0.75,
-        "approach_classification": 0.3,
-        "data_flow_selection": 0.5,
-        "source_method_mapping": 0.2,
-        "stage_responsibility": 0.7,
-        "processing_mode": 0.7,
-        "data_grain": 0.5
-      }
+      ]
     },
     {
       "id": "database",
@@ -1450,22 +1955,7 @@
         "data_flow_graph",
         "dependency_graph",
         "symbol_table"
-      ],
-      "template_weights": {
-        "contextual_use": 0.8,
-        "interaction_flow": 0.75,
-        "condition_outcome": 0.5,
-        "code_explain": 0.15,
-        "fault_correction": 0.5,
-        "requirement_change": 0.65,
-        "constraint_behavior": 1.0,
-        "approach_classification": 0.7,
-        "data_flow_selection": 0.5,
-        "source_method_mapping": 0.3,
-        "stage_responsibility": 0.7,
-        "processing_mode": 0.5,
-        "data_grain": 1.0
-      }
+      ]
     },
     {
       "id": "security",
@@ -1477,22 +1967,7 @@
         "api_discovery",
         "symbol_table",
         "data_flow_graph"
-      ],
-      "template_weights": {
-        "contextual_use": 0.6,
-        "interaction_flow": 0.6,
-        "condition_outcome": 1.0,
-        "code_explain": 0.25,
-        "fault_correction": 1.0,
-        "requirement_change": 0.9,
-        "constraint_behavior": 1.0,
-        "approach_classification": 0.4,
-        "data_flow_selection": 0.5,
-        "source_method_mapping": 0.4,
-        "stage_responsibility": 0.4,
-        "processing_mode": 0.4,
-        "data_grain": 0.3
-      }
+      ]
     },
     {
       "id": "testing",
@@ -1503,22 +1978,7 @@
         "test_discovery",
         "control_flow_graph",
         "data_flow_graph"
-      ],
-      "template_weights": {
-        "contextual_use": 0.3,
-        "interaction_flow": 0.4,
-        "condition_outcome": 0.9,
-        "code_explain": 0.5,
-        "fault_correction": 0.9,
-        "requirement_change": 0.7,
-        "constraint_behavior": 1.0,
-        "approach_classification": 0.2,
-        "data_flow_selection": 0.3,
-        "source_method_mapping": 0.2,
-        "stage_responsibility": 0.4,
-        "processing_mode": 0.4,
-        "data_grain": 0.5
-      }
+      ]
     },
     {
       "id": "complexity",
@@ -1529,22 +1989,7 @@
         "complexity_analysis",
         "control_flow_graph",
         "data_flow_graph"
-      ],
-      "template_weights": {
-        "contextual_use": 0.3,
-        "interaction_flow": 0.4,
-        "condition_outcome": 0.7,
-        "code_explain": 0.6,
-        "fault_correction": 0.65,
-        "requirement_change": 1.0,
-        "constraint_behavior": 1.0,
-        "approach_classification": 0.5,
-        "data_flow_selection": 0.4,
-        "source_method_mapping": 0.2,
-        "stage_responsibility": 0.4,
-        "processing_mode": 0.8,
-        "data_grain": 0.4
-      }
+      ]
     },
     {
       "id": "oop",
@@ -1555,95 +2000,125 @@
         "symbol_table",
         "module_graph",
         "call_graph"
-      ],
-      "template_weights": {
-        "contextual_use": 0.8,
-        "interaction_flow": 1.0,
-        "condition_outcome": 0.6,
-        "code_explain": 0.5,
-        "fault_correction": 0.6,
-        "requirement_change": 0.9,
-        "constraint_behavior": 0.6,
-        "approach_classification": 0.4,
-        "data_flow_selection": 0.6,
-        "source_method_mapping": 0.2,
-        "stage_responsibility": 0.8,
-        "processing_mode": 0.5,
-        "data_grain": 0.3
-      }
+      ]
     }
   ],
   "focus_point_weights": {
     "architecture": {
       "component_responsibility": 1.0,
+      "module_dependency_boundary": 1.0,
       "design_decision_change_impact": 0.9,
+      "entrypoint_lifecycle": 0.8,
       "pipeline_data_flow": 0.7,
+      "orchestration_scheduling": 0.7,
+      "configuration_deployment": 0.6,
+      "class_collaboration_polymorphism": 0.6,
       "package_purpose": 0.5,
       "cache_materialisation": 0.5,
       "performance_scalability": 0.5,
+      "resource_lifecycle": 0.5,
+      "object_design_principles": 0.5,
       "persistence_schema_integrity": 0.4
     },
     "api": {
       "external_interface_contract": 1.0,
+      "request_response_handling": 1.0,
       "data_source_acquisition": 0.9,
+      "pagination_rate_limits": 0.8,
+      "retry_idempotency": 0.8,
       "data_format_schema": 0.6,
       "integration_entity_matching": 0.6,
       "failure_recovery": 0.5,
       "augmentation_enrichment": 0.5,
+      "authentication_authorization": 0.5,
+      "schema_evolution_migration": 0.5,
+      "resource_lifecycle": 0.4,
       "configuration_security_validation": 0.4
     },
     "data_flow": {
       "pipeline_data_flow": 1.0,
+      "orchestration_scheduling": 0.9,
       "streaming_event_behavior": 0.8,
       "transformation_aggregation": 0.8,
+      "ordering_deduplication": 0.8,
+      "data_lineage_quality": 0.8,
       "data_source_acquisition": 0.7,
       "cache_materialisation": 0.7,
+      "window_buffer_processing": 0.7,
       "cleaning_missing_values": 0.6,
       "integration_entity_matching": 0.6,
       "augmentation_enrichment": 0.5,
+      "state_mutation_side_effect": 0.5,
       "persistence_schema_integrity": 0.5
     },
     "project_logic": {
       "function_io_contract": 1.0,
+      "algorithm_control_logic": 1.0,
       "condition_state_behavior": 0.9,
+      "state_mutation_side_effect": 0.9,
+      "edge_case_boundary": 0.8,
+      "resource_lifecycle": 0.7,
       "cleaning_missing_values": 0.7,
       "transformation_aggregation": 0.6,
       "failure_recovery": 0.6,
       "component_responsibility": 0.5,
+      "ordering_deduplication": 0.5,
       "design_decision_change_impact": 0.4
     },
     "database": {
       "persistence_schema_integrity": 1.0,
+      "entity_relationship_keys": 1.0,
+      "query_join_filter": 0.9,
+      "transaction_atomicity": 0.9,
       "data_format_schema": 0.8,
       "integration_entity_matching": 0.7,
+      "schema_evolution_migration": 0.7,
       "transformation_aggregation": 0.6,
       "cache_materialisation": 0.5,
+      "retry_idempotency": 0.5,
       "data_source_acquisition": 0.4
     },
     "security": {
       "configuration_security_validation": 1.0,
+      "authentication_authorization": 1.0,
+      "input_validation_injection": 1.0,
+      "secret_sensitive_data": 0.9,
       "failure_recovery": 0.6,
       "external_interface_contract": 0.5,
+      "request_response_handling": 0.5,
       "persistence_schema_integrity": 0.4
     },
     "testing": {
       "testing_quality_verification": 1.0,
+      "test_scope_isolation": 1.0,
+      "boundary_failure_testing": 1.0,
+      "edge_case_boundary": 0.8,
       "cleaning_missing_values": 0.6,
       "failure_recovery": 0.6,
       "function_io_contract": 0.5,
+      "authentication_authorization": 0.4,
       "condition_state_behavior": 0.4
     },
     "complexity": {
       "performance_scalability": 1.0,
+      "time_space_complexity": 1.0,
+      "window_buffer_processing": 0.7,
       "cache_materialisation": 0.6,
       "design_decision_change_impact": 0.6,
+      "pagination_rate_limits": 0.5,
       "transformation_aggregation": 0.5,
+      "algorithm_control_logic": 0.5,
       "pipeline_data_flow": 0.4
     },
     "oop": {
+      "object_design_principles": 1.0,
+      "class_collaboration_polymorphism": 1.0,
       "component_responsibility": 0.9,
       "function_io_contract": 0.7,
+      "module_dependency_boundary": 0.6,
+      "state_mutation_side_effect": 0.6,
       "design_decision_change_impact": 0.5,
+      "resource_lifecycle": 0.5,
       "condition_state_behavior": 0.4
     }
   },
@@ -1662,7 +2137,9 @@
     },
     "function_io_contract": {
       "code_explain": 1.0,
+      "contract_verification": 0.9,
       "condition_outcome": 0.7,
+      "state_trace": 0.7,
       "constraint_behavior": 0.6,
       "data_grain": 0.4,
       "contextual_use": 0.4
@@ -1675,6 +2152,7 @@
       "interaction_flow": 0.5
     },
     "external_interface_contract": {
+      "contract_verification": 1.0,
       "contextual_use": 0.9,
       "source_method_mapping": 0.9,
       "constraint_behavior": 0.7,
@@ -1683,12 +2161,14 @@
     },
     "data_format_schema": {
       "data_grain": 1.0,
+      "contract_verification": 0.9,
       "constraint_behavior": 0.7,
       "code_explain": 0.5,
       "approach_classification": 0.5
     },
     "cleaning_missing_values": {
       "approach_classification": 1.0,
+      "edge_case_outcome": 0.9,
       "code_explain": 0.8,
       "fault_correction": 0.7,
       "condition_outcome": 0.6,
@@ -1697,6 +2177,7 @@
     "transformation_aggregation": {
       "data_grain": 0.9,
       "approach_classification": 0.9,
+      "state_trace": 0.8,
       "code_explain": 0.7,
       "processing_mode": 0.6,
       "stage_responsibility": 0.5
@@ -1723,6 +2204,7 @@
       "approach_classification": 0.4
     },
     "persistence_schema_integrity": {
+      "contract_verification": 1.0,
       "constraint_behavior": 0.9,
       "data_grain": 0.8,
       "stage_responsibility": 0.6,
@@ -1745,6 +2227,7 @@
     },
     "condition_state_behavior": {
       "condition_outcome": 1.0,
+      "state_trace": 1.0,
       "code_explain": 0.8,
       "constraint_behavior": 0.6,
       "fault_correction": 0.5,
@@ -1752,6 +2235,7 @@
     },
     "failure_recovery": {
       "fault_correction": 1.0,
+      "edge_case_outcome": 0.9,
       "condition_outcome": 0.8,
       "constraint_behavior": 0.6,
       "code_explain": 0.5,
@@ -1759,6 +2243,7 @@
     },
     "configuration_security_validation": {
       "constraint_behavior": 1.0,
+      "contract_verification": 0.9,
       "contextual_use": 0.7,
       "fault_correction": 0.6,
       "condition_outcome": 0.5,
@@ -1766,12 +2251,14 @@
     },
     "testing_quality_verification": {
       "constraint_behavior": 1.0,
+      "test_case_selection": 1.0,
       "fault_correction": 0.8,
       "approach_classification": 0.6,
       "code_explain": 0.5,
       "data_grain": 0.4
     },
     "performance_scalability": {
+      "complexity_analysis": 1.0,
       "processing_mode": 0.9,
       "approach_classification": 0.7,
       "stage_responsibility": 0.6,
@@ -1780,30 +2267,199 @@
     },
     "design_decision_change_impact": {
       "requirement_change": 1.0,
+      "dependency_change_impact": 0.9,
       "approach_classification": 0.7,
       "interaction_flow": 0.6,
       "stage_responsibility": 0.5,
       "contextual_use": 0.5
+    },
+    "module_dependency_boundary": {
+      "interaction_flow": 1.0,
+      "dependency_change_impact": 0.9,
+      "stage_responsibility": 0.8,
+      "constraint_behavior": 0.6,
+      "contextual_use": 0.5
+    },
+    "entrypoint_lifecycle": {
+      "interaction_flow": 0.9,
+      "stage_responsibility": 0.8,
+      "state_trace": 0.7,
+      "condition_outcome": 0.6,
+      "dependency_change_impact": 0.5
+    },
+    "configuration_deployment": {
+      "contextual_use": 0.9,
+      "constraint_behavior": 0.8,
+      "contract_verification": 0.7,
+      "fault_correction": 0.5,
+      "requirement_change": 0.4
+    },
+    "request_response_handling": {
+      "contract_verification": 1.0,
+      "source_method_mapping": 0.9,
+      "interaction_flow": 0.8,
+      "contextual_use": 0.7,
+      "edge_case_outcome": 0.5
+    },
+    "pagination_rate_limits": {
+      "processing_mode": 0.9,
+      "condition_outcome": 0.8,
+      "complexity_analysis": 0.7,
+      "fault_correction": 0.6,
+      "edge_case_outcome": 0.5
+    },
+    "retry_idempotency": {
+      "edge_case_outcome": 0.9,
+      "fault_correction": 0.9,
+      "constraint_behavior": 0.7,
+      "interaction_flow": 0.6,
+      "test_case_selection": 0.5
+    },
+    "orchestration_scheduling": {
+      "data_flow_selection": 1.0,
+      "stage_responsibility": 0.9,
+      "interaction_flow": 0.8,
+      "processing_mode": 0.7,
+      "dependency_change_impact": 0.6
+    },
+    "ordering_deduplication": {
+      "state_trace": 1.0,
+      "edge_case_outcome": 0.8,
+      "approach_classification": 0.7,
+      "code_explain": 0.6,
+      "constraint_behavior": 0.5
+    },
+    "window_buffer_processing": {
+      "processing_mode": 1.0,
+      "state_trace": 0.8,
+      "edge_case_outcome": 0.7,
+      "complexity_analysis": 0.7,
+      "data_grain": 0.6
+    },
+    "data_lineage_quality": {
+      "data_flow_selection": 1.0,
+      "interaction_flow": 0.8,
+      "contract_verification": 0.7,
+      "constraint_behavior": 0.7,
+      "stage_responsibility": 0.6
+    },
+    "algorithm_control_logic": {
+      "code_explain": 1.0,
+      "state_trace": 1.0,
+      "condition_outcome": 0.9,
+      "fault_correction": 0.7,
+      "complexity_analysis": 0.6
+    },
+    "state_mutation_side_effect": {
+      "state_trace": 1.0,
+      "condition_outcome": 1.0,
+      "code_explain": 0.8,
+      "fault_correction": 0.7,
+      "dependency_change_impact": 0.5
+    },
+    "resource_lifecycle": {
+      "edge_case_outcome": 0.9,
+      "condition_outcome": 0.9,
+      "interaction_flow": 0.7,
+      "fault_correction": 0.7,
+      "state_trace": 0.6
+    },
+    "edge_case_boundary": {
+      "edge_case_outcome": 1.0,
+      "test_case_selection": 0.9,
+      "condition_outcome": 0.8,
+      "fault_correction": 0.8,
+      "constraint_behavior": 0.6
+    },
+    "entity_relationship_keys": {
+      "contract_verification": 1.0,
+      "data_grain": 1.0,
+      "interaction_flow": 0.7,
+      "constraint_behavior": 0.7,
+      "dependency_change_impact": 0.5
+    },
+    "query_join_filter": {
+      "contract_verification": 0.9,
+      "data_grain": 0.9,
+      "state_trace": 0.7,
+      "code_explain": 0.6,
+      "edge_case_outcome": 0.6
+    },
+    "transaction_atomicity": {
+      "contract_verification": 1.0,
+      "edge_case_outcome": 0.8,
+      "interaction_flow": 0.7,
+      "fault_correction": 0.7,
+      "condition_outcome": 0.5
+    },
+    "schema_evolution_migration": {
+      "dependency_change_impact": 1.0,
+      "contract_verification": 0.9,
+      "requirement_change": 0.8,
+      "interaction_flow": 0.7,
+      "constraint_behavior": 0.6
+    },
+    "authentication_authorization": {
+      "contract_verification": 1.0,
+      "constraint_behavior": 0.9,
+      "edge_case_outcome": 0.8,
+      "test_case_selection": 0.7,
+      "fault_correction": 0.6
+    },
+    "input_validation_injection": {
+      "contract_verification": 1.0,
+      "edge_case_outcome": 0.9,
+      "fault_correction": 0.9,
+      "test_case_selection": 0.7,
+      "constraint_behavior": 0.7
+    },
+    "secret_sensitive_data": {
+      "constraint_behavior": 1.0,
+      "contract_verification": 0.9,
+      "data_flow_selection": 0.8,
+      "dependency_change_impact": 0.6,
+      "fault_correction": 0.5
+    },
+    "test_scope_isolation": {
+      "test_case_selection": 1.0,
+      "interaction_flow": 0.7,
+      "contextual_use": 0.6,
+      "constraint_behavior": 0.5
+    },
+    "boundary_failure_testing": {
+      "test_case_selection": 1.0,
+      "edge_case_outcome": 1.0,
+      "fault_correction": 0.8,
+      "condition_outcome": 0.6
+    },
+    "time_space_complexity": {
+      "complexity_analysis": 1.0,
+      "code_explain": 0.7,
+      "approach_classification": 0.6,
+      "requirement_change": 0.5,
+      "state_trace": 0.4
+    },
+    "object_design_principles": {
+      "stage_responsibility": 0.9,
+      "interaction_flow": 0.8,
+      "contract_verification": 0.7,
+      "fault_correction": 0.6,
+      "dependency_change_impact": 0.5
+    },
+    "class_collaboration_polymorphism": {
+      "interaction_flow": 1.0,
+      "dependency_change_impact": 1.0,
+      "stage_responsibility": 0.8,
+      "contextual_use": 0.6,
+      "requirement_change": 0.5
     }
   },
   "framework_template_policy": {
-    "emphasis_fit": {
-      "mostly_concepts": {
-        "none": 1.0,
-        "required": 0.25,
-        "insertion": 0.3
-      },
-      "balanced": {
-        "none": 1.0,
-        "required": 0.8,
-        "insertion": 0.8
-      },
-      "mostly_code": {
-        "none": 0.45,
-        "required": 1.0,
-        "insertion": 0.9
-      }
+    "code_mode_fit": {
+      "none": 1.0,
+      "required": 0.8,
+      "insertion": 0.8
     },
-    "notes": "code_mode != 'none' is hard-gated off when allow_code is false (PRD 7.4, AC 9)."
+    "notes": "Fixed balanced policy: conceptual and code-grounded templates share each assessment."
   }
 }

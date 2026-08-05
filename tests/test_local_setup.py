@@ -50,6 +50,7 @@ def test_public_macos_script_uses_request_origin_without_creator_session():
     with TestClient(app) as client:
         response = client.get(
             "/api/local-setup/macos/script",
+            params={"model": "qwen3.5:9b"},
             headers={
                 "x-forwarded-proto": "https",
                 "x-forwarded-host": "repoproof.chingyu.site",
@@ -59,12 +60,14 @@ def test_public_macos_script_uses_request_origin_without_creator_session():
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/x-shellscript")
     assert f"ORIGIN='{ORIGIN}'" in response.text
+    assert "MODEL='qwen3.5:9b'" in response.text
 
 
 def test_public_windows_script_uses_request_origin_without_creator_session():
     with TestClient(app) as client:
         response = client.get(
             "/api/local-setup/windows/script",
+            params={"model": "qwen3.5:9b"},
             headers={
                 "x-forwarded-proto": "https",
                 "x-forwarded-host": "repoproof.chingyu.site",
@@ -74,6 +77,7 @@ def test_public_windows_script_uses_request_origin_without_creator_session():
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/x-powershell")
     assert f"$Origin = '{ORIGIN}'" in response.text
+    assert "$Model = 'qwen3.5:9b'" in response.text
 
 
 def test_old_macos_archive_endpoint_is_removed():
@@ -91,12 +95,18 @@ def test_old_windows_archive_endpoint_is_removed():
 
 
 def test_creator_embeds_local_setup_in_the_question_framework():
-    creator = (Path(__file__).parents[1] / "app" / "static" / "creator.html").read_text()
+    static = Path(__file__).parents[1] / "app" / "static"
+    creator = (static / "creator.html").read_text()
+    styles = (static / "creator.css").read_text()
+    script = (static / "creator.js").read_text()
 
     assert 'id="localInstructions"' in creator
     assert 'id="localMac"' in creator
     assert 'id="localWindows"' in creator
     assert 'id="localCopy"' in creator
     assert 'href="/static/local-setup.html"' not in creator
-    assert ".local-setup.ready{display:block;gap:0;margin:0;padding:0;border:0" in creator
-    assert "{checking:false, ready:true}" in creator
+    assert ".local-setup.ready{display:block;gap:0;margin:0;padding:0;border:0" in styles
+    assert ".local-actions{display:flex;align-items:center;justify-content:center" in styles
+    assert "{checking:false, ready:true}" in script
+    assert "const localModels = p.local?.models" in script
+    assert "payload.think = batch.think" in script

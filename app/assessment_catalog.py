@@ -52,24 +52,6 @@ def _clean_id(value: object, kind: str) -> str:
     return result
 
 
-def _normalize_weights(raw: object, ids: tuple[str, ...], *, owner: str) -> dict[str, float]:
-    if not isinstance(raw, dict):
-        raise ValueError(f"{owner} template weights must be an object")
-    unknown = sorted(set(raw) - set(ids))
-    if unknown:
-        raise ValueError(f"{owner} references unknown templates: {unknown}")
-    weights = {}
-    for template_id in ids:
-        try:
-            value = float(raw.get(template_id, 0))
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{owner} has a non-numeric weight for {template_id!r}") from exc
-        if not 0 <= value <= 1:
-            raise ValueError(f"{owner} weight for {template_id!r} must be between 0 and 1")
-        weights[template_id] = value
-    return weights
-
-
 def _normalize_evidence_type(raw: dict) -> dict:
     _required(raw, ("id", "name", "description"), "evidence type")
     return {
@@ -269,9 +251,8 @@ def _normalize_template(raw: dict, evidence_ids: tuple[str, ...]) -> dict:
     }
 
 
-def _normalize_topic(raw: dict, evidence_ids: tuple[str, ...],
-                     template_ids: tuple[str, ...]) -> dict:
-    _required(raw, ("id", "name", "query", "evidence_types", "template_weights"), "topic")
+def _normalize_topic(raw: dict, evidence_ids: tuple[str, ...]) -> dict:
+    _required(raw, ("id", "name", "query", "evidence_types"), "topic")
     requested = [_clean_id(value, "topic evidence type") for value in raw["evidence_types"]]
     if not requested:
         raise ValueError(f"topic {raw['id']!r} needs at least one evidence type")
@@ -284,9 +265,6 @@ def _normalize_topic(raw: dict, evidence_ids: tuple[str, ...],
         "query": str(raw["query"]).strip(),
         "description": str(raw.get("description", "")).strip(),
         "evidence_types": list(dict.fromkeys(requested)),
-        "template_weights": _normalize_weights(
-            raw["template_weights"], template_ids, owner=f"topic {raw['id']!r}"
-        ),
     }
 
 
@@ -328,9 +306,7 @@ def load_catalog(path: Path | None = None) -> tuple[list[dict], list[dict], list
     _unique(templates, "template")
     template_ids = tuple(item["id"] for item in templates)
 
-    topics = [
-        _normalize_topic(item, evidence_ids, template_ids) for item in raw_topics
-    ]
+    topics = [_normalize_topic(item, evidence_ids) for item in raw_topics]
     _unique(topics, "topic")
 
     point_ids = tuple(item["id"] for item in assessment_points)
@@ -382,29 +358,24 @@ def _normalize_matrix(raw: object, row_ids: tuple[str, ...], col_ids: tuple[str,
 
 
 def _normalize_framework_policy(raw: object) -> dict:
-    """Validate the Framework x Template emphasis policy (PRD 5.1)."""
+    """Validate the fixed Framework x Template code-mode policy."""
     if not isinstance(raw, dict):
         raise ValueError("catalog must contain 'framework_template_policy'")
-    fit = raw.get("emphasis_fit")
+    fit = raw.get("code_mode_fit")
     if not isinstance(fit, dict) or not fit:
-        raise ValueError("'framework_template_policy.emphasis_fit' must be a non-empty object")
-    out: dict[str, dict[str, float]] = {}
-    for emphasis, modes in fit.items():
-        if not isinstance(modes, dict):
-            raise ValueError(f"emphasis_fit[{emphasis!r}] must be an object")
-        clean: dict[str, float] = {}
-        for mode, weight in modes.items():
-            if mode not in CODE_MODES:
-                raise ValueError(f"emphasis_fit[{emphasis!r}] has unknown code mode {mode!r}")
-            value = float(weight)
-            if not 0.0 <= value <= 1.0:
-                raise ValueError(f"emphasis_fit[{emphasis!r}][{mode!r}] must be within 0.0-1.0")
-            clean[mode] = value
-        missing = CODE_MODES - set(clean)
-        if missing:
-            raise ValueError(f"emphasis_fit[{emphasis!r}] missing code modes {sorted(missing)}")
-        out[emphasis] = clean
-    return {"emphasis_fit": out}
+        raise ValueError("'framework_template_policy.code_mode_fit' must be a non-empty object")
+    clean: dict[str, float] = {}
+    for mode, weight in fit.items():
+        if mode not in CODE_MODES:
+            raise ValueError(f"code_mode_fit has unknown code mode {mode!r}")
+        value = float(weight)
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"code_mode_fit[{mode!r}] must be within 0.0-1.0")
+        clean[mode] = value
+    missing = CODE_MODES - set(clean)
+    if missing:
+        raise ValueError(f"code_mode_fit missing code modes {sorted(missing)}")
+    return {"code_mode_fit": clean}
 
 
 (TEMPLATES, EVIDENCE_TYPES, ASSESSMENT_POINTS, TOPICS,
@@ -413,7 +384,6 @@ TEMPLATE_BY_ID = {item["id"]: item for item in TEMPLATES}
 EVIDENCE_TYPE_BY_ID = {item["id"]: item for item in EVIDENCE_TYPES}
 ASSESSMENT_POINT_BY_ID = {item["id"]: item for item in ASSESSMENT_POINTS}
 TOPIC_BY_ID = {item["id"]: item for item in TOPICS}
-EMPHASIS_MODES = tuple(FRAMEWORK_TEMPLATE_POLICY["emphasis_fit"])
 
 
 def focus_point_fit(focus_id: str, point_id: str) -> float:
@@ -426,18 +396,10 @@ def point_template_fit(point_id: str, template_id: str) -> float:
     return POINT_TEMPLATE_WEIGHTS.get(point_id, {}).get(template_id, 0.0)
 
 
-def framework_template_fit(template: dict, *, emphasis: str = "balanced",
-                           allow_code: bool = True) -> float:
-    """Framework x Template fit.
-
-    Returns 0.0 (a hard prohibition) when the template needs code but the
-    framework disallows it — AC 9. Otherwise scores the emphasis preference.
-    """
+def framework_template_fit(template: dict) -> float:
+    """Fixed balanced Framework x Template fit."""
     mode = template.get("code_mode", "none")
-    if not allow_code and mode != "none":
-        return 0.0
-    table = FRAMEWORK_TEMPLATE_POLICY["emphasis_fit"]
-    return table.get(emphasis, table.get("balanced", {})).get(mode, 0.0)
+    return FRAMEWORK_TEMPLATE_POLICY["code_mode_fit"].get(mode, 0.0)
 
 
 def catalog_hash() -> str:
@@ -446,54 +408,16 @@ def catalog_hash() -> str:
     A change here must invalidate an unconfirmed preview (PRD 10.4).
     """
     payload = {
-        "templates": [
-            {"id": t["id"], "code_mode": t.get("code_mode", "none")} for t in TEMPLATES
-        ],
-        "evidence_types": [e["id"] for e in EVIDENCE_TYPES],
-        "assessment_points": [
-            {"id": p["id"], "difficulty_range": p.get("difficulty_range"),
-             "evidence_types": p.get("evidence_types")}
-            for p in ASSESSMENT_POINTS
-        ],
-        "topics": [t["id"] for t in TOPICS],
+        "templates": TEMPLATES,
+        "evidence_types": EVIDENCE_TYPES,
+        "assessment_points": ASSESSMENT_POINTS,
+        "topics": TOPICS,
         "focus_point_weights": FOCUS_POINT_WEIGHTS,
         "point_template_weights": POINT_TEMPLATE_WEIGHTS,
         "framework_template_policy": FRAMEWORK_TEMPLATE_POLICY,
     }
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
-
-
-def weighted_template_schedule(topic: dict, count: int,
-                               available_template_ids: set[str] | None = None) -> list[dict]:
-    candidates = [
-        template for template in TEMPLATES
-        if topic["template_weights"][template["id"]] > 0
-        and (available_template_ids is None or template["id"] in available_template_ids)
-    ]
-    if count <= 0 or not candidates:
-        return []
-
-    weights = [topic["template_weights"][template["id"]] for template in candidates]
-    total = sum(weights)
-    raw_allocations = [count * weight / total for weight in weights]
-    allocations = [int(value) for value in raw_allocations]
-    remaining = count - sum(allocations)
-    order = sorted(
-        range(len(candidates)),
-        key=lambda i: (-(raw_allocations[i] - allocations[i]), -weights[i], i),
-    )
-    for index in order[:remaining]:
-        allocations[index] += 1
-
-    ranked = sorted(range(len(candidates)), key=lambda i: (-weights[i], i))
-    schedule = []
-    while any(allocations):
-        for index in ranked:
-            if allocations[index]:
-                schedule.append(candidates[index])
-                allocations[index] -= 1
-    return schedule
 
 
 def public_topics() -> list[dict]:

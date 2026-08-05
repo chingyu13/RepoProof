@@ -58,6 +58,46 @@ CONCEPT_LEXICON = {
         "triggers": ("oop", "object oriented", "object-oriented", "inheritance", "polymorphism"),
         "aliases": ("class", "method", "object", "inherit", "interface", "encapsulation", "polymorphism"),
     },
+    "application_lifecycle": {
+        "triggers": ("entry point", "entrypoint", "application lifecycle", "start up", "shut down", "initialisation", "initialization"),
+        "aliases": ("main", "bootstrap", "initialize", "startup", "shutdown", "cleanup", "resource", "lifecycle"),
+    },
+    "api_reliability": {
+        "triggers": ("rate limit", "rate limiting", "pagination", "page token", "idempotent", "idempotency", "backoff"),
+        "aliases": ("pagination", "page", "cursor", "quota", "throttle", "retry", "backoff", "idempotent", "duplicate"),
+    },
+    "stream_processing": {
+        "triggers": ("stream processing", "event time", "sliding window", "tumbling window", "micro batch", "out of order"),
+        "aliases": ("stream", "event", "window", "buffer", "batch", "interval", "order", "timestamp", "latency"),
+    },
+    "data_lineage": {
+        "triggers": ("data lineage", "data provenance", "traceability", "source to output"),
+        "aliases": ("lineage", "provenance", "source", "trace", "transform", "quality", "audit", "output"),
+    },
+    "database_transactions": {
+        "triggers": ("transaction", "atomicity", "rollback", "isolation level", "partial write"),
+        "aliases": ("transaction", "atomic", "commit", "rollback", "isolation", "consistency", "write", "database"),
+    },
+    "schema_evolution": {
+        "triggers": ("schema evolution", "database migration", "schema migration", "backward compatibility"),
+        "aliases": ("schema", "migration", "version", "field", "type", "alter", "compatibility", "consumer"),
+    },
+    "secure_input": {
+        "triggers": ("sql injection", "command injection", "untrusted input", "parameterised query", "parameterized query"),
+        "aliases": ("input", "validate", "sanitize", "injection", "parameterized", "encode", "reject", "query"),
+    },
+    "access_control": {
+        "triggers": ("access control", "role based", "role-based", "log in", "login", "protected route"),
+        "aliases": ("authenticate", "authorize", "identity", "role", "permission", "token", "session", "protected"),
+    },
+    "test_scope": {
+        "triggers": ("unit test", "integration test", "end to end test", "end-to-end test", "test double"),
+        "aliases": ("test", "unit", "integration", "fixture", "mock", "stub", "isolation", "dependency"),
+    },
+    "algorithm_analysis": {
+        "triggers": ("time complexity", "space complexity", "big o", "nested loop", "memory usage"),
+        "aliases": ("complexity", "time", "space", "memory", "input", "loop", "allocation", "scale"),
+    },
 }
 
 

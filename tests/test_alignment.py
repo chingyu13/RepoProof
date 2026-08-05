@@ -1,5 +1,6 @@
 import unittest
 
+from app import blueprint
 from app.alignment import (
     align_assessment_targets,
     build_assessment_targets,
@@ -7,6 +8,7 @@ from app.alignment import (
 )
 from app.generator import generate_questions
 from app.knowledge import expand_concepts
+from app.knowledge import EvidenceStore
 
 
 CHUNKS = [
@@ -140,6 +142,12 @@ Most files are integrated.
             "coverage": "strong",
             "evidence": [{"chunk_id": "c0", "score": 2.5}],
         }
+        focus = [{"id": "project_logic", "weight": 5}]
+        plan = blueprint.build_blueprint(
+            EvidenceStore(CHUNKS), targets=[target], focus_areas=focus,
+            snapshot_id="test", num_questions=1, seed=42,
+        )
+        self.assertTrue(plan["planned"])
         questions, warnings = generate_questions(
             CHUNKS,
             {
@@ -149,8 +157,9 @@ Most files are integrated.
                 "correct_mode": "exact",
                 "correct_exact": 1,
                 "difficulty": 3,
-                "focus_areas": [{"id": "project_logic", "weight": 5}],
+                "focus_areas": focus,
                 "assessment_targets": [target],
+                "frozen_slots": plan["planned"],
             },
         )
         self.assertEqual(len(questions), 1, warnings)

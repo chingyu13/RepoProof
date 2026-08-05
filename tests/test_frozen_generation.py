@@ -56,6 +56,10 @@ def test_frozen_tasks_follow_the_plan(store, frozen):
     planned = [(s["assessment_point_id"], s["template_id"]) for s in frozen]
     built = [(t["slot"]["assessment_point_id"], t["slot"]["template_id"]) for t in tasks]
     assert built == planned[:len(built)]
+    for task, source in zip(tasks, frozen):
+        assert task["slot"]["assessment_point_ids"] == source.get(
+            "assessment_point_ids", [source["assessment_point_id"]]
+        )
 
 
 def test_generation_matches_the_planned_templates(store, frozen):
@@ -76,12 +80,12 @@ def test_generation_does_not_reschedule(store, frozen):
     assert [q.get("slot") for q in a] == [q.get("slot") for q in b]
 
 
-def test_no_frozen_slots_falls_back_to_live_scheduling(store):
+def test_no_frozen_slots_is_rejected(store):
     _es, chunks = store
     cfg = _cfg([])
     cfg.pop("frozen_slots")
-    questions, _warnings = generate_questions(chunks, cfg)
-    assert questions, "legacy path must still generate without a blueprint"
+    with pytest.raises(ValueError, match="confirmed question plan"):
+        generate_questions(chunks, cfg)
 
 
 def test_missing_template_is_reported_not_silently_dropped(store, frozen):

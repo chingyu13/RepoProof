@@ -18,8 +18,6 @@ FRAMEWORK = {
     "correct_exact": 1,
     "difficulty_min": 1,
     "difficulty_max": 4,
-    "question_emphasis": "mostly_concepts",
-    "allow_code": False,
     "focus_areas": [{"id": "api", "weight": 5}, {"id": "data_flow", "weight": 4}],
     "seed": 42,
 }
@@ -114,15 +112,6 @@ def test_same_inputs_and_seed_produce_same_preview(client, project):
     assert a["assessment_point_distribution"] == b["assessment_point_distribution"]
 
 
-# --- AC 9: code gating through the API --------------------------------------
-
-def test_code_disallowed_never_plans_code_templates(client, project):
-    from app.assessment_catalog import TEMPLATE_BY_ID
-    body = _preview(client, project, allow_code=False).json()
-    assert all(TEMPLATE_BY_ID[s["template_id"]]["code_mode"] == "none"
-               for s in body["planned"])
-
-
 # --- AC 11: confirming freezes the blueprint --------------------------------
 
 def test_confirm_freezes_plan(client, project):
@@ -191,6 +180,14 @@ def test_generation_rejects_unconfirmed_plan(client, project):
     assert "confirm" in r.text.lower()
 
 
+def test_openai_generation_also_requires_a_confirmed_plan(client, project):
+    fw = {**FRAMEWORK, "provider": "openai", "question_plan_id": ""}
+    r = client.post(f"/api/projects/{project}/generation-runs",
+                    data={"config_json": json.dumps(fw)})
+    assert r.status_code == 400
+    assert "confirm" in r.text.lower()
+
+
 def test_generation_rejects_unknown_plan(client, project):
     fw = {**FRAMEWORK, "provider": "mock", "question_plan_id": "does-not-exist"}
     r = client.post(f"/api/projects/{project}/generation-runs",
@@ -217,7 +214,6 @@ def test_local_generation_is_handed_to_the_creator_browser(client, project):
         client,
         project,
         num_questions=1,
-        allow_code=False,
         focus_areas=[{"id": "api", "weight": 5}],
     ).json()
     if not preview["planned"]:
@@ -226,9 +222,9 @@ def test_local_generation_is_handed_to_the_creator_browser(client, project):
     framework = {
         **FRAMEWORK,
         "num_questions": 1,
-        "allow_code": False,
         "focus_areas": [{"id": "api", "weight": 5}],
         "provider": "local",
+        "model": "qwen3.5:9b",
         "question_plan_id": preview["id"],
     }
     started = client.post(
@@ -240,6 +236,8 @@ def test_local_generation_is_handed_to_the_creator_browser(client, project):
     assert run["status"] == "awaiting_client"
     assert "_local_state" not in run
     batch = run["local_batch"]
+    assert batch["model"] == "qwen3.5:9b"
+    assert batch["think"] is False
     outputs = []
     for task in batch["tasks"]:
         content = json.dumps({
@@ -267,3 +265,5 @@ def test_local_generation_is_handed_to_the_creator_browser(client, project):
     assert completed.status_code == 200, completed.text
     assert completed.json()["status"] == "complete"
     assert len(completed.json()["result"]["created"]) == 1
+    stored = client.get(f"/api/projects/{project}/questions").json()[0]
+    assert stored["assessment_point_ids"] == preview["planned"][0]["assessment_point_ids"]

@@ -178,7 +178,7 @@ def logout():
 
 @app.get("/api/meta")
 def meta():
-    default_provider = config.default_provider(local_available=True)
+    default_provider = config.default_provider()
     return {
         "mock_mode": default_provider == "mock",
         "model": config.OPENAI_MODEL,
@@ -196,6 +196,7 @@ def meta():
                 "available": True,
                 "client_managed": True,
                 "model": config.LOCAL_LLM_MODEL,
+                "models": config.local_model_options(),
                 "url": config.BROWSER_OLLAMA_URL,
             },
         },
@@ -219,9 +220,10 @@ def _request_origin(request: Request) -> str:
 
 
 @app.get("/api/local-setup/macos/script")
-def local_setup_macos_script(request: Request):
+def local_setup_macos_script(request: Request, model: str = ""):
     try:
-        script = macos_setup_script(_request_origin(request), config.LOCAL_LLM_MODEL)
+        selected_model = config.resolve_model("local", model)
+        script = macos_setup_script(_request_origin(request), selected_model)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return Response(
@@ -232,9 +234,10 @@ def local_setup_macos_script(request: Request):
 
 
 @app.get("/api/local-setup/windows/script")
-def local_setup_windows_script(request: Request):
+def local_setup_windows_script(request: Request, model: str = ""):
     try:
-        script = windows_setup_script(_request_origin(request), config.LOCAL_LLM_MODEL)
+        selected_model = config.resolve_model("local", model)
+        script = windows_setup_script(_request_origin(request), selected_model)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return Response(
@@ -352,9 +355,6 @@ class GenerateConfig(BaseModel):
     difficulty: int = 3          # legacy single value; superseded by the range below
     difficulty_min: int = 1
     difficulty_max: int = 5
-    question_emphasis: str = "balanced"   # mostly_concepts | balanced | mostly_code
-    allow_code: bool = True
-    excluded_assessment_points: list[str] = Field(default_factory=list)
     seed: int = 42
     question_plan_id: str = ""   # frozen blueprint to generate from
     focus: str = ""
@@ -446,6 +446,7 @@ def _store_generated_questions(
             "justifications_json": q["justifications"],
             "evidence_json": q["evidence"],
             "alignment_json": q.get("alignment", {}),
+            "assessment_point_ids_json": q.get("assessment_point_ids", []),
             "difficulty": q["difficulty"],
             "focus_areas_json": q["focus_areas"],
             "explanation": q["explanation"],
@@ -713,11 +714,8 @@ async def create_question_plan(
         focus_areas=selected_focus,
         snapshot_id=str(project.get("snapshot_id") or ""),
         num_questions=int(cfg.get("num_questions") or 5),
-        emphasis=str(cfg.get("question_emphasis") or "balanced"),
-        allow_code=bool(cfg.get("allow_code", True)),
         difficulty_min=int(cfg.get("difficulty_min") or 1),
         difficulty_max=int(cfg.get("difficulty_max") or 5),
-        excluded_assessment_points=cfg.get("excluded_assessment_points") or [],
         seed=int(cfg.get("seed") or 42),
     )
 
@@ -749,7 +747,13 @@ async def create_question_plan(
         "catalog_hash": preview["catalog_hash"],
         "requested_questions": int(cfg.get("num_questions") or 5),
         "planned_questions": len(preview["planned"]),
-        "assessment_points": sorted({s["assessment_point_id"] for s in preview["planned"]}),
+        "assessment_points": sorted({
+            point_id
+            for slot in preview["planned"]
+            for point_id in slot.get("assessment_point_ids", [
+                slot["assessment_point_id"]
+            ])
+        }),
         "templates": sorted({s["template_id"] for s in preview["planned"]}),
         "gate_rejections": preview["gate_rejections"],
         "warnings": preview["warnings"],
@@ -849,7 +853,12 @@ async def start_generation(
         cfg = GenerateConfig(**json.loads(config_json)).model_dump()
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid question framework.") from exc
-    if config.local_only() and (cfg.get("provider") or "").lower() == "openai":
+    provider = (cfg.get("provider") or config.default_provider()).lower()
+    if provider not in {"openai", "local", "mock"}:
+        raise HTTPException(400, "Unknown LLM provider.")
+    cfg["provider"] = provider
+    cfg["model"] = config.resolve_model(provider, cfg.get("model", ""))
+    if config.local_only() and provider == "openai":
         raise HTTPException(400, "This server runs in local-only privacy mode; the OpenAI provider is disabled. "
                                  "Use the local model or mock.")
     selected_focus = _validated_focus(cfg)
@@ -861,6 +870,8 @@ async def start_generation(
     frozen = _frozen_plan_for_generation(project_id, cfg)
     if frozen:
         cfg["frozen_slots"] = frozen.get("slots") or []
+    else:
+        raise HTTPException(400, "Confirm a question plan before generating.")
 
     async def read_uploads(files: list[UploadFile] | None) -> list[tuple[str, bytes]]:
         result = []

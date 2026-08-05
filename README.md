@@ -41,7 +41,7 @@ Evidence-chunk construction  (file / line / cell / snapshot provenance)
         ↓
 Assessment context  (prior knowledge + scope/rubric → aligned targets)
         ↓
-Blueprint planning  (20 Assessment Points × 13 Templates × project evidence)
+Blueprint planning  (46 Assessment Points × 19 Templates × project evidence)
         ↓   deterministic preview → confirmed frozen slots
 Provider branch:
   Local/Mock → typed slots + bounded BM25 evidence bundle
@@ -60,7 +60,7 @@ Publish → Take → Exact-match scoring  (per-focus-area breakdown)
 - **Static analysis.** All parsers emit one shared IR. Python and notebooks use `ast`; Java, JavaScript, TypeScript, C, and C++ use tree-sitter; remaining supported languages use a generic declaration/text fallback.
 - **Constrained generation + self-correction.** The backend resolves typed slots and fixes the Local question stem and code before inference; the Local LLM returns options and an explanation. One targeted repair and one alternate-plan regeneration are available for invalid options.
 - **Constraint validation.** Every MAQ must have 2–7 distinct options, one unambiguous correct combination (all-correct disallowed), difficulty 1–5, and linked evidence — the same gate blocks human approval.
-- **Blueprint steering.** An interactive radar chart weights nine Focus Areas. Assignment Targets and Focus weights rank 20 Assessment Points; Focus × Point, Point × Template, framework-fit, evidence, slot, and difficulty gates then select from 13 reusable Templates. The creator previews and confirms this deterministic plan before Local/mock inference.
+- **Blueprint steering.** An interactive radar chart weights nine Focus Areas. Assignment Targets and Focus weights rank 46 Assessment Points; Focus × Point, Point × Template, framework-fit, evidence, slot, and difficulty gates then select from 19 reusable Templates. The creator previews and confirms this deterministic plan before Local/mock inference.
 - **Explicit provider boundary.** Local and mock generation consume only confirmed typed slots and bounded structured evidence. The hosted OpenAI option is still a temporary filtered raw-project baseline and is disabled entirely by `REPOPROOF_LOCAL_ONLY=1`.
 - **Assessment alignment.** Lecture/prior-knowledge material and project scope, requirements, or rubrics can be entered or uploaded as PDF, DOCX, PPTX, or text. RepoProof extracts weighted targets, matches them to static evidence with the shared tokenizer/concept lexicon, and shows the selected target on each review question.
 - **MLOps telemetry.** An append-only event log captures generation config and human review/edit signals (derived metadata only — never raw code); a metrics endpoint aggregates approval rate, human-edit rate, and validator-block rate for comparing prompt/model versions.

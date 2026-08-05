@@ -32,8 +32,7 @@ def store():
 
 def _plan(store, **over):
     kw = dict(targets=TARGETS, focus_areas=FOCUS, snapshot_id="snap1", num_questions=5,
-              emphasis="balanced", allow_code=True, difficulty_min=1, difficulty_max=4,
-              seed=42)
+              difficulty_min=1, difficulty_max=4, seed=42)
     kw.update(over)
     return blueprint.build_blueprint(store, **kw)
 
@@ -69,6 +68,29 @@ def test_primary_and_secondary_focus():
     assert primary not in secondary
 
 
+def test_point_pair_needs_a_shared_requirement_and_primary_focus():
+    ranked = [
+        ("external_interface_contract", 1.0),
+        ("data_source_acquisition", 0.9),
+    ]
+    same_requirement = {
+        "external_interface_contract": {"id": "r1", "kind": "project_scope"},
+        "data_source_acquisition": {"id": "r1", "kind": "project_scope"},
+    }
+    groups = blueprint._point_groups(ranked, 0, same_requirement, FOCUS)
+    assert groups == [
+        ("external_interface_contract",),
+        ("external_interface_contract", "data_source_acquisition"),
+    ]
+    separate_requirement = dict(same_requirement)
+    separate_requirement["data_source_acquisition"] = {
+        "id": "r2", "kind": "project_scope"
+    }
+    assert blueprint._point_groups(ranked, 0, separate_requirement, FOCUS) == [
+        ("external_interface_contract",)
+    ]
+
+
 def test_focus_with_zero_fit_is_not_selected():
     primary, _ = blueprint.split_focus("testing_quality_verification",
                                        [{"id": "api", "weight": 5}])
@@ -77,16 +99,11 @@ def test_focus_with_zero_fit_is_not_selected():
 
 # --- §7.3 template distribution + AC 9 --------------------------------------
 
-def test_template_distribution_respects_emphasis():
-    concepts = blueprint.template_distribution(FOCUS, emphasis="mostly_concepts")
-    code = blueprint.template_distribution(FOCUS, emphasis="mostly_code")
-    assert concepts and code
-    assert concepts != code
-
-
-def test_no_code_templates_when_code_disallowed():
-    dist = blueprint.template_distribution(FOCUS, allow_code=False)
-    assert all(TEMPLATE_BY_ID[t]["code_mode"] == "none" for t in dist)
+def test_template_distribution_comes_from_assessment_points():
+    points = blueprint.assessment_point_distribution(TARGETS, FOCUS)
+    dist = blueprint.template_distribution(points)
+    assert dist
+    assert all(template_id in TEMPLATE_BY_ID for template_id in dist)
 
 
 # --- §7.7 expected difficulty (AC 13) ---------------------------------------
@@ -149,6 +166,41 @@ def test_repetition_penalty_covers_point_template_subject_evidence():
     assert none == 0.0 < same_point < identical
 
 
+def test_selected_multi_point_slot_reduces_every_covered_point():
+    chosen = [{
+        "assessment_point_id": "streaming",
+        "assessment_point_ids": ["streaming", "acquisition"],
+        "template_id": "workflow", "subject": "pipeline", "evidence_ids": ["e1"],
+    }]
+    repeats_acquisition = blueprint.repetition_penalty({
+        "assessment_point_id": "acquisition",
+        "assessment_point_ids": ["acquisition"],
+        "template_id": "scenario", "subject": "other", "evidence_ids": [],
+    }, chosen)
+    unrelated = blueprint.repetition_penalty({
+        "assessment_point_id": "testing",
+        "assessment_point_ids": ["testing"],
+        "template_id": "other", "subject": "other", "evidence_ids": [],
+    }, chosen)
+    assert repeats_acquisition > unrelated == 0.0
+
+
+def test_selection_uses_point_coverage_not_a_point_relationship_table():
+    candidates = [
+        {"assessment_point_id": "streaming", "assessment_point_ids": ["streaming", "acquisition"],
+         "template_id": "workflow", "subject": "pipeline", "evidence_ids": [],
+         "shows_code": False, "relevance": 1.0, "plan_key": "combined", "score_breakdown": {}},
+        {"assessment_point_id": "acquisition", "assessment_point_ids": ["acquisition"],
+         "template_id": "scenario", "subject": "source", "evidence_ids": [],
+         "shows_code": False, "relevance": 0.9, "plan_key": "acquisition", "score_breakdown": {}},
+        {"assessment_point_id": "testing", "assessment_point_ids": ["testing"],
+         "template_id": "scenario", "subject": "tests", "evidence_ids": [],
+         "shows_code": False, "relevance": 0.8, "plan_key": "testing", "score_breakdown": {}},
+    ]
+    selected, _warnings = blueprint.select_plans(candidates, 2, seed=1)
+    assert [slot["plan_key"] for slot in selected] == ["combined", "testing"]
+
+
 def test_selection_is_deterministic_for_same_seed(store):
     a, b = _plan(store), _plan(store)
     assert [s["plan_key"] for s in a["planned"]] == [s["plan_key"] for s in b["planned"]]
@@ -188,6 +240,8 @@ def test_every_slot_carries_preview_table_fields(store):
         pytest.skip("no plans for this fixture")
     for slot in bp["planned"]:
         assert slot["assessment_point_id"] and slot["template_id"]
+        assert slot["assessment_point_ids"]
+        assert slot["assessment_point_id"] == slot["assessment_point_ids"][0]
         assert slot["primary_focus_id"]
         assert slot["expected_difficulty"]["min"] <= slot["expected_difficulty"]["max"]
         assert slot["evidence_ids"], "every slot must cite evidence"
@@ -195,21 +249,6 @@ def test_every_slot_carries_preview_table_fields(store):
         assert set(slot["score_breakdown"]) >= {
             "assignment", "focus_point", "point_template", "framework_template",
             "evidence", "alignment", "repetition_penalty"}
-
-
-def test_code_disabled_run_never_schedules_code_templates(store):
-    bp = _plan(store, allow_code=False)
-    assert all(TEMPLATE_BY_ID[s["template_id"]]["code_mode"] == "none"
-               for s in bp["planned"])
-
-
-def test_excluded_point_never_planned(store):
-    bp = _plan(store)
-    if not bp["planned"]:
-        pytest.skip("no plans for this fixture")
-    victim = bp["planned"][0]["assessment_point_id"]
-    after = _plan(store, excluded_assessment_points=[victim])
-    assert all(s["assessment_point_id"] != victim for s in after["planned"])
 
 
 def test_unsupported_reports_high_weight_points_with_reasons(store):
@@ -233,62 +272,31 @@ def test_plot_series_has_axes(store):
         assert mark["y_min"] is not None and mark["y_max"] is not None
 
 
-# --- regression: a zero-slot Focus must not crash catalog scheduling ---------
-
-def test_low_weight_focus_allocated_zero_slots_does_not_crash(store):
-    """A low-weight Focus can receive zero slots from the proportional
-    schedule, so it never enters topic_counts. Scheduling must skip it rather
-    than KeyError on the topic id (regression: KeyError 'project_logic')."""
-    import random
-
-    from app.assessment_catalog import TOPIC_BY_ID
-    from app.generator import _catalog_tasks, _proportional_schedule
-
-    weights = [("architecture", 4), ("api", 3), ("data_flow", 5),
-               ("database", 3), ("testing", 3), ("project_logic", 2)]
-    items = [(TOPIC_BY_ID[i], w) for i, w in weights]
-    allocated = {t["id"] for t in _proportional_schedule(items, 5)}
-    assert {i["id"] for i, _ in items} - allocated, "fixture must leave a Focus unallocated"
-
-    cfg = {"focus_areas": [{"id": i, "weight": w} for i, w in weights],
-           "assessment_targets": []}
-    tasks, _warnings = _catalog_tasks(store, cfg, 5, random.Random(1))
-    assert isinstance(tasks, list)
-
-
 # --- code/concept mix: quota + interleaving ---------------------------------
 
 def _seq(bp):
     return [bool(s["shows_code"]) for s in bp["planned"]]
 
 
-def test_balanced_emphasis_mixes_code_and_concept(store):
-    bp = _plan(store, emphasis="balanced")
+def test_fixed_policy_mixes_code_and_concept(store):
+    bp = _plan(store)
     if len(bp["planned"]) < 4:
         pytest.skip("fixture cannot support a mixed run")
     kinds = _seq(bp)
     assert any(kinds) and not all(kinds), "balanced must plan both code and no-code"
 
 
-def test_balanced_emphasis_hits_its_code_quota(store):
-    bp = _plan(store, emphasis="balanced")
+def test_fixed_policy_hits_its_code_quota(store):
+    bp = _plan(store)
     if len(bp["planned"]) < 4:
         pytest.skip("fixture cannot support a mixed run")
-    quota = blueprint._code_quota(len(bp["planned"]), "balanced")
+    quota = blueprint._code_quota(len(bp["planned"]))
     assert abs(sum(_seq(bp)) - quota) <= 1
-
-
-def test_emphasis_shifts_the_code_share(store):
-    concepts = _plan(store, emphasis="mostly_concepts")
-    code = _plan(store, emphasis="mostly_code")
-    if len(concepts["planned"]) < 4 or len(code["planned"]) < 4:
-        pytest.skip("fixture cannot support a mixed run")
-    assert sum(_seq(code)) > sum(_seq(concepts))
 
 
 def test_code_questions_are_not_clustered(store):
     """No three consecutive questions of the same kind while the other exists."""
-    bp = _plan(store, emphasis="balanced")
+    bp = _plan(store)
     kinds = _seq(bp)
     if len(kinds) < 4 or len(set(kinds)) < 2:
         pytest.skip("fixture cannot support a mixed run")

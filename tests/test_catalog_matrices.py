@@ -13,8 +13,8 @@ from app import assessment_catalog as ac
 # --- AC 1: catalog validates the expected object counts --------------------
 
 def test_catalog_counts():
-    assert len(ac.ASSESSMENT_POINTS) == 20
-    assert len(ac.TEMPLATES) == 13
+    assert len(ac.ASSESSMENT_POINTS) == 46
+    assert len(ac.TEMPLATES) == 19
     assert len(ac.TOPICS) == 9
     assert len(ac.EVIDENCE_TYPES) == 10
 
@@ -111,35 +111,16 @@ def test_missing_matrix_fails_startup(tmp_path):
 
 
 def test_framework_policy_requires_all_code_modes(tmp_path):
-    bad = {"emphasis_fit": {"balanced": {"none": 1.0}}}
+    bad = {"code_mode_fit": {"none": 1.0}}
     with pytest.raises(ValueError, match="missing code modes"):
         ac.load_catalog(_catalog_with(tmp_path, framework_template_policy=bad))
 
 
-# --- AC 9: code-disabled frameworks never schedule code templates ----------
+# --- AC 9: fixed framework policy covers every template ---------------------
 
-def test_code_templates_prohibited_when_code_disallowed():
+def test_fixed_framework_policy_assigns_every_template_a_fit():
     for template in ac.TEMPLATES:
-        fit = ac.framework_template_fit(template, allow_code=False)
-        if template["code_mode"] != "none":
-            assert fit == 0.0, f"{template['id']} must be gated off"
-        else:
-            assert fit > 0.0
-
-
-def test_emphasis_shifts_template_preference():
-    code_t = ac.TEMPLATE_BY_ID["code_explain"]
-    concept_t = ac.TEMPLATE_BY_ID["contextual_use"]
-    assert (ac.framework_template_fit(code_t, emphasis="mostly_code")
-            > ac.framework_template_fit(code_t, emphasis="mostly_concepts"))
-    assert (ac.framework_template_fit(concept_t, emphasis="mostly_concepts")
-            >= ac.framework_template_fit(concept_t, emphasis="mostly_code"))
-
-
-def test_unknown_emphasis_falls_back_to_balanced():
-    t = ac.TEMPLATE_BY_ID["contextual_use"]
-    assert ac.framework_template_fit(t, emphasis="???") == \
-        ac.framework_template_fit(t, emphasis="balanced")
+        assert ac.framework_template_fit(template) > 0.0
 
 
 # --- catalog hash (PRD 10.4) ----------------------------------------------
@@ -148,3 +129,10 @@ def test_catalog_hash_is_stable_and_short():
     h = ac.catalog_hash()
     assert h == ac.catalog_hash()
     assert len(h) == 16 and all(c in "0123456789abcdef" for c in h)
+
+
+def test_catalog_hash_changes_when_point_matching_content_changes(monkeypatch):
+    before = ac.catalog_hash()
+    point = ac.ASSESSMENT_POINTS[0]
+    monkeypatch.setitem(point, "query", point["query"] + " changed-term")
+    assert ac.catalog_hash() != before

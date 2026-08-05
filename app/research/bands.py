@@ -7,7 +7,9 @@ singles out an individual.
 """
 from __future__ import annotations
 
-from .versions import BAND_DEFINITION_VERSION  # noqa: F401  (re-exported for callers)
+from .versions import BAND_DEFINITION_VERSION
+
+__all__ = ("BAND_DEFINITION_VERSION", "duration_band", "completion_period")
 
 # Answer-duration bands, in seconds.
 _DURATION_BANDS = [

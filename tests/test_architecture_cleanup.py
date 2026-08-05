@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
+from app import config, generator
+from app.assessment_catalog import TOPICS
 from app.generator import _raw_openai_prompt, generate_questions
 from app.knowledge import evidence_types_for_chunk
 from app.main import GenerateConfig, app, print_view
@@ -11,25 +13,26 @@ from app.main import GenerateConfig, app, print_view
 
 class ArchitectureCleanupTests(unittest.TestCase):
     def test_generation_config_rejects_removed_legacy_fields(self):
-        for field in ("topic", "areas", "template", "keep_approved"):
+        for field in (
+            "topic", "areas", "template", "keep_approved", "question_emphasis",
+            "allow_code", "excluded_assessment_points",
+        ):
             with self.subTest(field=field), self.assertRaises(ValidationError):
                 GenerateConfig(**{field: "legacy"})
 
-    def test_generation_without_focus_has_no_legacy_fallback(self):
-        questions, warnings = generate_questions(
-            [],
-            {
-                "provider": "mock",
-                "num_questions": 2,
-                "choice_count": 4,
-                "correct_mode": "exact",
-                "correct_exact": 1,
-                "difficulty": 3,
-                "focus_areas": [],
-            },
-        )
-        self.assertFalse(questions)
-        self.assertTrue(any("Focus Area" in warning for warning in warnings))
+    def test_generation_without_a_plan_has_no_legacy_fallback(self):
+        with self.assertRaisesRegex(ValueError, "confirmed question plan"):
+            generate_questions([], {"provider": "mock", "num_questions": 2})
+
+    def test_browser_local_is_the_only_ollama_transport(self):
+        self.assertFalse(hasattr(config, "LOCAL_LLM_URL"))
+        self.assertFalse(hasattr(config, "local_llm_available"))
+        self.assertFalse(hasattr(generator, "_call_llm"))
+        with self.assertRaisesRegex(ValueError, "Browser-local"):
+            generate_questions([], {"provider": "local"})
+
+    def test_topics_do_not_own_a_second_template_matrix(self):
+        self.assertTrue(all("template_weights" not in topic for topic in TOPICS))
 
     def test_evidence_type_is_not_inferred_from_legacy_chunk_kind(self):
         self.assertEqual(evidence_types_for_chunk({"kind": "function"}), ())
@@ -56,17 +59,19 @@ class ArchitectureCleanupTests(unittest.TestCase):
 
     def test_step_two_uses_inline_context_file_tags(self):
         html = Path("app/static/creator.html").read_text()
-        self.assertNotIn("priorFileNames", html)
-        self.assertNotIn("scopeFileNames", html)
+        css = Path("app/static/creator.css").read_text()
+        script = Path("app/static/creator.js").read_text()
+        self.assertNotIn("priorFileNames", html + script)
+        self.assertNotIn("scopeFileNames", html + script)
         self.assertIn('id="priorFileTags"', html)
         self.assertIn('id="scopeFileTags"', html)
-        self.assertIn(".context-fields{display:grid;gap:.4rem", html)
+        self.assertIn(".context-fields{display:grid;gap:.4rem", css)
         self.assertIn('class="framework-field question-count-field"', html)
         self.assertIn('class="difficulty-control"', html)
         self.assertIn('class="difficulty-icon-wrap"', html)
-        self.assertNotIn("numeric-step", html)
-        self.assertIn("const difficultyIcons = {", html)
-        self.assertNotIn("Target avg difficulty", html)
+        self.assertNotIn("numeric-step", html + css + script)
+        self.assertIn("const difficultyIcons = {", script)
+        self.assertNotIn("Target avg difficulty", html + script)
         for name in ("dropdown.svg", "easy_easy.svg", "easy.svg", "mid.svg", "hard.svg", "hard_hard.svg"):
             self.assertTrue((Path("app/static/assets") / name).is_file())
 

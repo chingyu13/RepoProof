@@ -7,7 +7,6 @@ import pytest
 
 from app.research import aggregate, bands, manifest, optout
 from app.research.allowlist import (
-    DATASET_A_ALLOWED,
     SchemaValidationError,
     enforce_allowlist,
     new_study_record_id,

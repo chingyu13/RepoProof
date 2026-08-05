@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from app import config
-from app.generator import _call_llm
+from app.generator import _call_openai
 from app.main import GenerateConfig, meta
 
 
@@ -16,6 +16,16 @@ class ModelSelectionTests(unittest.TestCase):
             "gpt-4o-mini",
         ])
 
+    def test_local_catalog_keeps_baseline_and_reasoning_candidate(self):
+        models = config.local_model_options()
+
+        self.assertEqual(
+            [model["id"] for model in models],
+            ["qwen2.5-coder:7b", "qwen3.5:9b"],
+        )
+        self.assertIsNone(models[0]["think"])
+        self.assertIs(models[1]["think"], False)
+
     def test_model_resolution_rejects_unlisted_request(self):
         self.assertEqual(
             config.resolve_model("openai", "untrusted-model"),
@@ -25,14 +35,11 @@ class ModelSelectionTests(unittest.TestCase):
             config.resolve_model("local", "untrusted-model"),
             config.LOCAL_LLM_MODEL,
         )
+        self.assertEqual(config.resolve_model("local", "qwen3.5:9b"), "qwen3.5:9b")
 
     def test_meta_exposes_browser_managed_local_provider_without_server_probe(self):
-        with (
-            patch("app.main.config.local_llm_available", return_value=True) as probe,
-            patch("app.main.config.default_provider", return_value="openai"),
-        ):
+        with patch("app.main.config.default_provider", return_value="openai"):
             result = meta()
-        probe.assert_not_called()
         self.assertEqual(
             result["providers"]["openai"]["models"],
             config.openai_model_options(),
@@ -41,6 +48,10 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertEqual(
             result["providers"]["local"]["url"],
             config.BROWSER_OLLAMA_URL,
+        )
+        self.assertEqual(
+            result["providers"]["local"]["models"],
+            config.local_model_options(),
         )
 
     def test_generation_config_accepts_selected_model(self):
@@ -58,8 +69,7 @@ class ModelSelectionTests(unittest.TestCase):
         client = MagicMock()
         client.chat.completions.create.return_value = completion
         with patch("openai.OpenAI", return_value=client):
-            result = _call_llm(
-                "openai",
+            result = _call_openai(
                 "system",
                 "user",
                 model="gpt-5.6-terra",
@@ -72,7 +82,6 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertEqual(kwargs["max_completion_tokens"], 16_000)
         self.assertNotIn("temperature", kwargs)
         self.assertNotIn("max_tokens", kwargs)
-
 
 if __name__ == "__main__":
     unittest.main()

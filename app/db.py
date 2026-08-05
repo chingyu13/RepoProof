@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS questions (
     justifications_json TEXT NOT NULL DEFAULT '{}',  -- {key: why correct/incorrect}
     evidence_json TEXT NOT NULL DEFAULT '[]',        -- [{chunk_id, title, file, lines}]
     alignment_json TEXT NOT NULL DEFAULT '{}',
+    assessment_point_ids_json TEXT NOT NULL DEFAULT '[]',
     difficulty INTEGER NOT NULL DEFAULT 1,
     focus_areas_json TEXT NOT NULL DEFAULT '[]',
     explanation TEXT NOT NULL DEFAULT '',
@@ -105,6 +106,7 @@ _MIGRATIONS = [
     ("questions", "flags_json", "TEXT NOT NULL DEFAULT '[]'"),   # soft quality flags for review
     ("projects", "project_path", "TEXT NOT NULL DEFAULT ''"),
     ("questions", "alignment_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("questions", "assessment_point_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
     ("attempts", "repo_id", "TEXT NOT NULL DEFAULT ''"),   # pseudonymous taker id — never the SID
     ("attempts", "research_opt_in", "INTEGER NOT NULL DEFAULT 0"),  # 1 = student opted in to research retention
     # Model's own 1-10 confidence in the answer key + explanation. Nullable on

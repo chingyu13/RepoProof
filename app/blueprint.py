@@ -3,14 +3,15 @@
 Sits between the Question Framework and question generation. Given the
 assignment targets, the creator's Focus weights and framework settings, and the
 project's evidence, it produces a *deterministic, LLM-free* blueprint: N planned
-question slots, each bound to an Assessment Point, a Template, a subject, and
-concrete evidence, with an expected difficulty band and a score breakdown.
+question slots, each bound to one or more Assessment Points, a Template, a
+subject, and concrete evidence, with an expected difficulty band and a score
+breakdown.
 
 Pipeline (PRD §1):
 
     assignment targets      -> assessment-point distribution
-    focus + framework       -> template distribution
-    point x template x evidence
+    assessment points      -> template distribution
+    point set x template x evidence
                             -> eligible candidates (hard gates)
                             -> scored + de-duplicated
                             -> N selected slots + unsupported report
@@ -42,17 +43,16 @@ from .question_planner import render_question_plan, template_bundle
 MARK_WEIGHT_CAP = 2.0
 # Point weights below this are dropped from the distribution.
 POINT_WEIGHT_FLOOR = 0.08
+# Explicit target wording remains viable even when the selected Focus has no
+# catalog fit, so cross-disciplinary requirements are ranked rather than erased.
+FOCUS_LEXICAL_FLOOR = 0.35
 # Soft diversity targets for a normal five-question run (PRD §7.8).
 MIN_DISTINCT_POINTS = 3
 MIN_DISTINCT_TEMPLATES = 2
+MAX_POINTS_PER_SLOT = 2
 
-# Share of questions that should show code, per requested emphasis. Balanced
-# means roughly half, so a run does not silently become all-concept or all-code.
-EMPHASIS_CODE_SHARE = {
-    "mostly_concepts": 0.2,
-    "balanced": 0.5,
-    "mostly_code": 0.8,
-}
+# A balanced run aims for roughly half code and half conceptual questions.
+BALANCED_CODE_SHARE = 0.5
 # Penalty applied when a candidate's code class has already filled its quota.
 CODE_QUOTA_PENALTY = 0.55
 
@@ -85,6 +85,7 @@ def assessment_point_distribution(targets: list[dict],
     (PRD §10.1).
     """
     scores: dict[str, float] = {}
+    focus_weights = _normalized_focus_weights(focus_areas)
     for target in targets or []:
         t_tokens = _target_tokens(target)
         if not t_tokens:
@@ -93,7 +94,21 @@ def assessment_point_distribution(targets: list[dict],
         for point in ASSESSMENT_POINTS:
             overlap = len(t_tokens & _point_tokens(point))
             if overlap:
-                scores[point["id"]] = scores.get(point["id"], 0.0) + overlap * weight
+                if focus_weights:
+                    focus_support = sum(
+                        focus_weight * focus_point_fit(focus_id, point["id"])
+                        for focus_id, focus_weight in focus_weights.items()
+                    )
+                    focus_factor = (
+                        FOCUS_LEXICAL_FLOOR
+                        + (1.0 - FOCUS_LEXICAL_FLOOR) * focus_support
+                    )
+                else:
+                    focus_factor = 1.0
+                scores[point["id"]] = (
+                    scores.get(point["id"], 0.0)
+                    + overlap * weight * focus_factor
+                )
 
     if not scores:
         return _focus_prior(focus_areas)
@@ -163,21 +178,19 @@ def split_focus(point_id: str, focus_areas: list[dict] | None) -> tuple[str, lis
     return primary, secondary
 
 
-def template_distribution(focus_areas: list[dict] | None, *, emphasis: str = "balanced",
-                          allow_code: bool = True) -> dict[str, float]:
-    """Normalized Template weights from Focus weights x framework fit (PRD §7.3)."""
-    weights = _normalized_focus_weights(focus_areas)
+def template_distribution(point_weights: dict[str, float]) -> dict[str, float]:
+    """Normalized Template weights from Assessment Points x fixed framework fit."""
     scores: dict[str, float] = {}
     for template in TEMPLATES:
-        fit = framework_template_fit(template, emphasis=emphasis, allow_code=allow_code)
+        fit = framework_template_fit(template)
         if fit <= 0:
             continue
-        focus_part = sum(
-            w * float(TOPIC_BY_ID[fid]["template_weights"].get(template["id"], 0.0))
-            for fid, w in weights.items()
+        point_part = sum(
+            weight * point_template_fit(point_id, template["id"])
+            for point_id, weight in point_weights.items()
         )
-        if focus_part > 0:
-            scores[template["id"]] = focus_part * fit
+        if point_part > 0:
+            scores[template["id"]] = point_part * fit
     if not scores:
         return {}
     top = max(scores.values())
@@ -232,12 +245,34 @@ def expected_difficulty(point: dict, template: dict, evidence: list[dict],
     return {"min": lo, "max": hi}
 
 
+def expected_difficulty_for_points(points: list[dict], template: dict,
+                                   evidence: list[dict], *, difficulty_min: int,
+                                   difficulty_max: int) -> dict:
+    """Return the common difficulty band for every Point covered by a slot."""
+    bands = [
+        expected_difficulty(
+            point, template, evidence,
+            difficulty_min=difficulty_min,
+            difficulty_max=difficulty_max,
+        )
+        for point in points
+    ]
+    if not bands:
+        return {}
+    if any(not band for band in bands):
+        return {}
+    low = max(int(band["min"]) for band in bands)
+    high = min(int(band["max"]) for band in bands)
+    return {"min": low, "max": high} if low <= high else {}
+
+
 # --------------------------------------------------------------------------
 # §7.4 - §7.6 candidate enumeration with hard gates
 # --------------------------------------------------------------------------
 
-def _plan_key(point_id: str, template_id: str, subject: str, evidence_ids: list[str]) -> str:
-    blob = json.dumps([point_id, template_id, subject.casefold(),
+def _plan_key(point_ids: tuple[str, ...], template_id: str, subject: str,
+              evidence_ids: list[str]) -> str:
+    blob = json.dumps([point_ids, template_id, subject.casefold(),
                        sorted(evidence_ids)], sort_keys=True)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
@@ -260,16 +295,44 @@ def _subject_of(plan: dict) -> str:
     return " ".join(stem.split()[:8])
 
 
+def _point_groups(ranked_points: list[tuple[str, float]], point_index: int,
+                  target_by_point: dict[str, dict],
+                  focus_areas: list[dict] | None) -> list[tuple[str, ...]]:
+    """Return one- and two-Point claims that share an actual assignment target.
+
+    Points remain independent catalog entries. A pair exists only when this
+    assignment maps both Points to the same requirement and both use the same
+    primary Focus, so the pair represents a claim the student can genuinely be
+    asked to reason about rather than a hand-maintained Point relationship.
+    """
+    point_id, _weight = ranked_points[point_index]
+    primary_focus, _secondary = split_focus(point_id, focus_areas)
+    groups = [(point_id,)]
+    target = target_by_point.get(point_id)
+    if not target or MAX_POINTS_PER_SLOT < 2:
+        return groups
+
+    for secondary_id, _secondary_weight in ranked_points[point_index + 1:]:
+        secondary_target = target_by_point.get(secondary_id)
+        secondary_focus, _unused = split_focus(secondary_id, focus_areas)
+        if (
+            secondary_target
+            and secondary_target.get("id") == target.get("id")
+            and secondary_focus == primary_focus
+        ):
+            groups.append((point_id, secondary_id))
+            break
+    return groups
+
+
 def enumerate_candidates(evidence_store: EvidenceStore, *, point_weights: dict[str, float],
                          focus_areas: list[dict] | None, targets: list[dict] | None = None,
-                         emphasis: str = "balanced", allow_code: bool = True,
-                         difficulty_min: int = 1, difficulty_max: int = 5,
-                         excluded_points: set[str] | None = None) -> tuple[list[dict], dict]:
+                         difficulty_min: int = 1,
+                         difficulty_max: int = 5) -> tuple[list[dict], dict]:
     """Build every eligible candidate plan, plus rejection counts by reason.
 
     Hard gates run before ranking and before any LLM call (PRD §7.4).
     """
-    excluded = excluded_points or set()
     rejects: dict[str, int] = {}
 
     def reject(reason: str) -> None:
@@ -279,12 +342,17 @@ def enumerate_candidates(evidence_store: EvidenceStore, *, point_weights: dict[s
     candidates: list[dict] = []
     seen: set[str] = set()
 
-    for point_id, point_weight in sorted(point_weights.items(), key=lambda kv: (-kv[1], kv[0])):
-        if point_id in excluded:
-            reject("excluded_by_creator")
-            continue
-        point = ASSESSMENT_POINT_BY_ID.get(point_id)
-        if not point or point_weight <= 0:
+    ranked_points = [
+        (point_id, point_weight)
+        for point_id, point_weight in sorted(
+            point_weights.items(), key=lambda item: (-item[1], item[0])
+        )
+        if point_id in ASSESSMENT_POINT_BY_ID and point_weight > 0
+    ]
+
+    for point_index, (point_id, point_weight) in enumerate(ranked_points):
+        point = ASSESSMENT_POINT_BY_ID[point_id]
+        if point_weight <= 0:
             reject("zero_point_weight")
             continue
         primary_focus, secondary = split_focus(point_id, focus_areas)
@@ -294,80 +362,94 @@ def enumerate_candidates(evidence_store: EvidenceStore, *, point_weights: dict[s
         topic = TOPIC_BY_ID[primary_focus]
         target = target_by_point.get(point_id)
 
-        for template in TEMPLATES:
-            pt_fit = point_template_fit(point_id, template["id"])
-            if pt_fit <= 0:
-                reject("point_template_incompatible")
-                continue
-            fw_fit = framework_template_fit(template, emphasis=emphasis, allow_code=allow_code)
-            if fw_fit <= 0:
-                reject("framework_conflict")
-                continue
+        for point_ids in _point_groups(
+            ranked_points, point_index, target_by_point, focus_areas
+        ):
+            points = [ASSESSMENT_POINT_BY_ID[item] for item in point_ids]
+            weights = [point_weights[item] for item in point_ids]
+            combined_query = " ".join(item.get("query", "") for item in points)
 
-            evidence, missing = template_bundle(
-                evidence_store, topic, template, point.get("query", ""))
-            if missing:
-                reject("required_evidence_missing")
-                continue
-            if not _evidence_types_overlap(point, evidence):
-                reject("evidence_type_mismatch")
-                continue
+            for template in TEMPLATES:
+                pt_fits = [point_template_fit(item, template["id"]) for item in point_ids]
+                pt_fit = min(pt_fits)
+                if pt_fit <= 0:
+                    reject("point_template_incompatible")
+                    continue
+                fw_fit = framework_template_fit(template)
+                if fw_fit <= 0:
+                    reject("framework_conflict")
+                    continue
 
-            plan, _why = render_question_plan(template, topic, target, evidence)
-            if not plan:
-                reject("variables_unresolved")
-                continue
+                evidence, missing = template_bundle(
+                    evidence_store, topic, template, combined_query)
+                if missing:
+                    reject("required_evidence_missing")
+                    continue
+                if not all(_evidence_types_overlap(item, evidence) for item in points):
+                    reject("evidence_type_mismatch")
+                    continue
 
-            band = expected_difficulty(
-                point, template, evidence,
-                difficulty_min=difficulty_min, difficulty_max=difficulty_max)
-            if not band:
-                reject("difficulty_out_of_range")
-                continue
+                plan, _why = render_question_plan(template, topic, target, evidence)
+                if not plan:
+                    reject("variables_unresolved")
+                    continue
 
-            subject = _subject_of(plan)
-            evidence_ids = [str(c.get("id", "")) for c in evidence if c.get("id")]
-            # Dedupe on the tested claim too: the renderer's own plan_key encodes
-            # the template + stem, so two points cannot ask the same question.
-            key = _plan_key(point_id, template["id"], subject, evidence_ids)
-            claim = str(plan.get("plan_key") or "")
-            if key in seen or (claim and claim in seen):
-                reject("duplicate_plan_key")
-                continue
-            seen.add(key)
-            if claim:
-                seen.add(claim)
+                band = expected_difficulty_for_points(
+                    points, template, evidence,
+                    difficulty_min=difficulty_min, difficulty_max=difficulty_max)
+                if not band:
+                    reject("difficulty_out_of_range")
+                    continue
 
-            evidence_fit = _evidence_fit(point, evidence, target)
-            alignment_fit = 1.0 if target else 0.6
-            focus_fit = focus_point_fit(primary_focus, point_id)
-            relevance = (point_weight * focus_fit * pt_fit * fw_fit
-                         * evidence_fit * alignment_fit)
-            candidates.append({
-                "assessment_point_id": point_id,
-                "template_id": template["id"],
-                "primary_focus_id": primary_focus,
-                "secondary_focus_ids": secondary,
-                "variables": {k: v for k, v in plan.items() if isinstance(v, str)},
-                "subject": subject,
-                "planned_stem": str(plan.get("rendered_stem") or ""),
-                "code_mode": template.get("code_mode", "none"),
-                "shows_code": template.get("code_mode", "none") != "none",
-                "evidence_ids": evidence_ids,
-                "target_ids": [target["id"]] if target else [],
-                "expected_difficulty": band,
-                "relevance": round(relevance, 6),
-                "score_breakdown": {
-                    "assignment": round(point_weight, 4),
-                    "focus_point": round(focus_fit, 4),
-                    "point_template": round(pt_fit, 4),
-                    "framework_template": round(fw_fit, 4),
-                    "evidence": round(evidence_fit, 4),
-                    "alignment": round(alignment_fit, 4),
-                },
-                "reason_selected": _reason(point, target),
-                "plan_key": key,
-            })
+                subject = _subject_of(plan)
+                evidence_ids = [str(c.get("id", "")) for c in evidence if c.get("id")]
+                # A pair must produce a distinct tested claim. Otherwise it would
+                # merely label an existing one-Point question as broader coverage.
+                key = _plan_key(point_ids, template["id"], subject, evidence_ids)
+                claim = str(plan.get("plan_key") or "")
+                if key in seen or (claim and claim in seen):
+                    reject("duplicate_plan_key")
+                    continue
+                seen.add(key)
+                if claim:
+                    seen.add(claim)
+
+                evidence_fit = sum(
+                    _evidence_fit(item, evidence, target) for item in points
+                ) / len(points)
+                focus_fit = sum(
+                    focus_point_fit(primary_focus, item) for item in point_ids
+                ) / len(point_ids)
+                relevance = (
+                    (sum(weights) / len(weights)) * focus_fit * pt_fit * fw_fit
+                    * evidence_fit * (1.0 if target else 0.6)
+                )
+                candidates.append({
+                    "assessment_point_id": point_id,
+                    "assessment_point_ids": list(point_ids),
+                    "template_id": template["id"],
+                    "primary_focus_id": primary_focus,
+                    "secondary_focus_ids": secondary,
+                    "variables": {k: v for k, v in plan.items() if isinstance(v, str)},
+                    "subject": subject,
+                    "planned_stem": str(plan.get("rendered_stem") or ""),
+                    "code_mode": template.get("code_mode", "none"),
+                    "shows_code": template.get("code_mode", "none") != "none",
+                    "evidence_ids": evidence_ids,
+                    "target_ids": [target["id"]] if target else [],
+                    "expected_difficulty": band,
+                    "relevance": round(relevance, 6),
+                    "score_breakdown": {
+                        "assignment": round(sum(weights) / len(weights), 4),
+                        "focus_point": round(focus_fit, 4),
+                        "point_template": round(pt_fit, 4),
+                        "framework_template": round(fw_fit, 4),
+                        "evidence": round(evidence_fit, 4),
+                        "alignment": 1.0 if target else 0.6,
+                    },
+                    "reason_selected": _reason(points, target),
+                    "plan_key": key,
+                })
 
     candidates.sort(key=lambda c: (-c["relevance"], c["assessment_point_id"], c["template_id"]))
     return candidates, rejects
@@ -412,11 +494,12 @@ def _evidence_fit(point: dict, evidence: list[dict], target: dict | None) -> flo
     return round(max(0.05, 0.5 * overlap + 0.3 * depth + 0.2 * linked), 4)
 
 
-def _reason(point: dict, target: dict | None) -> str:
+def _reason(points: list[dict], target: dict | None) -> str:
     if target:
         label = str(target.get("label") or target.get("description") or "").strip()
         return f"Assignment requires: {label[:120]}"
-    return f"Selected Focus covers {point.get('name', point['id'])}"
+    names = " + ".join(point.get("name", point["id"]) for point in points)
+    return f"Selected Focus covers {names}"
 
 
 # --------------------------------------------------------------------------
@@ -424,13 +507,20 @@ def _reason(point: dict, target: dict | None) -> str:
 # --------------------------------------------------------------------------
 
 def repetition_penalty(candidate: dict, chosen: list[dict]) -> float:
-    """Penalty for overlap with already-selected plans (PRD §7.8)."""
+    """Penalty for Points and evidence already covered by selected plans."""
     penalty = 0.0
+    candidate_points = set(candidate.get("assessment_point_ids") or [
+        candidate["assessment_point_id"]
+    ])
     for other in chosen:
-        same_point = candidate["assessment_point_id"] == other["assessment_point_id"]
+        other_points = set(other.get("assessment_point_ids") or [
+            other["assessment_point_id"]
+        ])
+        shared_points = candidate_points & other_points
+        same_point = bool(shared_points)
         same_template = candidate["template_id"] == other["template_id"]
         if same_point:
-            penalty += 0.35
+            penalty += 0.35 * len(shared_points)
         if same_template:
             penalty += 0.15
         if same_point and same_template:
@@ -444,10 +534,9 @@ def repetition_penalty(candidate: dict, chosen: list[dict]) -> float:
     return round(penalty, 4)
 
 
-def _code_quota(count: int, emphasis: str) -> int:
+def _code_quota(count: int) -> int:
     """How many of the ``count`` questions should show code."""
-    share = EMPHASIS_CODE_SHARE.get(emphasis, EMPHASIS_CODE_SHARE["balanced"])
-    return int(round(count * share))
+    return int(round(count * BALANCED_CODE_SHARE))
 
 
 def interleave_by_code(slots: list[dict]) -> list[dict]:
@@ -471,8 +560,7 @@ def interleave_by_code(slots: list[dict]) -> list[dict]:
     return out
 
 
-def select_plans(candidates: list[dict], count: int, *, seed: int = 0,
-                 emphasis: str = "balanced") -> tuple[list[dict], list[str]]:
+def select_plans(candidates: list[dict], count: int, *, seed: int = 0) -> tuple[list[dict], list[str]]:
     """Relevance-first greedy selection with diversity and code-mix penalties.
 
     Returns ``(slots, warnings)``. Soft diversity targets may be relaxed on
@@ -482,7 +570,7 @@ def select_plans(candidates: list[dict], count: int, *, seed: int = 0,
     pool = list(candidates)
     chosen: list[dict] = []
     warnings: list[str] = []
-    code_quota = _code_quota(count, emphasis)
+    code_quota = _code_quota(count)
     plain_quota = count - code_quota
 
     while pool and len(chosen) < count:
@@ -527,7 +615,13 @@ def select_plans(candidates: list[dict], count: int, *, seed: int = 0,
         elif plain_quota and picked_code == len(chosen):
             warnings.append(
                 f"every planned question shows code (wanted {plain_quota} without code)")
-        points = {c["assessment_point_id"] for c in chosen}
+        points = {
+            point_id
+            for candidate in chosen
+            for point_id in candidate.get("assessment_point_ids", [
+                candidate["assessment_point_id"]
+            ])
+        }
         templates = {c["template_id"] for c in chosen}
         if count >= 5 and len(points) < MIN_DISTINCT_POINTS:
             warnings.append(
@@ -545,10 +639,15 @@ def select_plans(candidates: list[dict], count: int, *, seed: int = 0,
 # --------------------------------------------------------------------------
 
 def unsupported_points(point_weights: dict[str, float], candidates: list[dict],
-                       excluded: set[str] | None = None, limit: int = 8) -> list[dict]:
+                       limit: int = 8) -> list[dict]:
     """High-weight Assessment Points with no eligible plan, with a reason."""
-    covered = {c["assessment_point_id"] for c in candidates}
-    excluded = excluded or set()
+    covered = {
+        point_id
+        for candidate in candidates
+        for point_id in candidate.get("assessment_point_ids", [
+            candidate["assessment_point_id"]
+        ])
+    }
     out = []
     for pid, weight in sorted(point_weights.items(), key=lambda kv: (-kv[1], kv[0])):
         if pid in covered:
@@ -556,13 +655,11 @@ def unsupported_points(point_weights: dict[str, float], candidates: list[dict],
         point = ASSESSMENT_POINT_BY_ID.get(pid)
         if not point:
             continue
-        reason = ("excluded by creator" if pid in excluded
-                  else "no template, variable binding, or project evidence available")
         out.append({
             "assessment_point_id": pid,
             "name": point.get("name", pid),
             "weight": round(weight, 4),
-            "reason": reason,
+            "reason": "no template, variable binding, or project evidence available",
         })
         if len(out) >= limit:
             break
@@ -571,21 +668,18 @@ def unsupported_points(point_weights: dict[str, float], candidates: list[dict],
 
 def build_blueprint(evidence_store: EvidenceStore, *, targets: list[dict] | None,
                     focus_areas: list[dict] | None, snapshot_id: str,
-                    num_questions: int = 5, emphasis: str = "balanced",
-                    allow_code: bool = True, difficulty_min: int = 1,
-                    difficulty_max: int = 5, excluded_assessment_points: list[str] | None = None,
+                    num_questions: int = 5, difficulty_min: int = 1,
+                    difficulty_max: int = 5,
                     seed: int = 0) -> dict:
     """Produce a full blueprint preview. Deterministic; performs no LLM calls."""
-    excluded = {str(p) for p in (excluded_assessment_points or [])}
     point_weights = assessment_point_distribution(targets or [], focus_areas)
-    templates = template_distribution(focus_areas, emphasis=emphasis, allow_code=allow_code)
+    templates = template_distribution(point_weights)
 
     candidates, rejects = enumerate_candidates(
         evidence_store, point_weights=point_weights, focus_areas=focus_areas,
-        targets=targets, emphasis=emphasis, allow_code=allow_code,
-        difficulty_min=difficulty_min, difficulty_max=difficulty_max,
-        excluded_points=excluded)
-    planned, warnings = select_plans(candidates, num_questions, seed=seed, emphasis=emphasis)
+        targets=targets, difficulty_min=difficulty_min,
+        difficulty_max=difficulty_max)
+    planned, warnings = select_plans(candidates, num_questions, seed=seed)
 
     if not targets:
         warnings.insert(0, "No assignment scope supplied — Assessment Points inferred "
@@ -601,16 +695,13 @@ def build_blueprint(evidence_store: EvidenceStore, *, targets: list[dict] | None
             "num_questions": num_questions,
             "difficulty_min": difficulty_min,
             "difficulty_max": difficulty_max,
-            "question_emphasis": emphasis,
-            "allow_code": allow_code,
             "focus_areas": focus_areas or [],
-            "excluded_assessment_points": sorted(excluded),
             "seed": seed,
         },
         "assessment_point_distribution": point_weights,
         "template_distribution": templates,
         "planned": planned,
-        "unsupported": unsupported_points(point_weights, candidates, excluded),
+        "unsupported": unsupported_points(point_weights, candidates),
         "warnings": warnings,
         "gate_rejections": dict(sorted(rejects.items())),
     }
@@ -621,12 +712,17 @@ def plot_points(planned: list[dict]) -> list[dict]:
     out = []
     for slot in planned:
         band = slot.get("expected_difficulty") or {}
-        point = ASSESSMENT_POINT_BY_ID.get(slot["assessment_point_id"], {})
+        point_ids = slot.get("assessment_point_ids") or [slot["assessment_point_id"]]
+        point_names = [
+            ASSESSMENT_POINT_BY_ID.get(point_id, {}).get("name", point_id)
+            for point_id in point_ids
+        ]
         template = TEMPLATE_BY_ID.get(slot["template_id"], {})
         out.append({
             "index": slot.get("index", 0),
-            "assessment_point_id": slot["assessment_point_id"],
-            "assessment_point": point.get("name", slot["assessment_point_id"]),
+            "assessment_point_id": " + ".join(point_ids),
+            "assessment_point_ids": point_ids,
+            "assessment_point": " + ".join(point_names),
             "template_id": slot["template_id"],
             "template": template.get("name", slot["template_id"]),
             "y_min": band.get("min"),

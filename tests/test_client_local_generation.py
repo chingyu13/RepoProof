@@ -1,14 +1,16 @@
 import json
 
+from app import blueprint
 from app.generator import (
     apply_local_generation_outputs,
     local_generation_batch,
     prepare_local_generation,
 )
+from app.knowledge import EvidenceStore
 from tests.test_local_generation import CHUNKS
 
 
-CFG = {
+BASE_CFG = {
     "num_questions": 1,
     "choice_count": 4,
     "correct_mode": "exact",
@@ -19,6 +21,18 @@ CFG = {
     "focus_areas": [{"id": "api", "name": "Integration / API", "weight": 5}],
     "seed": 42,
 }
+
+
+def _cfg(**overrides):
+    cfg = {**BASE_CFG, **overrides}
+    plan = blueprint.build_blueprint(
+        EvidenceStore(CHUNKS), targets=[], focus_areas=cfg["focus_areas"],
+        snapshot_id="test123", num_questions=cfg["num_questions"],
+        difficulty_min=cfg["difficulty_min"], difficulty_max=cfg["difficulty_max"],
+        seed=cfg["seed"],
+    )
+    assert plan["planned"]
+    return {**cfg, "frozen_slots": plan["planned"]}
 
 
 def _valid_response() -> str:
@@ -40,7 +54,7 @@ def _valid_response() -> str:
 
 
 def test_client_local_batch_contains_fixed_prompts():
-    state = prepare_local_generation(CHUNKS, CFG)
+    state = prepare_local_generation(CHUNKS, _cfg())
     batch = local_generation_batch(state, "batch-token")
 
     assert batch["model"]
@@ -50,8 +64,16 @@ def test_client_local_batch_contains_fixed_prompts():
     assert "EVIDENCE" in batch["tasks"][0]["prompt"]
 
 
+def test_qwen_35_batch_preserves_model_and_disables_thinking():
+    state = prepare_local_generation(CHUNKS, _cfg(model="qwen3.5:9b"))
+    batch = local_generation_batch(state, "batch-token")
+
+    assert batch["model"] == "qwen3.5:9b"
+    assert batch["think"] is False
+
+
 def test_client_local_output_is_validated_and_normalized():
-    state = prepare_local_generation(CHUNKS, CFG)
+    state = prepare_local_generation(CHUNKS, _cfg())
     batch = local_generation_batch(state, "batch-token")
     task = batch["tasks"][0]
 
@@ -65,13 +87,14 @@ def test_client_local_output_is_validated_and_normalized():
     assert done is True
     assert len(questions) == 1
     assert questions[0]["generator"].startswith("local:")
+    assert questions[0]["assessment_point_ids"]
     assert len(questions[0]["options"]) == 4
     assert len(questions[0]["answer"]) == 1
     assert state["metrics"]["accepted_first_pass"] == 1
 
 
 def test_invalid_output_advances_to_repair_prompt():
-    state = prepare_local_generation(CHUNKS, CFG)
+    state = prepare_local_generation(CHUNKS, _cfg())
     first = local_generation_batch(state, "batch-one")["tasks"][0]
     questions, done = apply_local_generation_outputs(CHUNKS, state, [{
         "task_index": first["task_index"],

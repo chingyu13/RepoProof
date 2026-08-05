@@ -1,8 +1,7 @@
-"""Evidence-grounded MAQ generation for raw OpenAI, Local LLM, and mock modes."""
+"""MAQ generation for raw OpenAI, browser-local handoff, and mock modes."""
 import json
 import random
 import re
-import time
 from collections.abc import Callable
 
 from . import config
@@ -15,7 +14,6 @@ from .assessment_catalog import (
     ASSESSMENT_POINT_BY_ID,
     TEMPLATE_BY_ID,
     TOPIC_BY_ID,
-    weighted_template_schedule,
 )
 from .validator import OPTION_KEYS, find_similar_question, validate_maq, validate_maq_split
 
@@ -106,40 +104,6 @@ def _alignment_summary(target: dict | None) -> dict:
     }
 
 
-def _target_for_topic(cfg: dict, topic_id: str, occurrence: int) -> dict | None:
-    targets = cfg.get("assessment_targets") or []
-    scope = [target for target in targets if target.get("kind") == "project_scope"]
-    candidates = scope or [
-        target for target in targets if target.get("kind") == "prior_knowledge"
-    ]
-    evidenced = [
-        target for target in candidates
-        if target.get("coverage") != "unmatched" and target.get("evidence")
-    ]
-    candidates = evidenced
-    matched = [
-        target for target in candidates
-        if topic_id in (target.get("topic_ids") or [])
-    ]
-    candidates = matched or candidates
-    if not candidates:
-        return None
-    candidates = sorted(
-        candidates,
-        key=lambda target: (
-            target.get("coverage") == "unmatched",
-            -float(target.get("weight", 1)),
-            target.get("id", ""),
-        ),
-    )
-    weighted = [
-        target
-        for target in candidates
-        for _ in range(max(1, min(4, round(float(target.get("weight", 1))))))
-    ]
-    return weighted[occurrence % len(weighted)]
-
-
 def _question_alignment(question: dict, cfg: dict, index: int) -> dict:
     targets = cfg.get("assessment_targets") or []
     scope = [target for target in targets if target.get("kind") == "project_scope"]
@@ -197,6 +161,9 @@ def _question_prompt(slot: dict, evidence: list[dict], choice_count: int,
     return f"""FIXED STEM:
 {fixed_stem}
 
+ASSESSED POINTS:
+{chr(10).join(f'- {name}' for name in slot.get('assessment_point_names', []))}
+
 OPTION TASK:
 {slot['option_task']}
 
@@ -210,6 +177,7 @@ FRAMEWORK:
 - all {choice_count} option texts must be distinct;
 - every correct option follows from the evidence;
 - every incorrect option contradicts the evidence and remains plausible;
+- the options must test every assessed point named above;
 - avoid best/better/why, bare identifiers, giveaway absolutes, and generic claims.{focus_line}
 
 EVIDENCE:
@@ -266,51 +234,30 @@ def _extract_json(text: str) -> dict:
     return json.loads(m.group(0))
 
 
-def _call_llm(
-    provider: str,
+def _call_openai(
     system: str,
     user: str,
     *,
     model: str = "",
     temperature: float | None = None,
 ) -> dict:
-    """Call an OpenAI-compatible local or hosted provider."""
+    """Call the hosted OpenAI provider and parse its JSON response."""
     from openai import OpenAI
-    selected_model = config.resolve_model(provider, model)
-    if provider == "local":
-        # trust_env=False bypasses HTTP(S)_PROXY/ALL_PROXY env vars — localhost
-        # traffic must never be routed through a corporate/system proxy.
-        import httpx
-        client = OpenAI(base_url=config.LOCAL_LLM_URL, api_key="local-llm",
-                        http_client=httpx.Client(trust_env=False, timeout=300))
-        timeout = 300
-    else:
-        client = OpenAI(api_key=config.openai_api_key())
-        timeout = 90
+    selected_model = config.resolve_model("openai", model)
+    client = OpenAI(api_key=config.openai_api_key())
     kwargs = dict(
         model=selected_model,
         messages=[{"role": "system", "content": system},
                   {"role": "user", "content": user}],
-        timeout=timeout,
+        timeout=90,
     )
-    if provider == "local":
-        kwargs["temperature"] = temperature if temperature is not None else 0.2
-        kwargs["max_tokens"] = config.LOCAL_LLM_MAX_TOKENS
-    elif selected_model.startswith("gpt-5.6"):
+    if selected_model.startswith("gpt-5.6"):
         kwargs["max_completion_tokens"] = 16_000
         kwargs["reasoning_effort"] = "low"
     else:
         kwargs["temperature"] = temperature if temperature is not None else 0.4
         kwargs["max_tokens"] = 16_000
-    try:
-        resp = client.chat.completions.create(response_format={"type": "json_object"}, **kwargs)
-    except Exception as exc:
-        # some local servers (older Ollama, llama.cpp) reject response_format —
-        # retry once without it and rely on _extract_json instead
-        if provider == "local" and "response_format" in str(exc).lower():
-            resp = client.chat.completions.create(**kwargs)
-        else:
-            raise
+    resp = client.chat.completions.create(response_format={"type": "json_object"}, **kwargs)
     return _extract_json(resp.choices[0].message.content)
 
 
@@ -393,25 +340,6 @@ def _pick_correct_count(cfg: dict, choice_count: int, rng: random.Random) -> int
             lo = hi
         return rng.randint(lo, hi)
     return max(1, min(hard_max, int(cfg.get("correct_exact", 1))))
-
-
-def _proportional_schedule(items: list[tuple[dict, int]], count: int) -> list[dict]:
-    total = sum(weight for _, weight in items)
-    if count <= 0 or total <= 0:
-        return []
-    allocations = [count * weight // total for _, weight in items]
-    remaining = count - sum(allocations)
-    remainders = [count * weight % total for _, weight in items]
-    for index in sorted(range(len(items)), key=lambda i: (-remainders[i], i))[:remaining]:
-        allocations[index] += 1
-
-    sequence: list[dict] = []
-    while any(allocations):
-        for index, (item, _) in enumerate(items):
-            if allocations[index] > 0:
-                sequence.append(item)
-                allocations[index] -= 1
-    return sequence
 
 
 def _code_grounding_errors(question: dict, slot: dict,
@@ -879,8 +807,7 @@ def _generate_raw_openai_questions(
     try:
         _notify(progress, "generating_questions", current=0, total=num,
                 message="Generating the question batch from the project.")
-        response = _call_llm(
-            "openai",
+        response = _call_openai(
             RAW_OPENAI_SYSTEM_PROMPT,
             prompt,
             model=cfg.get("model", ""),
@@ -919,8 +846,7 @@ def _generate_raw_openai_questions(
                 code_logic_plan.get(index, ""), draft, errors_by_index[index],
             )
             try:
-                response = _call_llm(
-                    "openai",
+                response = _call_openai(
                     RAW_OPENAI_SYSTEM_PROMPT,
                     repair_prompt,
                     model=cfg.get("model", ""),
@@ -957,242 +883,6 @@ def _generate_raw_openai_questions(
     return questions, warnings
 
 
-def _selected_topics(cfg: dict) -> list[tuple[dict, int]]:
-    topic_weights: dict[str, int] = {}
-    topic_order: list[str] = []
-
-    def add(raw: object, weight: object) -> None:
-        try:
-            parsed_weight = max(0, min(5, int(weight)))
-        except (TypeError, ValueError):
-            return
-        if parsed_weight <= 0:
-            return
-        topic = TOPIC_BY_ID.get(str(raw or "").strip())
-        if topic:
-            if topic["id"] not in topic_weights:
-                topic_order.append(topic["id"])
-                topic_weights[topic["id"]] = 0
-            topic_weights[topic["id"]] += parsed_weight
-
-    for entry in cfg.get("focus_areas") or []:
-        if isinstance(entry, dict):
-            add(entry.get("id"), entry.get("weight", 0))
-    return [(TOPIC_BY_ID[topic_id], topic_weights[topic_id]) for topic_id in topic_order]
-
-
-def _catalog_tasks(evidence_store: EvidenceStore, cfg: dict, num: int,
-                   rng: random.Random) -> tuple[list[dict], list[str]]:
-    focus_topics = _selected_topics(cfg)
-    if not focus_topics:
-        return [], ["Select at least one valid Focus Area before generating."]
-
-    extra_focus = str(cfg.get("focus") or "").strip()
-    warnings = []
-
-    availability: dict[str, list[str]] = {}
-    for topic, _ in focus_topics:
-        templates = [
-            template for template in TEMPLATE_BY_ID.values()
-            if topic["template_weights"][template["id"]] > 0
-        ]
-        target = _target_for_topic(cfg, topic["id"], 0)
-        target_text = (
-            str(target.get("description", ""))[:500] if target else ""
-        )
-        retrieval_focus = "; ".join(
-            part for part in (extra_focus, target_text) if part
-        )
-        available_ids = []
-        missing_by_template: dict[str, list[str]] = {}
-        for template in templates:
-            problems = []
-            for variant in range(3):
-                evidence, missing = template_bundle(
-                    evidence_store, topic, template, retrieval_focus, variant
-                )
-                if missing:
-                    problems = missing
-                    continue
-                plan, problem = render_question_plan(
-                    template, topic, target, evidence, variant
-                )
-                if plan:
-                    available_ids.append(template["id"])
-                    break
-                problems = [problem]
-            if template["id"] not in available_ids:
-                missing_by_template[template["id"]] = problems
-        availability[topic["id"]] = available_ids
-        if not available_ids:
-            if (
-                topic["id"] == "architecture"
-                and missing_by_template
-                and all(
-                    "relational architecture evidence" in labels
-                    for labels in missing_by_template.values()
-                )
-            ):
-                warnings.append(
-                    "No relational architecture evidence is available. "
-                    "Re-analyze the project to produce call, dependency, API, or module relationships."
-                )
-                continue
-            details = "; ".join(
-                f"{template_id}: {', '.join(labels) or 'no matching chunks'}"
-                for template_id, labels in missing_by_template.items()
-            )
-            warnings.append(
-                f"No evidence-sufficient template for {topic['name']}"
-                + (f" ({details})" if details else "")
-                + "."
-            )
-
-    available_focus_topics = [
-        (topic, weight)
-        for topic, weight in focus_topics
-        if availability[topic["id"]]
-    ]
-    topic_seq = _proportional_schedule(available_focus_topics, num)
-    if not topic_seq:
-        return [], warnings
-
-    topic_counts: dict[str, int] = {}
-    for topic in topic_seq:
-        topic_counts[topic["id"]] = topic_counts.get(topic["id"], 0) + 1
-
-    schedules: dict[str, list[dict]] = {}
-    for topic, _ in available_focus_topics:
-        # A low-weight Focus can be allocated zero slots by the proportional
-        # schedule, so it never appears in topic_seq/topic_counts. Read the count
-        # defensively and skip scheduling for those topics.
-        count = topic_counts.get(topic["id"], 0)
-        if count <= 0:
-            continue
-        schedules[topic["id"]] = weighted_template_schedule(
-            topic, count, set(availability.get(topic["id"], []))
-        )
-
-    tasks = []
-    used_plan_keys: set[str] = set()
-    topic_offsets: dict[str, int] = {}
-    pair_occurrences: dict[tuple[str, str], int] = {}
-    for index, topic in enumerate(topic_seq):
-        offset = topic_offsets.get(topic["id"], 0)
-        schedule = schedules.get(topic["id"], [])
-        topic_offsets[topic["id"]] = offset + 1
-        if offset >= len(schedule):
-            continue
-        target = _target_for_topic(cfg, topic["id"], offset)
-        target_text = (
-            str(target.get("description", ""))[:500] if target else ""
-        )
-        retrieval_focus = "; ".join(
-            part for part in (extra_focus, target_text) if part
-        )
-        preferred = schedule[offset]
-        alternatives = sorted(
-            (
-                TEMPLATE_BY_ID[template_id]
-                for template_id in availability[topic["id"]]
-                if template_id != preferred["id"]
-            ),
-            key=lambda template: (
-                -topic["template_weights"][template["id"]],
-                template["id"],
-            ),
-        )
-        chosen = None
-        for template in [preferred, *alternatives]:
-            pair = (topic["id"], template["id"])
-            start = pair_occurrences.get(pair, 0)
-            candidates = []
-            for variant in range(start, start + 8):
-                evidence, missing = template_bundle(
-                    evidence_store, topic, template, retrieval_focus, variant
-                )
-                if missing:
-                    continue
-                for frame_variant in range(len(template["stem_frames"])):
-                    plan, problem = render_question_plan(
-                        template,
-                        topic,
-                        target,
-                        evidence,
-                        variant,
-                        frame_variant,
-                    )
-                    if plan:
-                        candidates.append((plan, evidence))
-            unique = next(
-                (
-                    candidate for candidate in candidates
-                    if candidate[0]["plan_key"] not in used_plan_keys
-                ),
-                None,
-            )
-            if unique:
-                chosen = (template, start, unique, candidates)
-                break
-        if chosen is None:
-            warnings.append(
-                f"Skipped {topic['name']}: no distinct typed-slot plan was available."
-            )
-            continue
-        template, start, (plan, evidence), candidates = chosen
-        pair_occurrences[(topic["id"], template["id"])] = start + 1
-        used_plan_keys.add(plan["plan_key"])
-        slot_variants = []
-        usable_evidence_variants = []
-        for variant_plan, variant_evidence in candidates:
-            if variant_plan["plan_key"] in {
-                slot["plan_key"] for slot in slot_variants
-            }:
-                continue
-            slot_variants.append({
-                "slot": f"{topic['id']}:{template['id']}",
-                "focus": topic["name"],
-                "reasoning_prompt": template["reasoning_prompt"],
-                "template_id": template["id"],
-                "template_name": template["name"],
-                "option_task": template["option_task"],
-                "default_evidence_ids": [
-                    chunk["id"] for chunk in variant_evidence
-                ],
-                "requested_difficulty": max(
-                    1, min(5, int(cfg.get("difficulty", 3)))
-                ),
-                **variant_plan,
-            })
-            usable_evidence_variants.append(variant_evidence)
-        selected_index = next(
-            (
-                variant_index
-                for variant_index, variant_slot in enumerate(slot_variants)
-                if variant_slot["plan_key"] == plan["plan_key"]
-            ),
-            0,
-        )
-        if selected_index:
-            slot_variants.insert(0, slot_variants.pop(selected_index))
-            usable_evidence_variants.insert(
-                0, usable_evidence_variants.pop(selected_index)
-            )
-        tasks.append({
-            "i": index,
-            "slot": slot_variants[0],
-            "slot_variants": slot_variants,
-            "evidence_variants": usable_evidence_variants,
-            "evidence_chars": template["evidence"]["chars_per_chunk"],
-            "focus_for_prompt": extra_focus,
-            "alignment": _alignment_summary(target),
-            "correct_count": _pick_correct_count(
-                cfg, max(2, min(7, int(cfg.get("choice_count", 4)))), rng
-            ),
-        })
-    return tasks, warnings
-
-
 def _frozen_tasks(evidence_store: EvidenceStore, cfg: dict,
                   rng: random.Random) -> tuple[list[dict], list[str]]:
     """Build generation tasks from a confirmed blueprint's frozen slots.
@@ -1215,14 +905,26 @@ def _frozen_tasks(evidence_store: EvidenceStore, cfg: dict,
                 f"Skipped planned question {index + 1}: its template or focus is no "
                 "longer in the catalog.")
             continue
-        point = ASSESSMENT_POINT_BY_ID.get(str(frozen.get("assessment_point_id") or ""))
-        query = (point or {}).get("query", "")
+        point_ids = [
+            str(point_id)
+            for point_id in (frozen.get("assessment_point_ids") or [
+                frozen.get("assessment_point_id", "")
+            ])
+            if str(point_id) in ASSESSMENT_POINT_BY_ID
+        ]
+        points = [ASSESSMENT_POINT_BY_ID[point_id] for point_id in point_ids]
+        if not points:
+            warnings.append(
+                f"Skipped planned question {index + 1}: its assessment point is no longer "
+                "in the catalog.")
+            continue
+        query = " ".join(point.get("query", "") for point in points)
         target = _target_for_frozen(cfg, frozen)
 
         evidence, missing = template_bundle(evidence_store, topic, template, query)
         if missing:
             warnings.append(
-                f"Skipped planned question {index + 1} ({(point or {}).get('name', '')}): "
+                f"Skipped planned question {index + 1} ({', '.join(point['name'] for point in points)}): "
                 "its evidence is no longer available.")
             continue
         plan, problem = render_question_plan(template, topic, target, evidence)
@@ -1243,7 +945,9 @@ def _frozen_tasks(evidence_store: EvidenceStore, cfg: dict,
             # Difficulty comes from this slot's own expected band (its midpoint),
             # never from one creator-entered number copied to every slot (AC 13).
             "requested_difficulty": _band_midpoint(band),
-            "assessment_point_id": frozen.get("assessment_point_id", ""),
+            "assessment_point_id": point_ids[0],
+            "assessment_point_ids": point_ids,
+            "assessment_point_names": [point["name"] for point in points],
             "expected_difficulty": band,
             **plan,
         }
@@ -1298,10 +1002,9 @@ def prepare_local_generation(
     evidence_store = EvidenceStore(chunks)
     rng = random.Random(cfg.get("seed", 42))
     num = int(cfg.get("num_questions", 5))
-    if cfg.get("frozen_slots"):
-        tasks, warnings = _frozen_tasks(evidence_store, cfg, rng)
-    else:
-        tasks, warnings = _catalog_tasks(evidence_store, cfg, num, rng)
+    if not cfg.get("frozen_slots"):
+        raise ValueError("Local generation requires a confirmed question plan.")
+    tasks, warnings = _frozen_tasks(evidence_store, cfg, rng)
     _notify(
         progress,
         "retrieving_evidence",
@@ -1400,6 +1103,7 @@ def local_generation_batch(state: dict, batch_id: str) -> dict:
     return {
         "batch_id": batch_id,
         "model": state["model"],
+        "think": config.local_model_thinking(state["model"]),
         "system": SYSTEM_PROMPT,
         "max_tokens": config.LOCAL_LLM_MAX_TOKENS,
         "tasks": prompts,
@@ -1533,15 +1237,14 @@ def generate_questions(
             message="Building the evidence-grounded question plan.")
     provider = (cfg.get("provider") or "").strip().lower() or config.default_provider()
     fallback_warnings = []
-    if provider not in ("openai", "local", "mock"):
-        provider = config.default_provider()
+    if provider == "local":
+        raise ValueError(
+            "Browser-local generation must use prepare_local_generation()."
+        )
+    if provider not in ("openai", "mock"):
+        raise ValueError(f"Unknown generation provider: {provider}")
     if provider == "openai" and not config.openai_api_key():
         fallback_warnings.append("OpenAI selected but no API key configured — using mock questions.")
-        provider = "mock"
-    elif provider == "local" and not config.local_llm_available():
-        fallback_warnings.append(
-            f"Local LLM selected but no server answered at {config.LOCAL_LLM_URL} — using mock questions. "
-            "Start it with e.g. `ollama serve` (and `ollama pull " + config.LOCAL_LLM_MODEL + "`).")
         provider = "mock"
     model = config.resolve_model(provider, cfg.get("model", ""))
     cfg["provider"] = provider
@@ -1556,55 +1259,6 @@ def generate_questions(
                 message="Checking question coverage and saving the batch.")
         return questions, fallback_warnings + warnings
 
-    if provider == "local":
-        state = prepare_local_generation(chunks, cfg, progress=progress)
-        cfg["_generation_metrics"] = state["metrics"]
-        if not state["tasks"]:
-            return [], fallback_warnings + state["warnings"]
-        questions: list[dict] = []
-        while True:
-            batch = local_generation_batch(state, "server-local")
-            outputs = []
-            for task in batch["tasks"]:
-                accepted = sum(
-                    item.get("status") == "accepted" for item in state["tasks"]
-                )
-                _notify(
-                    progress,
-                    "generating_questions",
-                    current=accepted,
-                    total=len(state["tasks"]),
-                    message=f"Generating question {task['task_index'] + 1} of {len(state['tasks'])}.",
-                )
-                started = time.perf_counter()
-                output = {
-                    "task_index": task["task_index"],
-                    "attempt": task["attempt"],
-                }
-                try:
-                    output["raw"] = _call_llm(
-                        "local",
-                        batch["system"],
-                        task["prompt"],
-                        model=batch["model"],
-                        temperature=task["temperature"],
-                    )
-                except Exception as exc:
-                    output["error"] = f"{type(exc).__name__}: {exc}"
-                output["duration_seconds"] = time.perf_counter() - started
-                outputs.append(output)
-            questions, done = apply_local_generation_outputs(chunks, state, outputs)
-            if done:
-                break
-        _notify(
-            progress,
-            "finalizing",
-            current=len(questions),
-            total=int(cfg.get("num_questions", 5)),
-            message="Checking question coverage and saving the batch.",
-        )
-        return questions, fallback_warnings + state["warnings"]
-
     evidence_store = EvidenceStore(chunks)
     chunk_by_id = {c["id"]: c for c in chunks}
     rng = random.Random(cfg.get("seed", 42))
@@ -1613,12 +1267,9 @@ def generate_questions(
     difficulty = max(1, min(5, int(cfg.get("difficulty", 3))))
 
     seed = int(cfg.get("seed", 42))
-    # A confirmed blueprint wins: generate exactly its slots. Only fall back to
-    # live scheduling when no plan was frozen (legacy / internal callers).
-    if cfg.get("frozen_slots"):
-        tasks, task_warnings = _frozen_tasks(evidence_store, cfg, rng)
-    else:
-        tasks, task_warnings = _catalog_tasks(evidence_store, cfg, num, rng)
+    if not cfg.get("frozen_slots"):
+        raise ValueError("Mock generation requires a confirmed question plan.")
+    tasks, task_warnings = _frozen_tasks(evidence_store, cfg, rng)
     fallback_warnings.extend(task_warnings)
     _notify(progress, "retrieving_evidence", current=0, total=len(tasks) or num,
             message=f"Matched structured evidence for {len(tasks)} question slot(s).")
@@ -1791,6 +1442,13 @@ def _normalize(raw: dict, slot: dict, chunk_by_id: dict, rng: random.Random | No
         "evidence": evidence,
         "difficulty": int(diff) if isinstance(diff, (int, float, str)) and str(diff).isdigit() else 1,
         "focus_areas": [str(f) for f in raw.get("focus_areas", [slot["focus"]])][:4] or [slot["focus"]],
+        "assessment_point_ids": [
+            str(point_id)
+            for point_id in (slot.get("assessment_point_ids") or [
+                slot.get("assessment_point_id", "")
+            ])
+            if str(point_id)
+        ],
         "explanation": explanation,
         # Model metadata, not a calibrated probability. None when the model gave
         # nothing usable — never a fabricated default (ERD §3).

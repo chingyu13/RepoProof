@@ -35,14 +35,23 @@ _OPENAI_MODEL_OPTIONS = (
 if OPENAI_MODEL not in {option["id"] for option in _OPENAI_MODEL_OPTIONS}:
     OPENAI_MODEL = "gpt-5.6-terra"
 
-# Local LLM (privacy mode): any OpenAI-compatible server works.
-#   Ollama    -> http://127.0.0.1:11434/v1   (default)
-#   LM Studio -> http://127.0.0.1:1234/v1
-LOCAL_LLM_URL = os.environ.get("REPOPROOF_LOCAL_LLM_URL", "http://127.0.0.1:11434/v1").rstrip("/")
+# Browser-local Ollama configuration.
 LOCAL_LLM_MODEL = os.environ.get("REPOPROOF_LOCAL_LLM_MODEL", "qwen2.5-coder:7b")
 LOCAL_LLM_MAX_TOKENS = int(os.environ.get("REPOPROOF_LOCAL_LLM_MAX_TOKENS", "700"))
-# The creator browser uses its own loopback address. This is intentionally
-# separate from LOCAL_LLM_URL, whose loopback belongs to the web server.
+_LOCAL_MODEL_OPTIONS = (
+    {
+        "id": "qwen2.5-coder:7b",
+        "name": "Qwen 2.5 Coder 7B",
+        "note": "code-specialized baseline",
+        "think": None,
+    },
+    {
+        "id": "qwen3.5:9b",
+        "name": "Qwen 3.5 9B",
+        "note": "reasoning candidate",
+        "think": False,
+    },
+)
 BROWSER_OLLAMA_URL = os.environ.get(
     "REPOPROOF_BROWSER_OLLAMA_URL", "http://127.0.0.1:11434"
 ).rstrip("/")
@@ -67,48 +76,49 @@ def openai_model_options() -> list[dict]:
     return [dict(option) for option in _OPENAI_MODEL_OPTIONS]
 
 
+def local_model_options() -> list[dict]:
+    options = [dict(option) for option in _LOCAL_MODEL_OPTIONS]
+    if LOCAL_LLM_MODEL not in {option["id"] for option in options}:
+        options.insert(0, {
+            "id": LOCAL_LLM_MODEL,
+            "name": LOCAL_LLM_MODEL,
+            "note": "configured model",
+            "think": None,
+        })
+    return options
+
+
+def local_model_thinking(model: str) -> bool | None:
+    selected = resolve_model("local", model)
+    return next(
+        option["think"] for option in local_model_options()
+        if option["id"] == selected
+    )
+
+
 def resolve_model(provider: str, requested: str = "") -> str:
     if provider == "local":
-        return LOCAL_LLM_MODEL
+        allowed = {option["id"] for option in local_model_options()}
+        return requested if requested in allowed else LOCAL_LLM_MODEL
     if provider == "openai":
         allowed = {option["id"] for option in openai_model_options()}
         return requested if requested in allowed else OPENAI_MODEL
     return "mock"
 
 
-def local_llm_available(timeout: float = 1.2) -> bool:
-    """Ping the local server's /models endpoint. Cheap enough to call per request."""
-    import urllib.request
-    try:
-        req = urllib.request.Request(LOCAL_LLM_URL + "/models")
-        with urllib.request.urlopen(req, timeout=timeout):
-            return True
-    except Exception:
-        return False
-
-
-def default_provider(*, local_available: bool | None = None) -> str:
-    """Resolution order: explicit env override > MOCK_LLM flag > OpenAI key > local server > mock.
-
-    Pass ``local_available`` when the caller already probed the local server so
-    availability and the selected default stay consistent in one response.
-    """
+def default_provider() -> str:
+    """Choose the initial UI provider without probing visitor-local Ollama."""
     if LOCAL_ONLY:
-        # OpenAI is off the table entirely: local if reachable, else mock.
         if _FORCED_PROVIDER == "mock" or os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
             return "mock"
-        available = local_llm_available() if local_available is None else local_available
-        return "local" if available else "mock"
+        return "local"
     if _FORCED_PROVIDER in ("openai", "local", "mock"):
         return _FORCED_PROVIDER
     if os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
         return "mock"
     if openai_api_key():
         return "openai"
-    available = local_llm_available() if local_available is None else local_available
-    if available:
-        return "local"
-    return "mock"
+    return "local"
 
 # Consent copy (RepoProof UI / Step 1). Bump CONSENT_VERSION whenever the wording
 # changes so stored per-project consent records stay auditable.
