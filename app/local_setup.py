@@ -1,9 +1,7 @@
 """Build OS-specific Ollama setup helpers."""
 from __future__ import annotations
 
-import io
 import re
-import zipfile
 from urllib.parse import urlsplit
 
 
@@ -81,12 +79,12 @@ fi
 
 echo "Downloading $MODEL..."
 ollama pull "$MODEL"
-echo 'RepoProof Local LLM setup is complete.'
-open "$ORIGIN/creator"
+echo 'RepoProof Local LLM setup is complete. Return to the open RepoProof tab and click Check again.'
 '''
 
 
-def _windows_script(origin: str, model: str) -> str:
+def windows_setup_script(origin: str, model: str) -> str:
+    origin, model = _values(origin, model)
     return f'''$ErrorActionPreference = 'Stop'
 $Origin = '{origin}'
 $Model = '{model}'
@@ -99,7 +97,7 @@ if (-not $Ollama) {{
     }} else {{
         Write-Host 'Ollama is not installed. Opening the official download page.'
         Start-Process 'https://ollama.com/download'
-        Read-Host 'Install Ollama, then run this setup again. Press Enter to close'
+        Write-Host 'Install Ollama, then paste the RepoProof setup command into PowerShell again.'
         exit 1
     }}
 }}
@@ -128,33 +126,5 @@ if (-not $Ready) {{ throw 'Ollama did not start within 60 seconds.' }}
 Write-Host "Downloading $Model..."
 & $OllamaPath pull $Model
 if ($LASTEXITCODE -ne 0) {{ throw 'The Ollama model download failed.' }}
-Write-Host 'RepoProof Local LLM setup is complete.'
-Start-Process "$Origin/creator"
-Read-Host 'Return to RepoProof and click Check again. Press Enter to close'
+Write-Host 'RepoProof Local LLM setup is complete. Return to the open RepoProof tab and click Check again.'
 '''
-
-
-def _zip(files: list[tuple[str, str, int]]) -> bytes:
-    output = io.BytesIO()
-    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name, content, mode in files:
-            info = zipfile.ZipInfo(name)
-            info.create_system = 3
-            info.external_attr = mode << 16
-            archive.writestr(info, content.encode("utf-8"))
-    return output.getvalue()
-
-
-def windows_setup_archive(origin: str, model: str) -> tuple[bytes, str]:
-    origin, model = _values(origin, model)
-    powershell = _windows_script(origin, model)
-    launcher = (
-        "@echo off\r\n"
-        "powershell.exe -NoProfile -ExecutionPolicy Bypass "
-        "-File \"%~dp0RepoProof Local Setup.ps1\"\r\n"
-        "if errorlevel 1 pause\r\n"
-    )
-    return _zip([
-        ("RepoProof Local Setup.cmd", launcher, 0o644),
-        ("RepoProof Local Setup.ps1", powershell, 0o644),
-    ]), "RepoProof-Local-Setup-Windows.zip"

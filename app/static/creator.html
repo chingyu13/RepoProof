@@ -159,13 +159,31 @@ button:disabled{opacity:.5;cursor:default}
 .qflags{font-size:.78rem;background:#fef3c7;color:#92400e;border-radius:5px;padding:.4rem .6rem;margin:.45rem 0}
 [data-theme="dark"] .qflags{background:#3d2f0a;color:#f5d67a}
 .small{font-size:.8rem;color:var(--muted)}
-.local-setup{display:flex;align-items:center;gap:.55rem;min-height:2rem;margin:.35rem 0 .15rem;
-  font-size:.8rem;color:var(--muted)}
+.local-setup{display:grid;gap:.55rem;margin:.35rem 0 .15rem;padding:.7rem .8rem;
+  border:2px solid var(--input-border);border-radius:5px;background:var(--chip);font-size:.8rem;color:var(--ink)}
 .local-setup.hidden{display:none}
-.local-actions{display:flex;align-items:center;gap:.35rem;margin-left:auto}
-.local-actions button,.local-actions a{padding:.28rem .55rem;font-size:.78rem;text-decoration:none;border-radius:5px}
-.local-actions a{background:var(--input-bg);color:var(--ink);border:2px solid var(--strong)}
-.local-progress{width:120px;height:5px;border-radius:5px;background:var(--line);overflow:hidden}
+.local-setup.ready{display:block;gap:0;margin:0;padding:0;border:0;border-radius:0;background:transparent}
+.local-setup.ready .local-status{text-align:right;font-size:.72rem;line-height:1;color:var(--muted)}
+.local-status{text-align:center;color:var(--muted);font-size:.92rem;line-height:1.35}
+.local-instructions{display:grid;gap:.45rem;line-height:1.45}
+.local-instructions p{margin:0}
+.local-instructions ol{margin:0;padding-left:1.25rem}
+.local-instructions a{color:var(--ink);text-underline-offset:2px}
+.local-platforms{display:flex;gap:.3rem;margin-top:.05rem}
+.local-platforms button{padding:.25rem .55rem;border:1px solid transparent;border-radius:4px;background:transparent;
+  color:var(--ink);font-size:.78rem;font-weight:400;letter-spacing:0}
+.local-platforms button:hover{background:rgba(255,255,255,.45)}
+.local-platforms button.active{border-color:var(--input-border);background:var(--input-bg);font-weight:500}
+.local-command{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.45rem;min-width:0;
+  padding:.28rem .35rem .28rem .55rem;border-radius:5px;background:var(--card)}
+.local-command code{min-width:0;overflow-x:auto;color:var(--ink);font:inherit;white-space:nowrap;scrollbar-width:thin}
+.local-copy{min-width:64px;padding:.28rem .55rem;border:0;border-radius:4px;background:var(--chip-strong);
+  color:#fff;font-size:.76rem;font-weight:500;letter-spacing:0}
+.local-copy:hover{background:var(--strong)}
+.local-copy.copied{background:var(--strong)}
+.local-actions{display:flex;align-items:center;justify-content:flex-end;gap:.35rem}
+.local-actions button{padding:.32rem .6rem;font-size:.78rem}
+.local-progress{width:100%;height:5px;border-radius:5px;background:var(--line);overflow:hidden}
 .local-progress i{display:block;height:100%;width:0;background:var(--accent)}
 a{color:var(--accent)}
 .hidden{display:none}
@@ -248,6 +266,8 @@ a{color:var(--accent)}
   .correct-count-field{flex:0 0 108px;min-width:108px}
   .range-count-field{flex-basis:140px;min-width:140px}
   .difficulty-field{flex:0 0 112px;min-width:112px}
+  .local-command{grid-template-columns:1fr}
+  .local-copy{justify-self:end}
 }
 </style>
 </head>
@@ -406,10 +426,25 @@ a{color:var(--accent)}
     <div class="framework-field"><label>LLM model</label><select id="gProvider"><option value="">Loading…</option></select></div>
   </div>
   <div class="local-setup hidden" id="localSetup">
-    <span id="providerNote"></span>
+    <div class="local-status" id="providerNote" role="status" aria-live="polite"></div>
+    <div class="local-instructions hidden" id="localInstructions">
+      <p>RepoProof can generate questions with Ollama running on this computer. Only the selected evidence bundle is sent to Ollama.</p>
+      <p>Set up the local LLM:</p>
+      <ol>
+        <li>Download and open <a href="https://ollama.com/download" target="_blank" rel="noopener">Ollama</a>.</li>
+        <li id="localTerminalStep">Open Terminal, paste this command, then press Return:</li>
+      </ol>
+      <div class="local-platforms" role="tablist" aria-label="Operating system">
+        <button id="localMac" type="button" role="tab">macOS</button>
+        <button id="localWindows" type="button" role="tab">Windows</button>
+      </div>
+      <div class="local-command">
+        <code id="localCommand"></code>
+        <button class="local-copy" id="localCopy" type="button">Copy</button>
+      </div>
+    </div>
     <div class="local-progress hidden" id="localProgress"><i></i></div>
     <div class="local-actions">
-      <a class="hidden" id="localInstall" href="/static/local-setup.html" target="_blank" rel="noopener">Set up Ollama</a>
       <button class="secondary hidden" id="localPull" type="button">Download model</button>
       <button class="secondary" id="localCheck" type="button">Check again</button>
     </div>
@@ -498,6 +533,8 @@ let priorContextFiles = [];
 let scopeContextFiles = [];
 let localProvider = {url:'http://127.0.0.1:11434', model:'qwen2.5-coder:7b'};
 let localModelReady = false;
+let localSetupPlatform = /Windows/i.test(navigator.userAgent) ? 'windows' : 'macos';
+let localCopyReset = null;
 
 /* theme */
 const savedTheme = localStorage.getItem('rp-theme');
@@ -618,9 +655,53 @@ function selectedLlm(){
   };
 }
 
-function setLocalStatus(text, {install=false, pull=false, checking=true, progress=null}={}){
+function localSetupCommand(platform){
+  return platform === 'windows'
+    ? `irm '${location.origin}/api/local-setup/windows/script' | iex`
+    : `curl -fsSL '${location.origin}/api/local-setup/macos/script' | /bin/zsh`;
+}
+
+function setLocalPlatform(platform){
+  localSetupPlatform = platform === 'windows' ? 'windows' : 'macos';
+  const windows = localSetupPlatform === 'windows';
+  $('localMac').classList.toggle('active', !windows);
+  $('localWindows').classList.toggle('active', windows);
+  $('localMac').setAttribute('aria-selected', String(!windows));
+  $('localWindows').setAttribute('aria-selected', String(windows));
+  $('localTerminalStep').textContent = windows
+    ? 'Open Windows Terminal or PowerShell, paste this command, then press Enter:'
+    : 'Open Terminal, paste this command, then press Return:';
+  $('localCommand').textContent = localSetupCommand(localSetupPlatform);
+  $('localCopy').textContent = 'Copy';
+  $('localCopy').classList.remove('copied');
+}
+
+async function copyLocalSetupCommand(){
+  const command = localSetupCommand(localSetupPlatform);
+  const button = $('localCopy');
+  clearTimeout(localCopyReset);
+  try {
+    await navigator.clipboard.writeText(command);
+    button.textContent = 'Copied';
+    button.classList.add('copied');
+  } catch (_error) {
+    const range = document.createRange();
+    range.selectNodeContents($('localCommand'));
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    button.textContent = localSetupPlatform === 'windows' ? 'Press Ctrl+C' : 'Press ⌘C';
+  }
+  localCopyReset = setTimeout(()=>{
+    button.textContent = 'Copy';
+    button.classList.remove('copied');
+  }, 1800);
+}
+
+function setLocalStatus(text, {install=false, pull=false, checking=true, progress=null, ready=false}={}){
   $('providerNote').textContent = text;
-  $('localInstall').classList.toggle('hidden', !install);
+  $('localSetup').classList.toggle('ready', ready);
+  $('localInstructions').classList.toggle('hidden', !install);
   $('localPull').classList.toggle('hidden', !pull);
   $('localCheck').classList.toggle('hidden', !checking);
   $('localProgress').classList.toggle('hidden', progress === null);
@@ -650,12 +731,12 @@ async function checkLocalModel(){
       model.name === localProvider.model || model.model === localProvider.model);
     localModelReady = installed;
     if (installed) {
-      setLocalStatus(`${localProvider.model} ready.`, {checking:false});
+      setLocalStatus(`${localProvider.model} ready.`, {checking:false, ready:true});
     } else {
       setLocalStatus(`${localProvider.model} is not installed.`, {pull:true});
     }
   } catch (_error) {
-    setLocalStatus('Ollama is unavailable or browser access is blocked.', {install:true});
+    setLocalStatus(`${localProvider.model} is not detected.`, {install:true});
   }
   return localModelReady;
 }
@@ -708,6 +789,10 @@ function syncLocalSetup(){
 
 $('localCheck').onclick = checkLocalModel;
 $('localPull').onclick = pullLocalModel;
+$('localMac').onclick = ()=>setLocalPlatform('macos');
+$('localWindows').onclick = ()=>setLocalPlatform('windows');
+$('localCopy').onclick = copyLocalSetupCommand;
+setLocalPlatform(localSetupPlatform);
 
 $('logout').onclick = async ()=>{
   await fetch('/api/logout', {method:'POST'});

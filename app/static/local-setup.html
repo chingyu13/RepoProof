@@ -34,9 +34,10 @@
 
   <section id="windowsSetup" class="hidden">
     <h2>2. Set up Windows</h2>
-    <p>Download and extract the setup, then double-click <code>RepoProof Local Setup.cmd</code>.</p>
+    <p>Open Windows Terminal or PowerShell, paste this command, and press Enter:</p>
+    <pre><code id="windowsCommand"></code></pre>
     <div class="actions">
-      <a class="button" href="/api/local-setup/windows" download>Download for Windows</a>
+      <button class="button" id="copyWindows" type="button">Copy command</button>
     </div>
   </section>
 
@@ -50,10 +51,12 @@
     const mac = document.getElementById('macosSetup');
     const windows = document.getElementById('windowsSetup');
     const switcher = document.getElementById('switchPlatform');
-    const command = `curl -fsSL '${location.origin}/api/local-setup/macos/script' | /bin/zsh`;
-    const commandNode = document.getElementById('macCommand');
-    const copyButton = document.getElementById('copyMac');
-    commandNode.textContent = command;
+    const macCommand = `curl -fsSL '${location.origin}/api/local-setup/macos/script' | /bin/zsh`;
+    const windowsCommand = `irm '${location.origin}/api/local-setup/windows/script' | iex`;
+    const macCommandNode = document.getElementById('macCommand');
+    const windowsCommandNode = document.getElementById('windowsCommand');
+    macCommandNode.textContent = macCommand;
+    windowsCommandNode.textContent = windowsCommand;
 
     function showPlatform(name) {
       const showWindows = name === 'windows';
@@ -63,19 +66,25 @@
       switcher.onclick = () => showPlatform(showWindows ? 'macos' : 'windows');
     }
 
-    copyButton.onclick = async () => {
-      try {
-        await navigator.clipboard.writeText(command);
-        copyButton.textContent = 'Copied';
-      } catch (_error) {
-        const range = document.createRange();
-        range.selectNodeContents(commandNode);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        copyButton.textContent = 'Press ⌘C to copy';
-      }
-    };
+    function bindCopy(buttonId, commandNode, command, fallbackLabel) {
+      const button = document.getElementById(buttonId);
+      button.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(command);
+          button.textContent = 'Copied';
+        } catch (_error) {
+          const range = document.createRange();
+          range.selectNodeContents(commandNode);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          button.textContent = fallbackLabel;
+        }
+      };
+    }
+
+    bindCopy('copyMac', macCommandNode, macCommand, 'Press ⌘C to copy');
+    bindCopy('copyWindows', windowsCommandNode, windowsCommand, 'Press Ctrl+C to copy');
 
     showPlatform(/Windows/i.test(navigator.userAgent) ? 'windows' : 'macos');
   </script>

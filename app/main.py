@@ -32,7 +32,7 @@ from .generator import (
 )
 from .ingest import IngestError, clone_github, delete_project_files, extract_upload, raw_project_files
 from .knowledge import EvidenceStore, build_chunks
-from .local_setup import macos_setup_script, windows_setup_archive
+from .local_setup import macos_setup_script, windows_setup_script
 from .scoring import score_attempt
 from .assessment_catalog import ASSESSMENT_POINTS, TEMPLATES, public_topics
 from .validator import normalize_answer, validate_maq
@@ -231,19 +231,16 @@ def local_setup_macos_script(request: Request):
     )
 
 
-@app.get("/api/local-setup/windows")
-def local_setup_windows_download(request: Request):
+@app.get("/api/local-setup/windows/script")
+def local_setup_windows_script(request: Request):
     try:
-        archive, filename = windows_setup_archive(_request_origin(request), config.LOCAL_LLM_MODEL)
+        script = windows_setup_script(_request_origin(request), config.LOCAL_LLM_MODEL)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return Response(
-        archive,
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Cache-Control": "no-store",
-        },
+        script,
+        media_type="text/x-powershell",
+        headers={"Cache-Control": "no-store"},
     )
 
 
