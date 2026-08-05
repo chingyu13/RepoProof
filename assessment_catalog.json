@@ -2453,13 +2453,5 @@
       "contextual_use": 0.6,
       "requirement_change": 0.5
     }
-  },
-  "framework_template_policy": {
-    "code_mode_fit": {
-      "none": 1.0,
-      "required": 0.8,
-      "insertion": 0.8
-    },
-    "notes": "Fixed balanced policy: conceptual and code-grounded templates share each assessment."
   }
 }

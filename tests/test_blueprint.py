@@ -247,7 +247,7 @@ def test_every_slot_carries_preview_table_fields(store):
         assert slot["evidence_ids"], "every slot must cite evidence"
         assert slot["reason_selected"]
         assert set(slot["score_breakdown"]) >= {
-            "assignment", "focus_point", "point_template", "framework_template",
+            "assignment", "focus_point", "point_template",
             "evidence", "alignment", "repetition_penalty"}
 
 

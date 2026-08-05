@@ -54,6 +54,12 @@ def test_weights_within_unit_range():
                 assert 0.0 < weight <= 1.0
 
 
+def test_catalog_has_no_separate_code_mode_scoring_policy():
+    data = json.loads(ac._catalog_path().read_text(encoding="utf-8"))
+    assert "framework_template_policy" not in data
+    assert all(template["code_mode"] in ac.CODE_MODES for template in ac.TEMPLATES)
+
+
 # --- AC 3: missing entries default to zero; unknown IDs fail ---------------
 
 def test_missing_entries_default_to_zero():
@@ -108,19 +114,6 @@ def test_missing_matrix_fails_startup(tmp_path):
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ValueError, match="focus_point_weights"):
         ac.load_catalog(path)
-
-
-def test_framework_policy_requires_all_code_modes(tmp_path):
-    bad = {"code_mode_fit": {"none": 1.0}}
-    with pytest.raises(ValueError, match="missing code modes"):
-        ac.load_catalog(_catalog_with(tmp_path, framework_template_policy=bad))
-
-
-# --- AC 9: fixed framework policy covers every template ---------------------
-
-def test_fixed_framework_policy_assigns_every_template_a_fit():
-    for template in ac.TEMPLATES:
-        assert ac.framework_template_fit(template) > 0.0
 
 
 # --- catalog hash (PRD 10.4) ----------------------------------------------

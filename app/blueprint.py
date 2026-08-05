@@ -33,7 +33,6 @@ from .assessment_catalog import (
     TOPIC_BY_ID,
     catalog_hash,
     focus_point_fit,
-    framework_template_fit,
     point_template_fit,
 )
 from .knowledge import EvidenceStore, expand_concepts, retrieval_tokens
@@ -179,18 +178,15 @@ def split_focus(point_id: str, focus_areas: list[dict] | None) -> tuple[str, lis
 
 
 def template_distribution(point_weights: dict[str, float]) -> dict[str, float]:
-    """Normalized Template weights from Assessment Points x fixed framework fit."""
+    """Normalized Template weights from Assessment Point compatibility."""
     scores: dict[str, float] = {}
     for template in TEMPLATES:
-        fit = framework_template_fit(template)
-        if fit <= 0:
-            continue
         point_part = sum(
             weight * point_template_fit(point_id, template["id"])
             for point_id, weight in point_weights.items()
         )
         if point_part > 0:
-            scores[template["id"]] = point_part * fit
+            scores[template["id"]] = point_part
     if not scores:
         return {}
     top = max(scores.values())
@@ -375,10 +371,6 @@ def enumerate_candidates(evidence_store: EvidenceStore, *, point_weights: dict[s
                 if pt_fit <= 0:
                     reject("point_template_incompatible")
                     continue
-                fw_fit = framework_template_fit(template)
-                if fw_fit <= 0:
-                    reject("framework_conflict")
-                    continue
 
                 evidence, missing = template_bundle(
                     evidence_store, topic, template, combined_query)
@@ -421,7 +413,7 @@ def enumerate_candidates(evidence_store: EvidenceStore, *, point_weights: dict[s
                     focus_point_fit(primary_focus, item) for item in point_ids
                 ) / len(point_ids)
                 relevance = (
-                    (sum(weights) / len(weights)) * focus_fit * pt_fit * fw_fit
+                    (sum(weights) / len(weights)) * focus_fit * pt_fit
                     * evidence_fit * (1.0 if target else 0.6)
                 )
                 candidates.append({
@@ -443,7 +435,6 @@ def enumerate_candidates(evidence_store: EvidenceStore, *, point_weights: dict[s
                         "assignment": round(sum(weights) / len(weights), 4),
                         "focus_point": round(focus_fit, 4),
                         "point_template": round(pt_fit, 4),
-                        "framework_template": round(fw_fit, 4),
                         "evidence": round(evidence_fit, 4),
                         "alignment": 1.0 if target else 0.6,
                     },

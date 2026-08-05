@@ -274,7 +274,10 @@ def _unique(items: list[dict], kind: str) -> None:
         raise ValueError(f"duplicate {kind} ids in catalog")
 
 
-def load_catalog(path: Path | None = None) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+def load_catalog(path: Path | None = None) -> tuple[
+    list[dict], list[dict], list[dict], list[dict],
+    dict[str, dict[str, float]], dict[str, dict[str, float]],
+]:
     catalog = path or _catalog_path()
     data = json.loads(catalog.read_text(encoding="utf-8"))
     raw_templates = data.get("templates")
@@ -317,9 +320,8 @@ def load_catalog(path: Path | None = None) -> tuple[list[dict], list[dict], list
     point_template = _normalize_matrix(
         data.get("point_template_weights"), point_ids, template_ids,
         owner="point_template_weights", row_kind="assessment point", col_kind="template")
-    policy = _normalize_framework_policy(data.get("framework_template_policy"))
     return (templates, evidence_types, assessment_points, topics,
-            focus_point, point_template, policy)
+            focus_point, point_template)
 
 
 def _normalize_matrix(raw: object, row_ids: tuple[str, ...], col_ids: tuple[str, ...],
@@ -357,29 +359,8 @@ def _normalize_matrix(raw: object, row_ids: tuple[str, ...], col_ids: tuple[str,
     return out
 
 
-def _normalize_framework_policy(raw: object) -> dict:
-    """Validate the fixed Framework x Template code-mode policy."""
-    if not isinstance(raw, dict):
-        raise ValueError("catalog must contain 'framework_template_policy'")
-    fit = raw.get("code_mode_fit")
-    if not isinstance(fit, dict) or not fit:
-        raise ValueError("'framework_template_policy.code_mode_fit' must be a non-empty object")
-    clean: dict[str, float] = {}
-    for mode, weight in fit.items():
-        if mode not in CODE_MODES:
-            raise ValueError(f"code_mode_fit has unknown code mode {mode!r}")
-        value = float(weight)
-        if not 0.0 <= value <= 1.0:
-            raise ValueError(f"code_mode_fit[{mode!r}] must be within 0.0-1.0")
-        clean[mode] = value
-    missing = CODE_MODES - set(clean)
-    if missing:
-        raise ValueError(f"code_mode_fit missing code modes {sorted(missing)}")
-    return {"code_mode_fit": clean}
-
-
 (TEMPLATES, EVIDENCE_TYPES, ASSESSMENT_POINTS, TOPICS,
- FOCUS_POINT_WEIGHTS, POINT_TEMPLATE_WEIGHTS, FRAMEWORK_TEMPLATE_POLICY) = load_catalog()
+ FOCUS_POINT_WEIGHTS, POINT_TEMPLATE_WEIGHTS) = load_catalog()
 TEMPLATE_BY_ID = {item["id"]: item for item in TEMPLATES}
 EVIDENCE_TYPE_BY_ID = {item["id"]: item for item in EVIDENCE_TYPES}
 ASSESSMENT_POINT_BY_ID = {item["id"]: item for item in ASSESSMENT_POINTS}
@@ -396,12 +377,6 @@ def point_template_fit(point_id: str, template_id: str) -> float:
     return POINT_TEMPLATE_WEIGHTS.get(point_id, {}).get(template_id, 0.0)
 
 
-def framework_template_fit(template: dict) -> float:
-    """Fixed balanced Framework x Template fit."""
-    mode = template.get("code_mode", "none")
-    return FRAMEWORK_TEMPLATE_POLICY["code_mode_fit"].get(mode, 0.0)
-
-
 def catalog_hash() -> str:
     """Stable hash of the planning-relevant catalog, for freezing blueprints.
 
@@ -414,7 +389,6 @@ def catalog_hash() -> str:
         "topics": TOPICS,
         "focus_point_weights": FOCUS_POINT_WEIGHTS,
         "point_template_weights": POINT_TEMPLATE_WEIGHTS,
-        "framework_template_policy": FRAMEWORK_TEMPLATE_POLICY,
     }
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
